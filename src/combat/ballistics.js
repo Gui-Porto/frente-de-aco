@@ -1,11 +1,23 @@
-'use strict';
+import * as THREE from 'three';
+import { scene, camera } from '../core/render.js';
+import { S, tanks, planes, projs, popped } from '../core/state.js';
+import { V3, QUAT, clamp, lerp, rand, rv } from '../core/util.js';
+import { H, terrainNormal } from '../world/terrain.js';
+import { obstNear, HEDGES, addCrater } from '../world/scenery.js';
+import { RAPIER, world, COL } from '../world/physics.js';
+import { PLANES, prepAmmo, penAt, hePen, DEG, G } from '../data/vehicles.js';
+import { spawnP, TEX, fxDust, fxSparks, fxExplosion, fxBigBlast, fxTrail } from '../fx/particles.js';
+import { sndBoom, sndPing, sndClank } from '../fx/audio.js';
+import { MODS } from '../vehicles/tank.js';
+import { showDmg, shakeCam, shakeAt, flashVign, hitMarker } from '../ui/hud.js';
+import { xrayShot, xrayReport } from '../ui/xray.js';
+import { onVehicleDestroyed } from '../game/match.js';
 // =====================================================================
 // Projéteis, colisão, blindagem, penetração e dano
 // =====================================================================
-const tanks = [], planes = [];
 
 // Segmento × AABB (método das placas). d = vetor completo do segmento; retorna t∈[0,1] e a face de entrada.
-function segBox(o, d, mn, mx) {
+export function segBox(o, d, mn, mx) {
   let t0 = 0, t1 = 1, axis = -1, sign = 0;
   for (let a = 0; a < 3; a++) {
     const oa = o[a], da = d[a];
@@ -20,7 +32,7 @@ function segBox(o, d, mn, mx) {
   return { t: t0, axis, sign };
 }
 const _o = [0, 0, 0], _d = [0, 0, 0], _lo = new V3(), _lq = new V3();
-function partHit(inv, p, q, mn, mx) {
+export function partHit(inv, p, q, mn, mx) {
   _lo.copy(p).applyMatrix4(inv); _lq.copy(q).applyMatrix4(inv);
   const o = [_lo.x, _lo.y, _lo.z], d = [_lq.x - _lo.x, _lq.y - _lo.y, _lq.z - _lo.z];
   const r = segBox(o, d, mn, mx); if (!r) return null;
@@ -35,7 +47,7 @@ function nearSeg(c, r, p, dx, dy, dz, len2) {
   return Math.hypot(ex - dx * u, ey - dy * u, ez - dz * u) < r;
 }
 const _cen = new V3();
-function segmentHit(p, q, ignore, opts) {
+export function segmentHit(p, q, ignore, opts) {
   const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z, len2 = dx * dx + dy * dy + dz * dz || 1e-9;
   let best = 1, hit = null;
   _o[0] = p.x; _o[1] = p.y; _o[2] = p.z; _d[0] = dx; _d[1] = dy; _d[2] = dz;
@@ -71,10 +83,10 @@ function segmentHit(p, q, ignore, opts) {
   return hit;
 }
 const _rq = new V3();
-function raycast(o, dir, maxD, ignore, opts) { return segmentHit(o, _rq.copy(o).addScaledVector(dir, maxD), ignore, opts); }
+export function raycast(o, dir, maxD, ignore, opts) { return segmentHit(o, _rq.copy(o).addScaledVector(dir, maxD), ignore, opts); }
 // Linha de visada: cercas vivas e construções bloqueiam
-function losPts(p, q, ignore, target) { const h = segmentHit(p, q, ignore, { hedges: true }); return !h || (target && ((h.type === 'tank' && h.tank === target) || (h.type === 'plane' && h.plane === target))); }
-function los(a, b) {
+export function losPts(p, q, ignore, target) { const h = segmentHit(p, q, ignore, { hedges: true }); return !h || (target && ((h.type === 'tank' && h.tank === target) || (h.type === 'plane' && h.plane === target))); }
+export function los(a, b) {
   const p = a.eyePos(new V3()), q = b.type === 'plane' ? b.pos.clone() : b.centerPos(new V3());
   return losPts(p, q, a, b);
 }
@@ -82,7 +94,7 @@ function los(a, b) {
 // =====================================================================
 // Blindagem: espessura nominal e normal da chapa no espaço local da peça
 // =====================================================================
-function armorAt(t, hit) {
+export function armorAt(t, hit) {
   const A = t.def.armor, D = t.def, lp = hit.lp;
   let ax = hit.axis, sg = hit.sign, th, s;
   if (hit.part === 'hull') {
@@ -102,7 +114,7 @@ function armorAt(t, hit) {
   return { t: sg > 0 ? A.tTop : A.tSide[0], n: [0, sg, 0], key: 'teto da torre' };
 }
 // Ângulo de impacto, normalização, espessura efetiva, ricochete e sobreposição de calibre
-function evalArmor(t, hit, am, speed) {
+export function evalArmor(t, hit, am, speed) {
   const D = t.def, arm = armorAt(t, hit), ld = hit.ld, n = arm.n;
   const cosA = clamp(-(ld[0] * n[0] + ld[1] * n[1] + ld[2] * n[2]), 0.02, 1);
   const ang = Math.acos(cosA) / DEG;
@@ -121,19 +133,18 @@ function evalArmor(t, hit, am, speed) {
 // =====================================================================
 // Projéteis
 // =====================================================================
-const projs = [];
 const shellGeo = new THREE.CylinderGeometry(0.06, 0.06, 1, 5); shellGeo.rotateX(Math.PI / 2);
 const shellMat = new THREE.MeshBasicMaterial({ color: 0xffd08a, fog: false });
 const MAXTR = 900;
-const tracerMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 4).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false }), MAXTR);
+export const tracerMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 4).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false }), MAXTR);
 tracerMesh.frustumCulled = false; tracerMesh.count = 0; scene.add(tracerMesh);
 const bombGeo = (() => { const b = new THREE.CylinderGeometry(0.5, 0.5, 2.6, 10); b.rotateX(Math.PI / 2); return b; })();
-const bombMat = new THREE.MeshStandardMaterial({ color: lin(0x3d4130), roughness: .7, metalness: .3 });
+const bombMat = new THREE.MeshStandardMaterial({ color: 0x3d4130, roughness: .7, metalness: .3 });
 for (const pd of Object.values(PLANES)) {
   for (const b of pd.bombs) { b.type = 'BOMB'; b.cal = b.d * 1000; prepAmmo(Object.assign(b, { v: 200 }), b.cal, 0.22); }
   if (pd.rockets) { const r = pd.rockets; r.type = 'ROCKET'; r.cal = r.m > 20 ? 127 : 82; prepAmmo(r, r.cal, 0.35); }
 }
-function fireProj(owner, pos, vel, am, kind, extra) {
+export function fireProj(owner, pos, vel, am, kind, extra) {
   const pr = Object.assign({ p: pos.clone(), v: vel.clone(), am, owner, kind, life: kind === 'bomb' ? 40 : kind === 'bullet' ? 4 : 8, age: 0, bounced: false, ignore: owner, tracer: false }, extra || {});
   if (kind === 'shell') { pr.mesh = new THREE.Mesh(shellGeo, shellMat); scene.add(pr.mesh); }
   if (kind === 'bomb' || kind === 'rocket') {
@@ -145,7 +156,7 @@ function fireProj(owner, pos, vel, am, kind, extra) {
 }
 const _q = new V3(), _n = new V3(), _tm = new THREE.Matrix4(), _tq = new QUAT(), _ts = new V3(), _tp = new V3();
 const _zf = new V3(0, 0, 1);
-function updateProjs(dt) {
+export function updateProjs(dt) {
   let tc = 0;
   for (let i = projs.length - 1; i >= 0; i--) {
     const pr = projs[i]; pr.life -= dt; pr.age += dt; let dead = pr.life <= 0;
@@ -178,7 +189,7 @@ function updateProjs(dt) {
   }
   tracerMesh.count = tc; tracerMesh.instanceMatrix.needsUpdate = true;
 }
-function clearProjs() { for (const p of projs) if (p.mesh) scene.remove(p.mesh); projs.length = 0; }
+export function clearProjs() { for (const p of projs) if (p.mesh) scene.remove(p.mesh); projs.length = 0; }
 
 function onImpact(pr, hit) {
   const sp = pr.v.length(), dir = pr.v.clone().normalize(), am = pr.am;
@@ -223,7 +234,7 @@ function impactTank(pr, hit, sp, dir) {
   const mat = hit.part === 'hull' ? t.root.matrixWorld : t.turret.matrixWorld;
   const nW = new V3(...E.arm.n).transformDirection(mat);
   if (E.track && t.alive && (shell ? Math.random() < 0.75 : E.pen > 15 && Math.random() < 0.1)) { t.breakMod('tracks'); if (t.isPlayer) showDmg('Esteira rompida'); }
-  if (isP && shell) stats.hits++;
+  if (isP && shell) S.stats.hits++;
   if (Math.random() < E.ricoP) {
     pr.v.addScaledVector(nW, -2 * pr.v.dot(nW)).multiplyScalar(0.55).add(rv(30));
     pr.p.copy(hit.point).addScaledVector(nW, 0.08); pr.bounced = true; pr.ignore = t;
@@ -246,7 +257,7 @@ function impactTank(pr, hit, sp, dir) {
   return true;
 }
 
-function compLabel(c) { return c.kind === 'crew' ? c.ref.label : c.name === 'ammo' ? 'Munição' : c.name === 'fuel' ? 'Combustível' : MODS[c.name][0]; }
+export function compLabel(c) { return c.kind === 'crew' ? c.ref.label : c.name === 'ammo' ? 'Munição' : c.name === 'fuel' ? 'Combustível' : MODS[c.name][0]; }
 function postPen(t, pr, hit, dir, E) {
   const am = pr.am, D = t.def, shell = pr.kind === 'shell';
   const lp = hit.point.clone().applyMatrix4(t.invRoot);
@@ -287,7 +298,7 @@ function postPen(t, pr, hit, dir, E) {
   const sh = pr.owner, wasAlive = t.alive;
   if (names.detonate) destroyVehicle(t, sh, 'ammo');
   else if (t.alive && t.aliveCount() < 2) destroyVehicle(t, sh, 'crew');
-  if (sh && sh.isPlayer && shell) stats.pens++;
+  if (sh && sh.isPlayer && shell) S.stats.pens++;
   if (sh && sh.who && wasAlive && sh.team !== t.team) sh.who.score += 15;
   const det = names.list.length ? names.list.join(' · ') : 'sem dano crítico';
   const killed = wasAlive && !t.alive;
@@ -296,7 +307,7 @@ function postPen(t, pr, hit, dir, E) {
   if (t.isPlayer && t.alive) { showDmg(`Penetração na ${E.arm.key}: ${det}`); shakeCam(.6); flashVign(); }
 }
 // Efeito de componentes atingidos; retorna nomes e se a munição detonou
-function applyCompHits(t, hits, detChance) {
+export function applyCompHits(t, hits, detChance) {
   const list = []; let detonate = false;
   for (const c of hits) {
     if (c.kind === 'crew') { if (c.ref.alive) { c.ref.alive = false; list.push(c.ref.label); } continue; }
@@ -315,7 +326,7 @@ function applyCompHits(t, hits, detChance) {
 // Explosivos: sobrepressão e fragmentação (granadas HE, foguetes, bombas, AA)
 // =====================================================================
 const _bl = new V3();
-function blast(pos, tnt, owner, opts = {}) {
+export function blast(pos, tnt, owner, opts = {}) {
   const R = 1.2 + 2.6 * Math.cbrt(tnt), pen0 = hePen(tnt) + (opts.kinetic || 0);
   const sc = Math.cbrt(tnt);
   if (tnt >= 20) { fxBigBlast(pos, Math.min(2.6, sc / 3)); sndBoom(pos, true); addCrater(pos, 2 + sc * 1.2); shakeAt(pos, 1.6, 140); }
@@ -343,7 +354,7 @@ function blast(pos, tnt, owner, opts = {}) {
     if (_bl.y < D.clr + 0.8 && f > 0.55 && t.alive && Math.random() < f) { t.breakMod('tracks'); if (t.isPlayer) showDmg('Esteira rompida pela explosão'); }
     if (t.alive && f > 0.2) {
       const J = Math.sqrt(tnt) * 2000 * f, dir = _bl.set(t.pos.x - pos.x, 2, t.pos.z - pos.z).normalize();
-      t.vel.addScaledVector(dir, J / D.mass);
+      t.impulse(dir.multiplyScalar(J));
     }
     if (pen < th || !t.alive) {
       if (owner && owner.isPlayer && (opts.direct === t || f > .6) && !report) report = { t, w: 'NÃO PENETROU', s: `HE · ${Math.round(pen)} mm contra ${th} mm (${key})`, c: 'enemy' };
@@ -364,7 +375,7 @@ function blast(pos, tnt, owner, opts = {}) {
     const killed = wasAlive && !t.alive, det = res.list.length ? res.list.join(' · ') : 'sem dano crítico';
     if (owner && owner.isPlayer) {
       report = { t, w: killed ? 'DESTRUÍDO' : 'PENETROU', s: `HE · ${Math.round(pen)} mm contra ${th} mm (${key}) · ${det}`, c: killed ? 'amber' : 'ok', x: { lp: [ix, iy, iz], end: [ix, iy, iz], frags: Array.from({ length: 22 }, () => { const v = rv(1).normalize().multiplyScalar(Ri * rand(.6, 1.2)); return [[ix, iy, iz], [ix + v.x, iy + v.y, iz + v.z]]; }), blast: [ix, iy, iz], comps, before } };
-      if (opts.direct === t || opts.bomb) stats.pens++;
+      if (opts.direct === t || opts.bomb) S.stats.pens++;
     }
     if (t.isPlayer && t.alive) { showDmg(`Explosão no ${key}: ${det}`); shakeCam(.8); flashVign(); }
   }
@@ -412,8 +423,7 @@ function impactPlane(pr, hit, sp, dir) {
 // =====================================================================
 // Destruição
 // =====================================================================
-const popped = [];
-function destroyVehicle(v, killer, cause) {
+export function destroyVehicle(v, killer, cause) {
   if (!v.alive) return;
   v.alive = false;
   const k = killer && killer !== v && killer.team !== v.team ? killer : (v.lastHitBy && v.lastHitBy.team !== v.team ? v.lastHitBy : null);
@@ -427,21 +437,34 @@ function onTankDestroyed(t, cause) {
   if (cause === 'ammo') {
     fxExplosion(center, 2.2); sndBoom(center, true); shakeAt(center, 1.2, 80);
     const obj = t.turret; scene.attach(obj); t.turretOn = false;
-    t.popped = { obj, vel: new V3(rand(-3, 3), rand(9, 15), rand(-3, 3)).add(t.vel), w: rv(3), rest: false };
-    popped.push(t.popped);
+    const T = t.def.turret;
+    t.popped = spawnDebris(obj, new V3(rand(-3, 3), rand(9, 15), rand(-3, 3)).add(t.vel), rv(3), [T.w / 2, T.h / 2, T.l / 2], [0, T.h / 2, 0], 4000);
   } else { fxExplosion(center, 1); sndBoom(center, true); }
 }
-function updatePopped(dt) {
-  for (const p of popped) {
-    if (p.rest) continue;
-    p.vel.y -= G * dt; p.obj.position.addScaledVector(p.vel, dt);
-    p.obj.rotation.x += p.w.x * dt; p.obj.rotation.z += p.w.z * dt;
-    const gh = H(p.obj.position.x, p.obj.position.z);
-    if (p.obj.position.y < gh) {
-      p.obj.position.y = gh;
-      if (Math.abs(p.vel.y) < 2) p.rest = true;
-      p.vel.y *= -0.3; p.vel.x *= .5; p.vel.z *= .5; p.w.multiplyScalar(.4);
-      fxDust(p.obj.position.clone(), 6, 1); sndClank(p.obj.position);
-    }
+// Destroço como corpo rígido do Rapier (quica, rola e colide com veículos e construções)
+const _dq = new QUAT();
+export function spawnDebris(obj, vel, angVel, half, offset = [0, 0, 0], mass = 500) {
+  obj.updateMatrixWorld(true);
+  const p = new V3(), q = new QUAT(); obj.matrixWorld.decompose(p, q, new V3());
+  const off = new V3(...offset).applyQuaternion(q);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(p.x + off.x, p.y + off.y, p.z + off.z).setRotation(q).setLinvel(vel.x, vel.y, vel.z).setAngvel(angVel).setLinearDamping(0.05).setAngularDamping(0.3));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(...half).setMass(mass).setFriction(0.8).setRestitution(0.15).setCollisionGroups(COL.debris), body);
+  const d = { obj, body, offset: new V3(...offset), hit: false };
+  popped.push(d);
+  return d;
+}
+export function updatePopped() {
+  for (const d of popped) {
+    if (!d.body) continue;
+    const t = d.body.translation(), r = d.body.rotation();
+    _dq.set(r.x, r.y, r.z, r.w);
+    d.obj.quaternion.copy(_dq);
+    d.obj.position.set(t.x, t.y, t.z).sub(d.offset.clone().applyQuaternion(_dq));
+    const v = d.body.linvel();
+    if (!d.hit && v.y > -1 && t.y < H(t.x, t.z) + 2) { d.hit = true; fxDust(new V3(t.x, t.y, t.z), 6, 1); sndClank(d.obj.position); }
   }
+}
+export function clearDebris() {
+  for (const d of popped) { scene.remove(d.obj); if (d.body) world.removeRigidBody(d.body); }
+  popped.length = 0;
 }

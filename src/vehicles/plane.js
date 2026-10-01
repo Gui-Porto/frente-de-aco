@@ -1,16 +1,28 @@
-'use strict';
+import * as THREE from 'three';
+import { scene } from '../core/render.js';
+import { S, planes } from '../core/state.js';
+import { V3, QUAT, UP, clamp, lerp, rand, rv } from '../core/util.js';
+import { H, AIRLIMIT } from '../world/terrain.js';
+import { obstNear, addCrater } from '../world/scenery.js';
+import { PLANES, GUNS, RHO, G } from '../data/vehicles.js';
+import { fxBurn, fxTrail, fxSmallFlash, fxExplosion, fxBigBlast } from '../fx/particles.js';
+import { sndMG, sndShot, sndBoom } from '../fx/audio.js';
+import { fireProj, destroyVehicle, spawnDebris, blast } from '../combat/ballistics.js';
+import { makeLabel, showDmg, flashVign, shakeAt } from '../ui/hud.js';
+import { nextId } from './tank.js';
+import { planeDecals } from './paint.js';
 // =====================================================================
 // Aeronaves: modelo, dinâmica de voo 6DOF, instrutor de mira, armas, dano
 // Eixos do corpo: +z nariz, +y para cima, +x asa esquerda
 // =====================================================================
-function buildPlane(D) {
+export function buildPlane(D) {
   const root = new THREE.Group();
-  const paint = new THREE.MeshStandardMaterial({ color: lin(D.color), roughness: .6, metalness: .25 });
-  const under = new THREE.MeshStandardMaterial({ color: lin(D.key === 'il2' ? 0x6f8aa0 : D.key === 'fw190' ? 0x8e979b : 0x8d8c80), roughness: .6, metalness: .2 });
-  const dark = new THREE.MeshStandardMaterial({ color: lin(0x1b1b1a), roughness: .5, metalness: .4 });
-  const glass = new THREE.MeshStandardMaterial({ color: lin(0x2b3a44), roughness: .1, metalness: .6, transparent: true, opacity: .85 });
-  const white = new THREE.MeshStandardMaterial({ color: lin(0xd8d6cc), roughness: .7 });
-  const black = new THREE.MeshStandardMaterial({ color: lin(0x111111), roughness: .7 });
+  const paint = new THREE.MeshStandardMaterial({ color: D.color, roughness: .6, metalness: .25 });
+  const under = new THREE.MeshStandardMaterial({ color: D.key === 'il2' ? 0x6f8aa0 : D.key === 'fw190' ? 0x8e979b : 0x8d8c80, roughness: .6, metalness: .2 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x1b1b1a, roughness: .5, metalness: .4 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x2b3a44, roughness: .1, metalness: .6, transparent: true, opacity: .85 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .7 });
+  const black = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: .7 });
   const add = (g, m, p = root, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; p.add(o); return o; };
   const L = D.L, fr = D.fuseR;
   // fuselagem por revolução
@@ -60,20 +72,23 @@ function buildPlane(D) {
     const side = i % 2 ? -1 : 1, k = Math.floor(i / 2);
     rocketMeshes.push(add(new THREE.CylinderGeometry(.06, .06, 1.4, 6).rotateX(Math.PI / 2), dark, root, side * (D.span * 0.22 + k * 0.45), -.25, D.wingZ + .2));
   }
+  planeDecals(D, root, wingL, wingR);
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
   return { root, wingL, wingR, tail, prop, bombMeshes, rocketMeshes, mats: [paint, under] };
 }
 
-const _pm = new THREE.Matrix4(), _pf = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT(), _pt = new V3();
-class Plane {
+export const _pf = new V3(), _pt = new V3();
+const _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
+export class Plane {
   constructor(key, team, who, pos, yaw, speed) {
-    this.id = ++VID; this.def = PLANES[key]; const D = this.def;
+    this.id = nextId(); this.def = PLANES[key]; const D = this.def;
     this.type = 'plane'; this.team = team; this.who = who; this.name = who ? who.name : D.name; this.isPlayer = !!(who && who.isPlayer);
     Object.assign(this, buildPlane(D)); scene.add(this.root);
     this.pos = pos.clone(); this.q = new QUAT().setFromAxisAngle(UP, yaw);
     this.vel = new V3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(speed);
     this.pr = 0; this.rr = 0; this.yr = 0; // arfagem (nariz para cima +), rolagem (direita +), guinada (esquerda +)
     this.elev = 0; this.ail = 0; this.rud = 0; this.throttle = 1; this.wep = false;
+    this.flaps = 0; this.airbrake = false; this.iP = 0;
     this.hp = Object.assign({}, D.hpParts); this.maxHp = D.hpParts;
     this.wingOn = { L: true, R: true }; this.tailOn = true; this.engineOn = true; this.pilot = true;
     this.alive = true; this.gone = false; this.fire = 0; this.temp = 80; this.oil = 0; this.lastHitBy = null; this.lastHitT = -99;
@@ -130,7 +145,8 @@ class Plane {
       const hpL = this.wingOn.L ? 0.6 + 0.4 * this.hp.wingL / this.maxHp.wingL : 0, hpR = this.wingOn.R ? 0.6 + 0.4 * this.hp.wingR / this.maxHp.wingR : 0;
       const kW = (hpL + hpR) / 2;
       const mach = V / 340;
-      const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.bombs.length * 0.0012 + this.rockets * 0.0004 + (mach > 0.68 ? 2.5 * Math.pow(mach - 0.68, 2) : 0) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
+      CL += this.flaps * 0.38 * (aa <= as ? 1 : 0.5);
+      const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.flaps * 0.028 + (this.airbrake ? 0.06 : 0) + this.bombs.length * 0.0012 + this.rockets * 0.0004 + (mach > 0.68 ? 2.5 * Math.pow(mach - 0.68, 2) : 0) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
       // forças
       _pF.set(0, -m * G, 0);
       _pt.crossVectors(_pv, _pl); const ln = _pt.length();
@@ -193,29 +209,38 @@ class Plane {
     if (Math.max(Math.abs(this.pos.x), Math.abs(this.pos.z)) > AIRLIMIT) this.oobT += dt; else this.oobT = 0;
     if (this.oobT > 15 && this.alive) destroyVehicle(this, null, 'oob');
   }
-  // Instrutor (estilo "mouse aim"): leva o nariz à direção pedida com limites de AoA e G
+  // Instrutor (estilo "mouse aim" do WT): leva o VETOR VELOCIDADE à direção pedida.
+  // Limites de AoA (sem estol) e de G; proteção opcional perto do solo.
   steerTo(dir, dt, opts = {}) {
     if (!this.pilot) { this.elev = this.ail = this.rud = 0; return; }
     this.axes();
+    const D = this.def;
     const dl = dir.dot(_pl), du = dir.dot(_pu), df = dir.dot(_pf);
     const off = Math.acos(clamp(df, -1, 1));
-    const pitchErr = Math.atan2(du, Math.max(df, 0.05) + 0.0);
-    const yawErr = Math.atan2(dl, Math.max(df, 0.05));
+    // arfagem: erro do vetor velocidade (nariz + AoA) com termo integral pequeno contra erro estacionário
+    const pe = Math.atan2(du, Math.max(df, 0.05)) + this.alpha * 0.9;
+    this.iP = clamp(this.iP + pe * dt * (off < 0.3 ? 1 : 0), -0.3, 0.3) * (off < 0.3 ? 1 : 0.95);
+    const trim = 0.9 * clamp(this.alpha, -0.5, 0.5) / D.kde;
+    let elev = off > 1.4 && du < 0 ? 1 : 3.2 * pe + trim - 0.9 * this.pr;
+    // rolagem: inclina para colocar o alvo no plano de sustentação; perto do nariz, nivela as asas
     const bank = Math.atan2(-dl, du);
     const wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu);
     const w = clamp((off - 0.06) / 0.2, 0, 1);
-    let rollErr = lerp(level * 0.6, bank, w);
-    const as = this.def.clmax / this.def.cla;
-    // o vetor velocidade (não o nariz) vai ao alvo: soma o AoA e o trim que equilibra o momento de arfagem
-    const trim = 0.9 * clamp(this.alpha, -0.5, 0.5) / this.def.kde;
-    let elev = (off > 1.4 && du < 0 ? 1 : 3.2 * (pitchErr + this.alpha * 0.9) + trim) - 0.9 * this.pr;
-    const aLim = as * 0.86;
-    elev = Math.min(elev, 0.9 * aLim / this.def.kde + (aLim - this.alpha) * 7);   // limite de AoA (evita estol)
-    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.2);       // limite de G
-    elev = Math.max(elev, -0.9 * as * 0.6 / this.def.kde + (-as * 0.6 - this.alpha) * 7);
-    this.elev = clamp(elev, -1, 1);
+    const rollErr = lerp(level * 0.6, bank, w);
     this.ail = clamp(2.6 * rollErr - 0.55 * this.rr, -1, 1);
+    // leme: corrige pequenos desvios e anula a derrapagem
+    const yawErr = Math.atan2(dl, Math.max(df, 0.05));
     this.rud = clamp(1.8 * yawErr * (1 - w * 0.7) - 0.5 * this.yr, -1, 1);
+    const as = D.clmax / D.cla, aLim = as * (0.86 + this.flaps * 0.08);
+    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7);                  // sem estol
+    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
+    elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
+    // proteção perto do solo (assistência arcade): não deixa mergulhar abaixo de ~60 m sem querer
+    if (opts.groundAssist) {
+      const agl = this.pos.y - H(this.pos.x, this.pos.z), sink = -this.vel.y;
+      if (agl < 40 + sink * 2.2 && _pf.y < 0.1) elev = Math.max(elev, 0.6);
+    }
+    this.elev = clamp(elev, -1, 1);
   }
   gunsPos(g, i, out) { const p = g.pts[i]; return out.set(p[0], p[1], p[2]).applyMatrix4(this.root.matrixWorld); }
   updateWeapons(dt) {
@@ -257,7 +282,7 @@ class Plane {
   engineStop() { this.engineOn = false; this.hp.engine = 0; if (this.isPlayer) showDmg('Motor parou'); }
   damage(part, dmg, by, isBlast, penetrated = true) {
     if (this.gone || !isFinite(dmg)) return;
-    if (by && by.team !== this.team) { this.lastHitBy = by; this.lastHitT = now; }
+    if (by && by.team !== this.team) { this.lastHitBy = by; this.lastHitT = S.now; }
     if (part === 'pilot') {
       if (penetrated && Math.random() < 0.3 * Math.min(1.5, dmg)) { this.pilot = false; if (this.alive) destroyVehicle(this, by, 'pilot'); }
       else part = 'fuse';
@@ -275,15 +300,15 @@ class Plane {
     if (!this.wingOn[side]) return;
     this.wingOn[side] = false;
     const w = side === 'L' ? this.wingL : this.wingR;
-    scene.attach(w); popped.push({ obj: w, vel: this.vel.clone().add(rv(6)), w: rv(4), rest: false });
+    scene.attach(w); spawnDebris(w, this.vel.clone().add(rv(6)), rv(4), [this.def.span / 4, 0.12, this.def.chord / 2], [(side === 'L' ? 1 : -1) * this.def.span / 4, 0.08, this.def.wingZ], 180);
     this.boxes[side === 'L' ? 1 : 2].off = true;
     fxExplosion(this.pos.clone(), .4);
-    if (this.alive) destroyVehicle(this, this.lastHitT > now - 10 ? this.lastHitBy : null, why === 'g' ? 'overg' : why === 'vne' ? 'vne' : 'wing');
+    if (this.alive) destroyVehicle(this, this.lastHitT > S.now - 10 ? this.lastHitBy : null, why === 'g' ? 'overg' : why === 'vne' ? 'vne' : 'wing');
   }
   onDestroyed(cause) { this.firing = false; if (cause === 'pilot') { this.throttle = 0; } }
   crash() {
     if (this.gone) return;
-    if (this.alive) destroyVehicle(this, this.lastHitT > now - 15 ? this.lastHitBy : null, 'crash');
+    if (this.alive) destroyVehicle(this, this.lastHitT > S.now - 15 ? this.lastHitBy : null, 'crash');
     this.gone = true;
     fxBigBlast(this.pos.clone(), 1); sndBoom(this.pos, true); addCrater(this.pos, 4); shakeAt(this.pos, 1, 60);
     this.root.visible = false; this.burnAt = this.pos.clone(); this.burnT = 25;
