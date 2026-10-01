@@ -65,14 +65,14 @@ export function updateParts(dt) {
 export function clearParts() { for (const p of PARTS) { p.life = 0; p.s.visible = false; } }
 const flash = (pos, i) => flashAt(pos, i, S);
 export function fxDust(pos, n = 8, s = 1) {
-  for (let i = 0; i < n; i++) spawnP({ pos: pos.clone().add(rv(0.6 * s)), vel: rv(2.5 * s).setY(rand(1, 4) * s), life: rand(1.6, 3), size: 1.4 * s, size1: 5 * s, color: 0x7a6a50, op: .45, rise: 0.15, drag: 1.8 });
+  for (let i = 0; i < n; i++) spawnP({ pos: pos.clone().add(rv(0.6 * s)), vel: rv(2.5 * s).setY(rand(1, 4) * s), life: rand(1.2, 2.2), size: 1.0 * s, size1: 3.2 * s, color: 0xa89a7c, op: .3, rise: 0.1, drag: 2.2 });
 }
 export function fxSparks(pos, n = 7) {
   for (let i = 0; i < n; i++) spawnP({ pos, vel: rv(9), life: rand(.15, .35), size: .35, size1: .1, tex: TEX.fire, add: true, color: 0xffd080, grav: 9, drag: .5 });
 }
 export function fxExplosion(pos, s = 1) {
   for (let i = 0; i < 10 * s; i++) spawnP({ pos: pos.clone().add(rv(.4 * s)), vel: rv(7 * s), life: rand(.25, .55), size: 1.5 * s, size1: 4.5 * s, tex: TEX.fire, add: true, color: 0xffb060 });
-  for (let i = 0; i < 14 * s; i++) spawnP({ pos: pos.clone().add(rv(.8 * s)), vel: rv(4 * s).setY(rand(1, 6) * s), life: rand(2.5, 4.5), size: 2 * s, size1: 8 * s, color: 0x2a2724, op: .7, rise: .5, drag: 1.2 });
+  for (let i = 0; i < 9 * s; i++) spawnP({ pos: pos.clone().add(rv(.8 * s)), vel: rv(3.5 * s).setY(rand(1, 5) * s), life: rand(2, 3.5), size: 1.6 * s, size1: 5.5 * s, color: 0x4a4540, op: .38, rise: .45, drag: 1.4 });
   flash(pos, 6 * s);
 }
 export function fxBigBlast(pos, s) {
@@ -83,14 +83,14 @@ export function fxBigBlast(pos, s) {
 export function fxMuzzle(pos, dir, cal) {
   const s = cal / 80;
   for (let i = 0; i < 5; i++) spawnP({ pos: pos.clone().addScaledVector(dir, i * 0.6 * s), vel: dir.clone().multiplyScalar(18 + i * 4), life: .09, size: 1.6 * s, size1: 2.4 * s, tex: TEX.fire, add: true, color: 0xffc070, drag: 8 });
-  for (let i = 0; i < 9; i++) spawnP({ pos: pos.clone(), vel: dir.clone().multiplyScalar(rand(6, 18)).add(rv(3)), life: rand(1.8, 3.2), size: 1.1 * s, size1: 5.5 * s, color: 0x8d8a83, op: .38, rise: .35, drag: 2.2 });
+  for (let i = 0; i < 6; i++) spawnP({ pos: pos.clone(), vel: dir.clone().multiplyScalar(rand(6, 16)).add(rv(2.5)), life: rand(1.4, 2.4), size: .9 * s, size1: 3.6 * s, color: 0xb3afa6, op: .22, rise: .3, drag: 2.6 });
   const gp = pos.clone(); gp.y = H(gp.x, gp.z) + 0.3;
-  if (pos.y - gp.y < 4) for (let i = 0; i < 10; i++) { const a = Math.random() * 6.28; spawnP({ pos: gp, vel: new V3(Math.cos(a) * 9, rand(.3, 1.2), Math.sin(a) * 9), life: rand(1.2, 2.2), size: 1.3, size1: 4.5, color: 0x7a6a50, op: .3, drag: 2.5 }); }
+  if (pos.y - gp.y < 4) for (let i = 0; i < 6; i++) { const a = Math.random() * 6.28; spawnP({ pos: gp, vel: new V3(Math.cos(a) * 9, rand(.3, 1.2), Math.sin(a) * 9), life: rand(1, 1.8), size: 1.0, size1: 3.2, color: 0xb4a588, op: .16, drag: 2.8 }); }
   flash(pos, 4 * s);
 }
 export function fxSmallFlash(pos, dir) { spawnP({ pos: pos.clone().addScaledVector(dir, .3), vel: dir.clone().multiplyScalar(10), life: .05, size: .5, size1: .8, tex: TEX.fire, add: true, color: 0xffc070, drag: 8 }); }
 export function fxBurn(pos, s) {
   spawnP({ pos: pos.clone().add(rv(.4)), vel: new V3(rand(-.4, .4), rand(1.5, 3), rand(-.4, .4)), life: rand(.35, .7), size: 1.0 * s, size1: .3, tex: TEX.fire, add: true, color: 0xff8a30, hdr: 1.2, drag: .5 });
-  spawnP({ pos: pos.clone().add(new V3(0, 1, 0)), vel: new V3(rand(-.4, .4) + 0.6, rand(2, 3.2), rand(-.4, .4)), life: rand(5, 8), size: 1.8 * s, size1: 9 * s, color: 0x1a1816, op: .55, drag: .25, spin: (Math.random() - .5) * .3 });
+  spawnP({ pos: pos.clone().add(new V3(0, 1, 0)), vel: new V3(rand(-.4, .4) + 0.6, rand(2, 3.2), rand(-.4, .4)), life: rand(4, 6), size: 1.2 * s, size1: 5 * s, color: 0x3a3632, op: .28, drag: .35, spin: (Math.random() - .5) * .3 });
 }
 export function fxTrail(pos, color, s = 1, life = 2.5) { spawnP({ pos, life, size: .8 * s, size1: 3.5 * s, color, op: .55, drag: 1 }); }
