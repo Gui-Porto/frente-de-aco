@@ -70,3 +70,21 @@ describe('dados das aeronaves', () => {
     expect(PLANES.mig15.missiles).toBeUndefined();
   });
 });
+
+import { stepHeat, heatLevel } from '../src/vehicles/engineHeat.js';
+describe('temperatura do motor (água → óleo → desgaste)', () => {
+  const run = (kind, thr, wep, ias, secs) => { const e = { water: 85, oil: 70 }; let wear = 0; for (let t = 0; t < secs; t += 0.1) wear += stepHeat(e, kind, thr, wep, ias, false, 0.1); return { e, wear }; };
+  it('100% em cruzeiro rápido não desgasta', () => {
+    expect(run('liquid', 1, false, 120, 600).wear).toBe(0);
+    expect(run('radial', 1, false, 120, 600).wear).toBe(0);
+  });
+  it('WEP nivelado rápido aguenta 2 min sem estragar o motor', () => {
+    expect(run('liquid', 1, true, 120, 120).wear).toBeLessThan(0.05);
+  });
+  it('WEP subindo devagar: água esquenta antes do óleo e o motor acaba danificado', () => {
+    const a = run('liquid', 1, true, 65, 30);
+    expect(heatLevel(a.e, 'liquid')).toBeGreaterThan(0);
+    expect(a.e.water - 115).toBeGreaterThan(a.e.oil - 95); // água passa do limite primeiro
+    expect(run('liquid', 1, true, 65, 300).wear).toBeGreaterThan(1);
+  });
+});

@@ -34,7 +34,7 @@ export const ACTIONS = [
   ['a_airbrake', 'Avião', 'Freio aerodinâmico', ['KeyH']],
   ['a_zoom', 'Avião', 'Zoom / câmera de mira (segurar)', ['Mouse2']],
   // mesmos comandos nas batalhas terrestres e na Batalha Aérea (padrão do War Thunder com mouse aim)
-  ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Mouse1']],
+  ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Mouse1', 'Space']],
   ['a_cm', 'Avião', 'Contramedidas (flares + chaff)', ['KeyX']],
   ['a_gear', 'Avião', 'Trem de pouso', ['KeyG']],
   ['a_ext', 'Avião', 'Extintor de incêndio', ['KeyK']],
@@ -73,6 +73,8 @@ function merge(base, o) {
 }
 export const settings = defaults();
 try { const s = localStorage.getItem(KEY); if (s) merge(settings, JSON.parse(s)); } catch (e) { /* sem armazenamento: usa padrões */ }
+// configurações salvas antes do atalho de teclado: míssil só no botão do meio (touchpad não tem)
+if (settings.binds.a_missile.join() === 'Mouse1') settings.binds.a_missile.push('Space');
 const listeners = [];
 export function onSettings(fn) { listeners.push(fn); }
 export function saveSettings() {

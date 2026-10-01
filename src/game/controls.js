@@ -86,8 +86,7 @@ function controlPlane(p, dt) {
   if (isDown('a_thr_up')) { p.throttle = Math.min(1, p.throttle + dt * 0.6); if (p.throttle >= 1) wepHold += dt; } else wepHold = 0;
   if (isDown('a_thr_dn')) { p.throttle = Math.max(0, p.throttle - dt * 0.6); p.wep = false; }
   if (wepHold > 0.5) p.wep = true;
-  if (pressed('a_flaps')) { p.flaps = p.flaps ? 0 : 1; }
-  if (p.flaps && p.ias > 340 / 3.6) { p.flaps = 0; }
+  if (pressed('a_flaps')) p.cycleFlaps();
   p.airbrake = isDown('a_airbrake');
   const kx = (isDown('a_roll_r') ? 1 : 0) - (isDown('a_roll_l') ? 1 : 0);
   const ky = (isDown('a_yaw_l') ? 1 : 0) - (isDown('a_yaw_r') ? 1 : 0);

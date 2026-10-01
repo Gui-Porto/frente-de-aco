@@ -84,11 +84,13 @@ export function updateAirCamera(dt) {
     acam.off.lerp(_p, settings.gameplay.camSmooth ? 1 - Math.exp(-dt * k) : 1).setLength(_p.length()); // gira em volta, sem encurtar
   }
   acam.pos.copy(v.pos).add(acam.off);
-  // câmera de mira: encosta no eixo das armas e fecha o FOV
-  if (acam.aimK > 0.01) {
-    _t.set(0, 2.2, -8).applyQuaternion(v.q).add(v.pos);
-    acam.pos.lerp(_t, acam.aimK); fov = lerp(fov, 32, acam.aimK);
+  // câmera de mira (como no WT): continua atrás da linha de visada, um pouco mais alta e com FOV fechado.
+  // Antes ia para um ponto no referencial do AVIÃO olhando pela mira: em curva o avião enchia a tela.
+  if (acam.aimK > 0.01 && !cockpit) {
+    _t.copy(v.pos).addScaledVector(_f, -dist).addScaledVector(_u, up * 1.7); // mais alto: a deriva não cobre a mira
+    acam.pos.lerp(_t, acam.aimK);
   }
+  if (acam.aimK > 0.01) fov = lerp(fov, 32, acam.aimK);
   acam.fov += (fov - acam.fov) * (1 - Math.exp(-dt * 5));
   setFov(acam.fov);
   acam.pos.y = Math.max(acam.pos.y, H(acam.pos.x, acam.pos.z) + 2);

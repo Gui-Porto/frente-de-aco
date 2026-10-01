@@ -51,7 +51,10 @@ export const B = {
   toast(t) { toast(t); },
   // acertos críticos do jogador ("Tanque perfurado", "Piloto ferido"…), mostrados perto do retículo
   critLog: [],
-  crit(t) { this.critLog.push({ t, at: S.now }); if (this.critLog.length > 4) this.critLog.shift(); },
+  crit(t) { this.critLog.push({ t, at: S.now }); if (this.critLog.length > 4) this.critLog.shift(); this.flash('ACERTO CRÍTICO', 2); },
+  // mensagem grande de acerto no centro (como "Hit / Critical hit / Shot down" do WT); só sobe de nível
+  hitMsg: null, hitT: -9, hitBig: false, hurtT: -9, hurtK: 0, hurtFrom: new V3(),
+  flash(t, lvl) { const m = this.hitMsg; if (m && S.now - m.at < 0.9 && m.lvl > lvl) return; this.hitMsg = { t, lvl, at: S.now }; },
   // ---------- ciclo ----------
   start(cfg) {
     clearWorld(); clearMissiles();
@@ -64,7 +67,7 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = p.def.missiles ? new Seeker(MISSILES[p.def.missiles.w]) : null;
-    this.weapon = 1; this.marked = null; this.critLog = [];
+    this.weapon = 1; this.marked = null; this.critLog = []; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
@@ -72,8 +75,12 @@ export const B = {
   onDamage(v, dmg, by) {
     if (!v.dmgBy) return;
     if (by && by.team !== v.team) { const e = v.dmgBy.get(by) || { dmg: 0, t: 0 }; e.dmg += dmg; e.t = S.now; v.dmgBy.set(by, e); }
-    if (by === this.player && v.team !== 1) this.stats.dmgDealt += dmg;
-    if (v === this.player) { this.stats.dmgTaken += dmg; acam.hit = Math.min(1, acam.hit + dmg / 20); shakeCam(Math.min(0.6, dmg / 25)); }
+    if (by === this.player && v.team !== 1) { this.stats.dmgDealt += dmg; this.hitT = S.now; this.hitBig = dmg > 6; this.flash('ACERTO', dmg > 6 ? 1 : 0); }
+    if (v === this.player) {
+      this.stats.dmgTaken += dmg; acam.hit = Math.min(1, acam.hit + dmg / 20); shakeCam(Math.min(0.6, dmg / 25));
+      this.hurtT = S.now; this.hurtK = Math.min(1, (this.hurtT - (this.hurtPrev || -9) < 0.5 ? this.hurtK || 0 : 0) + 0.25 + dmg / 15); this.hurtPrev = S.now;
+      if (by && by.pos) this.hurtFrom.copy(by.pos); else this.hurtFrom.copy(v.pos);
+    }
   },
   onDestroyed(v, k, cause) {
     if (v.who) v.who.deaths++;
@@ -83,7 +90,7 @@ export const B = {
       pl.who.assists = (pl.who.assists || 0) + 1; pl.who.score += 40;
       if (pl === this.player) { this.stats.assists++; showDmg('Assistência · +40', true); }
     }
-    if (k === this.player) { this.stats.kills++; showDmg(`${v.def.short || v.def.name} derrubado · +100`, true); }
+    if (k === this.player) { this.stats.kills++; showDmg(`${v.def.short || v.def.name} derrubado · +100`, true); this.flash('ABATIDO', 3); }
     addFeed(k, v, cause);
     // explosão no ar quando a estrutura cede (o resto cai em chamas até o solo)
     if (cause === 'structure' || cause === 'wing' || cause === 'tail' || cause === 'fire') {
@@ -112,7 +119,7 @@ export const B = {
       if (c.missile && p.missiles > 0) {
         const tg = this.seeker && this.seeker.locked ? this.seeker.target : null;
         if (launchMissile(p, tg)) { this.stats.missiles++; if (!tg) toast('Míssil sem trava: voo balístico', 1600); }
-      }
+      } else if (c.missile) toast(p.def.missiles ? 'Mísseis esgotados' : 'Esta aeronave não leva mísseis (só o F-86)', 1600);
     } else if (p) { p.firing = false; }
     updateMissiles(dt);
     this.collisions();

@@ -48,8 +48,7 @@ export function pilot(p, c, aimDir, dt) {
   if (c.thr > 0) { p.throttle = Math.min(1, p.throttle + dt * 0.6 * c.thr); if (p.throttle >= 1 && !p.def.jet) wepHold += dt; } else wepHold = 0;
   if (c.thr < 0) { p.throttle = Math.max(0, p.throttle + dt * 0.6 * c.thr); p.wep = false; }
   if (wepHold > 0.5) p.wep = true;
-  if (c.flaps) p.flaps = p.flaps ? 0 : 1;
-  if (p.flaps && p.ias > 340 / 3.6) p.flaps = 0;
+  if (c.flaps) p.cycleFlaps();
   if (c.gear) p.gear = p.gear ? 0 : 1;
   if (p.gear && p.ias > 380 / 3.6) p.gear = 0; // recolhe sozinho acima da velocidade de operação
   p.airbrake = c.brake;

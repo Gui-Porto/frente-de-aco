@@ -9,7 +9,8 @@ import { drawScore } from '../ui/hud.js';
 import { settings, keyName } from '../core/settings.js';
 import { LABEL, modFrac, fuelLeak } from '../vehicles/planeDamage.js';
 import { B } from './battle.js';
-import { LOCK, LOCK_LABEL, leadPoint, energyHeight } from './targeting.js';
+import { LOCK, LOCK_LABEL, leadPoint } from './targeting.js';
+import { HEAT_LIMITS } from '../vehicles/engineHeat.js';
 import { incomingTo, missiles } from './missiles.js';
 import { acam, CAM_MODES } from './camera.js';
 import { cam } from '../game/camera.js';
@@ -20,10 +21,10 @@ import { cam } from '../game/camera.js';
 // aquecimento, lock do míssil, ameaças, radar e silhueta de dano.
 // =====================================================================
 const cv = $('#airhud'), g = cv.getContext('2d');
-const C = { ink: 'rgba(8,11,9,.62)', ph: '#e9dfb4', phd: 'rgba(233,223,180,.55)', amber: '#efa53c', enemy: '#e65a42', ally: '#6db4e3', sky: '#8fb7cf', ok: '#93cf6c' };
+const C = { green: '#5cf06e', greenD: 'rgba(92,240,110,.55)', white: '#f2f2ee', out: 'rgba(0,0,0,.8)', ink: 'rgba(8,11,9,.62)', ph: '#e9dfb4', phd: 'rgba(233,223,180,.55)', amber: '#efa53c', enemy: '#e65a42', ally: '#6db4e3', sky: '#8fb7cf', ok: '#93cf6c' };
 const MONO = '"IBM Plex Mono", ui-monospace, monospace', UI = '"Barlow Condensed", "Arial Narrow", sans-serif';
 const _a = new V3(), _b = new V3(), _s = new V3();
-let W = 0, Hh = 0, dpr = 1, blink = 0, lastE = 0, eRate = 0, eT = 0;
+let W = 0, Hh = 0, dpr = 1, blink = 0;
 export function showAirHud(on) { cv.hidden = !on; $('#hud').classList.toggle('air', on); }
 
 // projeta um ponto do mundo; retorna null se atrás da câmera
@@ -35,6 +36,13 @@ function proj(p, out = { x: 0, y: 0, on: false }) {
 const P1 = { x: 0, y: 0, on: false }, P2 = { x: 0, y: 0, on: false };
 const glow = (c, b = 6) => { g.shadowColor = c; g.shadowBlur = b; };
 function txt(s, x, y, size = 13, col = C.ph, align = 'left', font = MONO) { g.font = `500 ${size}px ${font}`; g.fillStyle = col; g.textAlign = align; g.fillText(s, x, y); }
+// texto do HUD do WT: claro com contorno escuro (legível no céu claro e no chão)
+function otxt(s, x, y, size = 15, col = C.white, align = 'left', font = UI, weight = 600) {
+  g.font = `${weight} ${size}px ${font}`; g.textAlign = align; g.shadowBlur = 0;
+  g.lineWidth = 3; g.strokeStyle = C.out; g.strokeText(s, x, y); g.fillStyle = col; g.fillText(s, x, y);
+}
+// traço verde com contorno (retículo)
+function gstroke(w = 1.6, col = C.green) { g.shadowBlur = 0; g.lineWidth = w + 2.2; g.strokeStyle = C.out; g.stroke(); g.lineWidth = w; g.strokeStyle = col; g.stroke(); }
 
 export function updateAirHUD(dt) {
   if (S.state === 'airmenu' || S.mode !== 'air') return;
@@ -52,12 +60,11 @@ export function updateAirHUD(dt) {
   if (live) {
     if (acam.mode === 2) cockpitFrame();
     speedLines(p);
+    hurt(p);
     reticle(p);
-    tapes(p, dt);
-    instruments(p, dt);
-    weapons(p);
+    flightInfo(p);
     warnings(p);
-    crits();
+    hitMessages();
     damagePanel(p);
   } else if (S.state === 'spectate' && v) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, W / 2, Hh - 40, 15, C.ally, 'center', UI);
@@ -133,98 +140,114 @@ function reticle(p) {
   _a.set(0, 0, 400).applyMatrix4(p.root.matrixWorld);
   const pr = proj(_a, P1);
   const mk = B.marked, d = mk ? mk.pos.distanceTo(p.pos) : 0;
+  const fpx = Hh / 2 / Math.tan(camera.fov * Math.PI / 360);
   if (pr) {
-    // anel de 8 losangos: raio ∝ envergadura típica / distância (encaixe o alvo no anel = alcance certo)
-    const fpx = Hh / 2 / Math.tan(camera.fov * Math.PI / 360);
-    const R = mk && d < 1200 ? clamp(11 / d * fpx, 16, 90) : 46;
-    g.strokeStyle = C.ph; g.fillStyle = C.ph; g.lineWidth = 1.6; glow(C.ph, 7);
-    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, x = pr.x + Math.cos(a) * R, y = pr.y + Math.sin(a) * R; g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 3, y); g.lineTo(x, y + 4); g.lineTo(x - 3, y); g.closePath(); g.fill(); }
-    g.beginPath(); g.arc(pr.x, pr.y, 2.2, 0, 7); g.fill();
-    g.beginPath(); g.moveTo(pr.x - 14, pr.y); g.lineTo(pr.x - 6, pr.y); g.moveTo(pr.x + 6, pr.y); g.lineTo(pr.x + 14, pr.y); g.moveTo(pr.x, pr.y + 6); g.lineTo(pr.x, pr.y + 14); g.stroke();
-    if (mk && d < 1200) txt(fmtD(d), pr.x + R + 8, pr.y + 4, 11, C.ph);
-    g.shadowBlur = 0;
+    // anel que fecha com a distância do alvo marcado (encaixe o alvo no anel = alcance certo)
+    const inR = mk && d < 1200, R = inR ? clamp(11 / d * fpx, 16, 90) : 34;
+    g.beginPath(); g.arc(pr.x, pr.y, R, 0, 7); gstroke(1.3, inR ? C.green : C.greenD);
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), sn = Math.sin(a); g.beginPath(); g.moveTo(pr.x + c * (R - 6), pr.y + sn * (R - 6)); g.lineTo(pr.x + c * (R + 6), pr.y + sn * (R + 6)); gstroke(1.8); }
+    // cruz central (linha das armas)
+    g.beginPath(); g.moveTo(pr.x - 12, pr.y); g.lineTo(pr.x - 4, pr.y); g.moveTo(pr.x + 4, pr.y); g.lineTo(pr.x + 12, pr.y); g.moveTo(pr.x, pr.y - 12); g.lineTo(pr.x, pr.y - 4); g.moveTo(pr.x, pr.y + 4); g.lineTo(pr.x, pr.y + 12); gstroke(1.8);
+    g.beginPath(); g.arc(pr.x, pr.y, 1.6, 0, 7); g.fillStyle = C.green; g.fill();
+    if (inR) otxt(fmtD(d), pr.x + R + 8, pr.y + 5, 13, C.green, 'left', MONO, 500);
+    // marcador de acerto: X na mira a cada acerto (branco; laranja se foi forte)
+    const ha = S.now - B.hitT;
+    if (ha < 0.18) {
+      const k = 1 - ha / 0.18, r1 = 8 + 6 * (1 - k), r2 = r1 + 9;
+      g.globalAlpha = k; g.beginPath();
+      for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { g.moveTo(pr.x + sx * r1, pr.y + sy * r1); g.lineTo(pr.x + sx * r2, pr.y + sy * r2); }
+      gstroke(2.4, B.hitBig ? C.amber : C.white); g.globalAlpha = 1;
+    }
     // lock do míssil: cone do buscador ao redor do eixo
     if (B.seeker && p.missiles > 0) {
       const M = B.seeker.M, st = B.seeker.state, rc = Math.tan((M.acq || M.fov * 2.5) * Math.PI / 180) * fpx;
-      const col = st === LOCK.LOCKED ? C.enemy : st === LOCK.TRACK ? C.amber : st === LOCK.LOST ? C.enemy : C.phd;
-      g.strokeStyle = col; g.lineWidth = 1.4; g.setLineDash(st === LOCK.SEARCH ? [4, 6] : []);
-      g.beginPath(); g.arc(pr.x, pr.y, rc, 0, 7); g.stroke(); g.setLineDash([]);
-      txt(LOCK_LABEL[st], pr.x, pr.y + rc + 16, 13, col, 'center', UI);
+      const col = st === LOCK.LOCKED ? C.enemy : st === LOCK.TRACK ? C.amber : st === LOCK.LOST ? C.enemy : C.greenD;
+      g.setLineDash(st === LOCK.SEARCH ? [4, 6] : []); g.beginPath(); g.arc(pr.x, pr.y, rc, 0, 7); gstroke(1.3, col); g.setLineDash([]);
+      otxt(LOCK_LABEL[st], pr.x, pr.y + rc + 18, 15, col, 'center');
       const tg = B.seeker.target;
-      if (tg) { const tp = proj(tg.pos, P2); if (tp) { const s = st === LOCK.LOCKED ? 16 : 13 + Math.sin(blink * 18) * 3; g.strokeStyle = col; g.lineWidth = 2; g.strokeRect(tp.x - s, tp.y - s, s * 2, s * 2); if (st === LOCK.TRACK) { g.fillStyle = col; g.fillRect(tp.x - s, tp.y + s + 4, s * 2 * clamp(B.seeker.t / M.lockT, 0, 1), 3); } } }
+      if (tg) { const tp = proj(tg.pos, P2); if (tp) { const s = st === LOCK.LOCKED ? 16 : 13 + Math.sin(blink * 18) * 3; g.beginPath(); g.rect(tp.x - s, tp.y - s, s * 2, s * 2); gstroke(2, col); if (st === LOCK.TRACK) { g.fillStyle = col; g.fillRect(tp.x - s, tp.y + s + 4, s * 2 * clamp(B.seeker.t / M.lockT, 0, 1), 3); } } }
     }
   }
-  // para onde o mouse está mandando o avião
+  // círculo do mouse (para onde o instrutor leva o nariz)
   _b.copy(p.pos).addScaledVector(cam.aimDir, 1000);
   const ap = proj(_b, P2);
-  if (ap && acam.mode !== 3) { g.strokeStyle = C.phd; g.lineWidth = 1.2; g.beginPath(); g.arc(ap.x, ap.y, 9, 0, 7); g.stroke(); }
+  if (ap && acam.mode !== 3) { g.beginPath(); g.arc(ap.x, ap.y, 10, 0, 7); gstroke(1.4, C.white); }
 }
 
-// ---------- fitas de velocidade, altitude e rumo ----------
-function tapes(p, dt) {
-  const cx = W / 2, cy = Hh / 2, off = Math.min(W * 0.27, 330), hh = 220;
-  const ias = p.ias * 3.6, alt = p.pos.y;
-  tape(cx - off, cy, hh, ias, 50, 10, 'left', 'KM/H', Math.round(ias), p.ias < stallV(p) * 1.15 ? C.amber : C.ph);
-  tape(cx + off, cy, hh, alt, 250, 50, 'right', 'M', Math.round(alt), alt - H(p.pos.x, p.pos.z) < 150 ? C.amber : C.ph);
-  // rumo
-  const hd = (Math.atan2(cam.aimDir.x, cam.aimDir.z) * 180 / Math.PI + 360 + 180) % 360;
-  const hw = 300, hx = cx - hw / 2, hy = 74;
-  g.save(); g.beginPath(); g.rect(hx, hy - 16, hw, 30); g.clip();
-  g.strokeStyle = C.phd; g.lineWidth = 1;
-  for (let a = Math.floor(hd / 5) * 5 - 40; a <= hd + 40; a += 5) {
-    const x = cx + (a - hd) * 4, big = a % 30 === 0;
-    g.beginPath(); g.moveTo(x, hy - 8); g.lineTo(x, hy - (big ? 0 : 4)); g.stroke();
-    if (big) txt(({ 0: 'N', 90: 'L', 180: 'S', 270: 'O' })[(a + 360) % 360] || String(((a + 360) % 360) / 10).padStart(2, '0'), x, hy + 12, 11, C.phd, 'center');
+// ---------- bloco de voo no canto superior esquerdo (como o do WT) ----------
+const FLAP_TXT = ['', 'COMBATE', 'DECOLAGEM', 'POUSO'];
+function flightInfo(p) {
+  const x = 20; let y = 30;
+  const line = (t, col = C.white, size = 16) => { otxt(t, x, y, size, col); y += size + 5; };
+  const D = p.def;
+  if (D.jet) line(`Empuxo ${Math.round(p.spool * 100)}%`);
+  else line(`Motor ${Math.round(p.throttle * 100)}%${p.wep ? '  WEP' : ''}`, p.wep ? C.amber : C.white);
+  line(`Vel. ${Math.round(p.ias * 3.6)} km/h${D.jet ? `   M ${(p.vel.length() / 340).toFixed(2).replace('.', ',')}` : ''}`, p.ias < stallV(p) * 1.15 ? C.amber : C.white);
+  const agl = p.pos.y - H(p.pos.x, p.pos.z);
+  line(`Alt. ${Math.round(p.pos.y)} m   ${p.vel.y >= 0 ? '▲' : '▼'}${Math.abs(p.vel.y).toFixed(0)} m/s`, agl < 150 ? C.amber : C.white);
+  line(`G ${p.n.toFixed(1).replace('.', ',')}`, Math.abs(p.n) > D.glim * 0.8 ? C.enemy : C.white);
+  // temperaturas: água/óleo (WT); laranja acima do limite, vermelho piscando no crítico
+  if (!p.engineOn) line('MOTOR PARADO', C.enemy);
+  else {
+    const L = HEAT_LIMITS[p.cooling], hc = (v, lim) => (v > lim + 10 ? (Math.sin(blink * 10) > 0 ? C.enemy : C.white) : v > lim ? C.amber : C.white);
+    if (L.water) { otxt(`Água ${Math.round(p.heat.water)}°`, x, y, 16, hc(p.heat.water, L.water)); otxt(`Óleo ${Math.round(p.heat.oil)}°`, x + 92, y, 16, hc(p.heat.oil, L.oil)); y += 21; }
+    else line(`${D.jet ? 'Turbina' : 'Óleo'} ${Math.round(p.heat.oil)}°`, hc(p.heat.oil, L.oil));
   }
-  g.restore();
-  txt(String(Math.round(hd)).padStart(3, '0'), cx, hy - 14, 13, C.ph, 'center');
-  // VSI ao lado da altitude e Mach para jatos
-  const vs = p.vel.y;
-  txt(`${vs >= 0 ? '▲' : '▼'} ${Math.abs(vs).toFixed(0)} m/s`, cx + off + 8, cy + hh / 2 + 22, 12, C.phd, 'right');
-  if (p.def.jet) txt(`M ${(p.vel.length() / 340).toFixed(2).replace('.', ',')}`, cx - off - 8, cy + hh / 2 + 22, 12, C.phd, 'left');
-}
-function tape(x, cy, h, val, step, minor, side, unit, shown, col) {
-  const s = side === 'left' ? -1 : 1, ppu = h / (step * 4);
-  g.save(); g.beginPath(); g.rect(x + (s < 0 ? -70 : 0), cy - h / 2, 70, h); g.clip();
-  g.strokeStyle = C.phd; g.lineWidth = 1;
-  for (let v = Math.floor((val - step * 2.2) / minor) * minor; v <= val + step * 2.2; v += minor) {
-    const y = cy - (v - val) * ppu, big = Math.abs(v % step) < 1e-6;
-    g.beginPath(); g.moveTo(x, y); g.lineTo(x + s * (big ? 12 : 6), y); g.stroke();
-    if (big && v >= 0) txt(String(v), x + s * 16, y + 4, 11, C.phd, side === 'left' ? 'right' : 'left');
+  if (p.flapStage || p.flaps > 0.02) line(`Flaps ${FLAP_TXT[p.flapStage] || 'SUBINDO'}`, C.green);
+  if (p.gear) line('Trem baixado', C.amber);
+  if (p.airbrake) line('Freio aerodinâmico', C.amber);
+  // munição
+  y += 6;
+  for (const gg of p.guns) {
+    const col = gg.broken || gg.jam ? C.enemy : gg.ammo < gg.max * 0.15 ? C.amber : C.white;
+    otxt(gg.W.name, x, y, 14, col, 'left', UI, 500);
+    otxt(gg.broken ? 'INOPERANTE' : gg.jam ? 'SUPERAQUECIDA' : String(gg.ammo), x + 200, y, 15, col, 'right', MONO, 500);
+    if (gg.heat > 0.05) { g.fillStyle = C.out; g.fillRect(x + 208, y - 9, 52, 6); g.fillStyle = gg.heat > 0.7 ? C.amber : C.white; g.fillRect(x + 209, y - 8, 50 * gg.heat, 4); }
+    y += 19;
   }
-  g.restore();
-  g.strokeStyle = C.phd; g.beginPath(); g.moveTo(x, cy - h / 2); g.lineTo(x, cy + h / 2); g.stroke();
-  // janela com o valor atual
-  g.fillStyle = C.ink; g.strokeStyle = col; g.lineWidth = 1.4;
-  const bx = side === 'left' ? x - 74 : x + 6;
-  g.beginPath(); g.rect(bx, cy - 12, 68, 24); g.fill(); g.stroke();
-  txt(String(shown), bx + 34, cy + 5, 15, col, 'center');
-  txt(unit, bx + (side === 'left' ? 0 : 68), cy - 18, 10, C.phd, side === 'left' ? 'left' : 'right', UI);
+  if (D.missiles) {
+    otxt(MISSILES[D.missiles.w].short, x, y, 14, p.missiles ? C.white : C.phd, 'left', UI, 500);
+    for (let i = 0; i < D.missiles.n; i++) { g.fillStyle = C.out; g.fillRect(x + 64 + i * 22, y - 11, 18, 11); g.fillStyle = i < p.missiles ? C.white : 'rgba(255,255,255,.15)'; g.fillRect(x + 65 + i * 22, y - 10, 16, 9); }
+    otxt(`[${kb('a_missile')}]`, x + 70 + D.missiles.n * 22, y, 13, C.phd, 'left', UI, 500);
+    y += 19;
+  }
+  if (D.jet) { otxt(`Flares ${p.flares} · Chaff ${p.chaff}  [${kb('a_cm')}]`, x, y, 14, p.flares ? C.white : C.amber, 'left', UI, 500); y += 19; }
 }
+
+// ---------- dano recebido: borda vermelha + arco na direção de quem atirou ----------
+function hurt(p) {
+  const age = S.now - B.hurtT; if (age > 1.2) return;
+  const k = (1 - age / 1.2) * B.hurtK;
+  const gr = g.createRadialGradient(W / 2, Hh / 2, Math.min(W, Hh) * 0.35, W / 2, Hh / 2, Math.max(W, Hh) * 0.72);
+  gr.addColorStop(0, 'rgba(200,20,10,0)'); gr.addColorStop(1, `rgba(200,20,10,${0.45 * k})`);
+  g.fillStyle = gr; g.fillRect(0, 0, W, Hh);
+  _a.copy(B.hurtFrom).sub(camera.position).applyQuaternion(_q.copy(camera.quaternion).invert());
+  if (_a.lengthSq() > 1) {
+    const ang = Math.atan2(-_a.y, _a.x), R = Math.min(W, Hh) * 0.3;
+    g.beginPath(); g.arc(W / 2, Hh / 2, R, ang - 0.32, ang + 0.32); g.lineWidth = 9; g.strokeStyle = `rgba(230,40,25,${0.9 * k})`; g.stroke();
+  }
+  if (age < 0.9) otxt('ATINGIDO', W / 2, Hh * 0.7, 20, C.enemy, 'center');
+}
+// ---------- mensagens de acerto (ACERTO / ACERTO CRÍTICO / ABATIDO) e lista de críticos ----------
+function hitMessages() {
+  const m = B.hitMsg;
+  if (m) {
+    const age = S.now - m.at, life = m.lvl >= 3 ? 2.2 : 1.1;
+    if (age < life) {
+      const col = [C.white, C.amber, C.amber, C.enemy][m.lvl], size = [20, 22, 24, 30][m.lvl] * (1 + Math.max(0, 0.25 - age) * 1.2);
+      g.globalAlpha = clamp((life - age) * 3, 0, 1); otxt(m.t, W / 2, Hh * 0.36, size, col, 'center', UI, 700); g.globalAlpha = 1;
+    }
+  }
+  let i = 0;
+  for (const c of B.critLog) {
+    const age = S.now - c.at; if (age > 2.5) continue;
+    g.globalAlpha = clamp(2.5 - age, 0, 1); otxt(c.t, W / 2, Hh * 0.36 + 26 + i * 20, 15, C.amber, 'center'); i++;
+  }
+  g.globalAlpha = 1;
+}
+
 const stallV = p => Math.sqrt(2 * p.def.mass * 9.81 / (1.225 * p.def.S * p.def.clmax)) * 0.95;
 
-// ---------- painel de instrumentos (canto inferior esquerdo) ----------
-function instruments(p, dt) {
-  const x = 18, y = Hh - 170, w = 230, h = 152;
-  panel(x, y, w, h, 'INSTRUMENTOS');
-  // potência
-  const thr = p.def.jet ? p.spool : p.throttle;
-  g.fillStyle = 'rgba(233,223,180,.12)'; g.fillRect(x + 12, y + 30, 14, 108);
-  g.fillStyle = p.wep ? C.amber : C.ph; g.fillRect(x + 12, y + 30 + 108 * (1 - thr), 14, 108 * thr);
-  txt(p.wep ? 'WEP' : `${Math.round(p.throttle * 100)}%`, x + 19, y + 26, 11, p.wep ? C.amber : C.ph, 'center');
-  const es = energyHeight(p.pos.y, p.vel.length());
-  if ((eT -= dt) <= 0) { eRate = (es - lastE) / 0.5; lastE = es; eT = 0.5; }
-  const as = p.def.clmax / p.def.cla;
-  const rows = [
-    ['G', p.n.toFixed(1).replace('.', ','), Math.abs(p.n) > p.def.glim * 0.8 ? C.enemy : Math.abs(p.n) > 6 ? C.amber : C.ph],
-    ['AoA', `${(p.alpha * 57.3).toFixed(0)}°`, Math.abs(p.alpha) > as * 0.85 ? C.amber : C.ph],
-    ['ENERGIA', `${(es / 1000).toFixed(2).replace('.', ',')} km ${eRate > 3 ? '▲' : eRate < -3 ? '▼' : '■'}`, eRate < -25 ? C.amber : C.ph],
-    ['MOTOR', !p.engineOn ? 'PARADO' : p.fire > 0 ? 'FOGO' : `${Math.round(p.temp)}°C`, !p.engineOn || p.fire > 0 ? C.enemy : p.temp > 110 ? C.amber : C.ph],
-    ['TREM', p.gear ? 'BAIXADO' : 'RECOLHIDO', p.gear ? C.amber : C.phd],
-    ['FLAPS', p.flaps ? 'BAIXADOS' : p.airbrake ? 'FREIO' : '—', p.flaps || p.airbrake ? C.amber : C.phd],
-  ];
-  rows.forEach(([k, v, c], i) => { txt(k, x + 40, y + 42 + i * 19, 11, C.phd, 'left', UI); txt(v, x + w - 12, y + 42 + i * 19, 13, c, 'right'); });
-}
 function panel(x, y, w, h, title) {
   g.shadowBlur = 0; g.fillStyle = C.ink; g.fillRect(x, y, w, h);
   g.strokeStyle = 'rgba(233,223,180,.18)'; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w - 1, h - 1);
@@ -233,43 +256,7 @@ function panel(x, y, w, h, title) {
 }
 
 // ---------- armas: munição, aquecimento, mísseis ----------
-const kb = id => keyName(settings.binds[id] && settings.binds[id][0]);
-function weapons(p) {
-  const rows = p.guns.length + (p.def.missiles ? 1 : 0) + (p.def.jet ? 1 : 0);
-  const w = 320, h = 30 + rows * 20, x = W / 2 - w / 2, y = Hh - h - 16;
-  panel(x, y, w, h, `ARMAMENTO · [${kb('a_guns')}] armas`);
-  let yy = y + 34;
-  for (const gg of p.guns) {
-    const col = gg.broken ? C.enemy : C.ph;
-    txt(gg.W.name, x + 12, yy, 12, col, 'left', UI);
-    txt(gg.broken ? 'INOPERANTE' : String(gg.ammo), x + 200, yy, 13, gg.broken ? C.enemy : gg.ammo < gg.max * 0.15 ? C.amber : C.ph, 'right');
-    g.fillStyle = 'rgba(233,223,180,.12)'; g.fillRect(x + 212, yy - 8, 96, 6);
-    g.fillStyle = gg.jam ? C.enemy : gg.heat > 0.7 ? C.amber : C.ph; g.fillRect(x + 212, yy - 8, 96 * gg.heat, 6);
-    if (gg.jam) txt('SUPERAQUECIDA', x + 260, yy + 9, 9, C.enemy, 'center', UI);
-    yy += 20;
-  }
-  if (p.def.missiles) {
-    const M = MISSILES[p.def.missiles.w];
-    txt(`[${kb('a_missile')}] ${M.short}`, x + 12, yy, 12, C.ph, 'left', UI);
-    for (let i = 0; i < p.def.missiles.n; i++) { g.fillStyle = i < p.missiles ? C.ph : 'rgba(233,223,180,.15)'; g.fillRect(x + 150 + i * 22, yy - 9, 16, 9); }
-    yy += 20;
-  }
-  if (p.def.jet) {
-    txt(`[${kb('a_cm')}] CONTRAMEDIDAS`, x + 12, yy, 12, C.ph, 'left', UI);
-    txt(`FLARES ${p.flares}  ·  CHAFF ${p.chaff}`, x + w - 12, yy, 12, p.flares ? C.ph : C.amber, 'right');
-  }
-}
-// acertos críticos do jogador, logo abaixo do retículo (somem em 2,5 s)
-function crits() {
-  const now = S.now; let i = 0;
-  for (const c of B.critLog) {
-    const age = now - c.at; if (age > 2.5) continue;
-    g.globalAlpha = clamp(2.5 - age, 0, 1);
-    txt(c.t.toUpperCase(), W / 2, Hh * 0.62 + i * 20, 15, C.amber, 'center', UI); i++;
-  }
-  g.globalAlpha = 1;
-}
-
+const kb = id => (settings.binds[id] || []).map(keyName).join(' / ');
 // ---------- alertas no centro ----------
 function warnings(p) {
   const list = [];

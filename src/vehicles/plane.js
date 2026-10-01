@@ -11,6 +11,7 @@ import { fireProj, destroyVehicle, spawnDebris, blast } from '../combat/ballisti
 import { makeLabel, showDmg, flashVign, shakeAt } from '../ui/hud.js';
 import { nextId } from './tank.js';
 import { buildPlane } from './planeModel.js';
+import { stepHeat, coolingOf } from './engineHeat.js';
 import { planeModules, fuelOf, ctrlAuthority, fuelLeak, applyMod } from './planeDamage.js';
 export { buildPlane };
 // =====================================================================
@@ -22,6 +23,7 @@ export { buildPlane };
 export const sweepOf = D => (D.span / 2 - D.fuseR * 0.6) * Math.tan((D.sweep || 0) * Math.PI / 180);
 
 export const _pf = new V3(), _pt = new V3();
+const FLAP_POS = [0, 0.33, 0.66, 1], FLAP_VMAX = [0, 480, 360, 290], FLAP_NAME = ['Recolhidos', 'Combate', 'Decolagem', 'Pouso'];
 const _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
 export class Plane {
   constructor(key, team, who, pos, yaw, speed, opts = {}) {
@@ -32,10 +34,10 @@ export class Plane {
     this.vel = new V3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(speed);
     this.pr = 0; this.rr = 0; this.yr = 0; // arfagem (nariz para cima +), rolagem (direita +), guinada (esquerda +)
     this.elev = 0; this.ail = 0; this.rud = 0; this.throttle = 1; this.wep = false;
-    this.flaps = 0; this.airbrake = false; this.iP = 0; this.gear = 0; this.spool = 1; this.shotsN = 0; this.hitsN = 0;
+    this.flaps = 0; this.flapStage = 0; this.airbrake = false; this.iP = 0; this.gear = 0; this.spool = 1; this.shotsN = 0; this.hitsN = 0;
     this.hp = Object.assign({}, D.hpParts); this.maxHp = D.hpParts;
     this.wingOn = { L: true, R: true }; this.tailOn = true; this.engineOn = true; this.pilot = true;
-    this.alive = true; this.gone = false; this.fire = 0; this.temp = 80; this.oil = 0; this.lastHitBy = null; this.lastHitT = -99;
+    this.alive = true; this.gone = false; this.fire = 0; this.temp = 80; this.heat = { water: 85, oil: 70 }; this.cooling = coolingOf(key, D.jet); this.oil = 0; this.lastHitBy = null; this.lastHitT = -99;
     this.gStress = 0; this.overG = 0; this.n = 1; this.alpha = 0; this.ias = speed; this.dropSign = 1; this.spottedUntil = 0; this.oobT = 0;
     this.firing = false; this.guns = [];
     for (const g of D.guns) {
@@ -76,7 +78,10 @@ export class Plane {
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
     const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.missiles * 70 - (this.fuelMax - this.fuel);
     const A = ctrlAuthority(this);
-    if (this.mods.hyd && this.mods.hyd.dead) { this.flaps = 0; this.airbrake = false; }
+    if (this.mods.hyd && this.mods.hyd.dead) { this.flapStage = 0; this.airbrake = false; }
+    // flaps por estágio (como no WT): acima do limite do estágio eles sobem um degrau sozinhos; o painel se move devagar
+    if (this.flapStage && this.ias > FLAP_VMAX[this.flapStage] / 3.6 * (D.jet ? 0.85 : 1)) { this.flapStage--; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[this.flapStage]} · velocidade alta`); }
+    this.flaps += clamp(FLAP_POS[this.flapStage] - this.flaps, -dt * 0.5, dt * 0.5);
     // motor danificado rende menos; a turbina responde com atraso (spool)
     const engK = this.engineOn ? 0.35 + 0.65 * clamp(this.hp.engine / this.maxHp.engine, 0, 1) : 0;
     this.spool += (this.throttle - this.spool) * Math.min(1, dt * (D.jet ? 0.7 : 4));
@@ -150,9 +155,10 @@ export class Plane {
       if (this.ias > this.def.vne * 1.07) { this.overG += dt * 2; if (this.overG > 0.4) this.breakWing('L', 'vne'); }
     }
     // temperatura do motor
-    const tgt = 75 + 45 * this.throttle + (this.wep && !this.def.jet ? 40 : 0) - clamp(this.ias / 140, 0, 1.4) * 22 + (this.oil > 0 ? 50 : 0);
-    this.temp += (tgt - this.temp) * dt * 0.06;
-    if (this.temp > 118 && this.engineOn) { this.hp.engine -= dt * 0.8; if (this.hp.engine <= 0) this.engineStop(); }
+    // água → óleo → desgaste (engineHeat.js). Antes um só número chegava a 142 °C no WEP e o motor morria em ~30 s.
+    const wear = stepHeat(this.heat, this.cooling, this.engineOn ? (D.jet ? this.spool : this.throttle) : 0, this.wep, this.ias, this.oil > 0, dt);
+    this.temp = this.heat.oil;
+    if (wear > 0 && this.engineOn) { this.hp.engine -= wear * this.maxHp.engine; if (this.hp.engine <= 0) { this.engineStop(); if (this.isPlayer) showDmg('Motor fundido por superaquecimento'); } }
     if (this.fire > 0) {
       this.fire += dt;
       if (Math.random() < dt * 30) fxBurn(_pt.set(...this.fireAt).applyMatrix4(this.root.matrixWorld).clone(), 1.2);
@@ -195,7 +201,8 @@ export class Plane {
     const wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu);
     const w = nose ? clamp((off - 0.035) / 0.14, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
     const rollErr = lerp(level * 0.6, bank, w);
-    this.ail = clamp(K * (2.6 * rollErr - 0.55 * this.rr), -1, 1);
+    // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
+    this.ail = clamp(K * (2.6 * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
     this.rud = clamp(K * 1.8 * yawErr * (1 - w * 0.7) - 0.5 * this.yr, -1, 1);
@@ -250,6 +257,13 @@ export class Plane {
     fireProj(this, pos, dir.multiplyScalar(am.v * 0.45).add(this.vel), am, 'rocket');
     sndShot(pos, 30);
     return true;
+  }
+  // F desce um estágio; do pouso volta para recolhido
+  cycleFlaps() {
+    if (this.mods.hyd && this.mods.hyd.dead) { if (this.isPlayer) showDmg('Hidráulico inoperante'); return; }
+    const nx = (this.flapStage + 1) % FLAP_POS.length, lim = FLAP_VMAX[nx] / 3.6 * (this.def.jet ? 0.85 : 1);
+    if (nx && this.ias > lim) { if (this.isPlayer) showDmg(`Flaps de ${FLAP_NAME[nx].toLowerCase()}: abaixo de ${Math.round(lim * 3.6)} km/h`); return; }
+    this.flapStage = nx; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[nx]}`);
   }
   engineStop() { this.engineOn = false; this.hp.engine = 0; if (this.isPlayer) showDmg('Motor parou'); }
   ignite(at) { if (this.fire <= 0) { this.fire = 0.01; this.fireAt = at.slice(); } }

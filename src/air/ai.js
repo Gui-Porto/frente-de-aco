@@ -1,3 +1,4 @@
+import { heatLevel } from '../vehicles/engineHeat.js';
 import { S, planes } from '../core/state.js';
 import { V3, UP, clamp, rand } from '../core/util.js';
 import { H } from '../world/terrain.js';
@@ -88,7 +89,7 @@ export class FighterBrain {
     p.axes(); fwdOf(p.q, _f);
     const d = this.d, dir = _d.set(0, 0, 0); let glim = d.glim, fire = false;
     // WEP só em combate e com o motor frio (acima de ~118 °C ele se degrada)
-    p.throttle = 1; p.airbrake = false; p.wep = this.state !== 'patrol' && this.state !== 'pursue' && p.temp < 105;
+    p.throttle = 1; p.airbrake = false; p.wep = this.state !== 'patrol' && this.state !== 'pursue' && heatLevel(p.heat, p.cooling) === 0;
     const fwdFlat = _l.set(_f.x, 0, _f.z).normalize();
     const tg = this.target;
     switch (this.role === 'bomber' ? 'bomber' : this.state) {

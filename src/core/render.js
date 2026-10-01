@@ -117,4 +117,7 @@ export function frameLighting(focus, camY, groundY, S, dt) {
   sky.material.uniforms.time.value += dt;
   if (S.flashT > 0) { S.flashT -= dt; if (S.flashT <= 0) flash.intensity = 0; }
 }
-export function renderFrame() { composer.render(); }
+// flush explícito a cada quadro: sem ele o Chrome/ANGLE (D3D11) acumulava comandos e a cada ~4,6 s
+// travava 200–550 ms num flush do compositor (medido com trace; a GPU em si gasta ~1,5 ms por quadro)
+const glCtx = renderer.getContext();
+export function renderFrame() { composer.render(); glCtx.flush(); }
