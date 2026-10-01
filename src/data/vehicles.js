@@ -1,14 +1,13 @@
-'use strict';
 // =====================================================================
 // Dados dos veículos (aproximações dos valores históricos)
 // Blindagem: [espessura mm, inclinação a partir da vertical em graus]
 // =====================================================================
-const DEG = Math.PI / 180, G = 9.81, RHO = 1.225;
+export const DEG = Math.PI / 180, G = 9.81, RHO = 1.225;
 
 // Penetração de HE por contato (aproximação da curva usada no WT): mm ≈ 15·m_TNT^(1/3)
-const hePen = tnt => 15 * Math.cbrt(tnt);
+export const hePen = tnt => 15 * Math.cbrt(tnt);
 
-const TANKS = {
+export const TANKS = {
   sherman: {
     key: 'sherman', type: 'tank', name: 'M4A3 (76) W', nation: 'EUA', year: 1944, color: 0x3a4126, sp: 170,
     mass: 33700, hp: 450, rpm: 2600, vmax: 42 / 3.6, vrev: 7 / 3.6, wheels: 6, rpmTraverse: false,
@@ -75,7 +74,7 @@ const TANKS = {
   }
 };
 
-const PLANES = {
+export const PLANES = {
   p47: {
     key: 'p47', type: 'plane', name: 'P-47D-28 Thunderbolt', short: 'P-47D', nation: 'EUA', year: 1944, color: 0x4a4d33, sp: 380, stripes: true,
     mass: 6600, S: 27.87, span: 12.4, L: 11.0, cla: 4.6, clmax: 1.45, cd0: 0.0175, e: 0.8, hp: 2000, wep: 2300, eta: 0.82,
@@ -109,7 +108,7 @@ const PLANES = {
 };
 
 // Armas de aeronaves/AA (bala única com cinto simplificado)
-const GUNS = {
+export const GUNS = {
   M2: { name: '12,7 mm M2', cal: 12.7, rpm: 750, v: 870, m: 0.046, pen: 24, he: 0, dmg: 1.2, tracer: 4 },
   ShKAS: { name: '7,62 mm ShKAS', cal: 7.62, rpm: 1800, v: 825, m: 0.0096, pen: 10, he: 0, dmg: 0.45, tracer: 4 },
   VYa: { name: '23 mm VYa-23', cal: 23, rpm: 600, v: 905, m: 0.2, pen: 35, he: 0.01, dmg: 3.2, tracer: 3 },
@@ -117,11 +116,11 @@ const GUNS = {
   MG151: { name: '20 mm MG 151/20', cal: 20, rpm: 740, v: 705, m: 0.092, pen: 8, he: 0.0185, dmg: 3.5, tracer: 3 }
 };
 
-const VEHICLES = Object.assign({}, TANKS, PLANES);
-const LINEUP = ['sherman', 't34', 'pz4', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'];
+export const VEHICLES = Object.assign({}, TANKS, PLANES);
+export const LINEUP = ['sherman', 't34', 'pz4', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'];
 
 // ---------- Balística: arrasto quadrático a = -k|v|v, k = ½ρ·Cd·A/m ----------
-function prepAmmo(am, cal, cd) {
+export function prepAmmo(am, cal, cd) {
   am.cal = am.cal || cal;
   const A = Math.PI * Math.pow(am.cal / 2000, 2);
   am.k = 0.5 * RHO * (cd || (am.type === 'APCR' ? 0.36 : 0.29)) * A / am.m;
@@ -139,10 +138,10 @@ for (const D of Object.values(TANKS)) {
   if (D.mg) prepAmmo(Object.assign(D.mg, { type: 'MG', dmg: 0.4 }), D.mg.cal, 0.3);
 }
 for (const g of Object.values(GUNS)) prepAmmo(Object.assign(g, { type: g.he ? 'HEF' : 'MG', tnt: g.he }), g.cal, 0.3);
-function ballistic(am, r) {
+export function ballistic(am, r) {
   const i = Math.max(0, Math.min(r / 25, am.tab.length - 1.001)), a = Math.floor(i), f = i - a;
   const A = am.tab[a], B = am.tab[a + 1];
   return { ang: A.ang + (B.ang - A.ang) * f, v: A.v + (B.v - A.v) * f, t: A.t + (B.t - A.t) * f };
 }
 // Perfuração cai com a velocidade de impacto (relação de De Marre, expoente 1,43)
-const penAt = (am, v) => am.type === 'HE' ? hePen(am.tnt) : am.pen * Math.pow(v / am.v, 1.43);
+export const penAt = (am, v) => am.type === 'HE' ? hePen(am.tnt) : am.pen * Math.pow(v / am.v, 1.43);

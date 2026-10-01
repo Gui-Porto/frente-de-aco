@@ -1,12 +1,24 @@
-'use strict';
+import * as THREE from 'three';
+import { scene } from '../core/render.js';
+import { S, tanks } from '../core/state.js';
+import { V3, QUAT, UP, clamp, rand, rv, angDiff } from '../core/util.js';
+import { H, terrainNormal, LIMIT } from '../world/terrain.js';
+import { TREES, HEDGES, fellTree } from '../world/scenery.js';
+import { RAPIER, world, COL } from '../world/physics.js';
+import { TANKS, DEG, G, ballistic } from '../data/vehicles.js';
+import { spawnP, fxMuzzle, fxSmallFlash, fxBurn } from '../fx/particles.js';
+import { sndShot, sndMG, sndClick } from '../fx/audio.js';
+import { fireProj, destroyVehicle } from '../combat/ballistics.js';
+import { makeLabel, showDmg, shakeCam } from '../ui/hud.js';
+import { camoTexture, addDecals } from './paint.js';
 // =====================================================================
 // Blindados: modelo, corpo rígido com suspensão por roda, lagartas, câmbio
 // =====================================================================
-const CREW = [['driver', 'Motorista', 'MOT'], ['radio', 'Op. de rádio', 'RÁD'], ['gunner', 'Atirador', 'ATI'], ['commander', 'Comandante', 'CMD'], ['loader', 'Municiador', 'MUN']];
-const MODS = { engine: ['Motor', 22], transmission: ['Transmissão', 25], tracks: ['Esteira', 11], breech: ['Culatra', 18], drive: ['Giro da torre', 15] };
-const GEARS = [0.15, 0.3, 0.5, 0.74, 1.0];
+export const CREW = [['driver', 'Motorista', 'MOT'], ['radio', 'Op. de rádio', 'RÁD'], ['gunner', 'Atirador', 'ATI'], ['commander', 'Comandante', 'CMD'], ['loader', 'Municiador', 'MUN']];
+export const MODS = { engine: ['Motor', 22], transmission: ['Transmissão', 25], tracks: ['Esteira', 11], breech: ['Culatra', 18], drive: ['Giro da torre', 15] };
+export const GEARS = [0.15, 0.3, 0.5, 0.74, 1.0];
 
-function hullProfile(D) {
+export function hullProfile(D) {
   const L = D.L, y0 = D.clr, y1 = D.clr + D.Hh;
   const s = D.armor.front[1] * DEG, ls = D.armor.lfront[1] * DEG, rs = D.armor.rear[1] * DEG;
   const lh = D.Hh * 0.4, gh = D.Hh - lh;
@@ -25,7 +37,7 @@ const trackTex = (() => {
   const c = document.createElement('canvas'); c.width = 64; c.height = 16; const g = c.getContext('2d');
   g.fillStyle = '#26251f'; g.fillRect(0, 0, 64, 16);
   for (let i = 0; i < 4; i++) { g.fillStyle = '#4a4740'; g.fillRect(i * 16 + 2, 1, 11, 14); g.fillStyle = '#18170f'; g.fillRect(i * 16 + 6, 2, 3, 12); }
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; return t;
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
 
 // Espessura nominal por face, usada pelo visualizador de blindagem do hangar
@@ -47,7 +59,7 @@ function plateThickness(D, part, n, y) {
 }
 const ARMOR_VS = 'attribute float thick; varying float vT; varying vec3 vN; varying vec3 vV; void main(){ vT=thick; vN=normalize(normalMatrix*normal); vec4 mv=modelViewMatrix*vec4(position,1.0); vV=mv.xyz; gl_Position=projectionMatrix*mv; }';
 const ARMOR_FS = 'varying float vT; varying vec3 vN; varying vec3 vV; vec3 ramp(float e){ vec3 c0=vec3(0.75,0.08,0.05), c1=vec3(0.95,0.5,0.08), c2=vec3(0.95,0.85,0.2), c3=vec3(0.35,0.75,0.25), c4=vec3(0.15,0.45,0.85); if(e<30.0) return mix(c0,c1,e/30.0); if(e<70.0) return mix(c1,c2,(e-30.0)/40.0); if(e<120.0) return mix(c2,c3,(e-70.0)/50.0); return mix(c3,c4,clamp((e-120.0)/100.0,0.0,1.0)); } void main(){ float c=abs(dot(normalize(vN),normalize(-vV))); float e=vT/max(c,0.08); vec3 col=ramp(e)*(0.55+0.45*c); gl_FragColor=vec4(col,1.0); }';
-const armorMat = new THREE.ShaderMaterial({ vertexShader: ARMOR_VS, fragmentShader: ARMOR_FS });
+export const armorMat = new THREE.ShaderMaterial({ vertexShader: ARMOR_VS, fragmentShader: ARMOR_FS });
 function tagArmor(mesh, D, part) {
   const g = mesh.geometry, pos = g.attributes.position, nor = g.attributes.normal, th = new Float32Array(pos.count), n = new V3(), p = new V3();
   // normais no espaço da peça (hull/turret), considerando rotação/translação local da malha
@@ -61,11 +73,11 @@ function tagArmor(mesh, D, part) {
   mesh.userData.normalMat = mesh.material;
 }
 
-function buildTank(D) {
+export function buildTank(D) {
   const root = new THREE.Group();
-  const camo = new THREE.MeshStandardMaterial({ color: lin(D.color), roughness: .82, metalness: .2 });
-  const dark = new THREE.MeshStandardMaterial({ color: lin(0x1c1c19), roughness: .95, metalness: .1 });
-  const steel = new THREE.MeshStandardMaterial({ color: lin(D.color).multiplyScalar(0.6), roughness: .7, metalness: .3 });
+  const camo = new THREE.MeshStandardMaterial({ map: camoTexture(D), roughness: .78, metalness: .25 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c19, roughness: .95, metalness: .1 });
+  const steel = new THREE.MeshStandardMaterial({ color: new THREE.Color(D.color).multiplyScalar(0.6), roughness: .7, metalness: .3 });
   const trackL = new THREE.MeshStandardMaterial({ map: trackTex.clone(), roughness: .95, metalness: .2 });
   const trackR = new THREE.MeshStandardMaterial({ map: trackTex.clone(), roughness: .95, metalness: .2 });
   for (const m of [trackL, trackR]) { m.map.needsUpdate = true; m.map.repeat.set(D.L * 2.6, 1); }
@@ -126,15 +138,18 @@ function buildTank(D) {
     const co = new THREE.CylinderGeometry(.02, .02, .4, 6); co.rotateX(Math.PI / 2); add(co, dark, gunPivot, T.w * .14, .05, .45);
   }
   const mgMuzzle = new THREE.Object3D(); mgMuzzle.position.set(T.w * .14, .05, .7); gunPivot.add(mgMuzzle);
+  addDecals(D, root, turret);
   return { root, turret, gunPivot, muzzles, mgMuzzle, mats: [camo, dark, steel, trackL, trackR], wheels, armorMeshes: meshes, trackL, trackR };
 }
-function setArmorView(v, on) { for (const m of v.armorMeshes) m.material = on ? armorMat : m.userData.normalMat; }
+export function setArmorView(v, on) { for (const m of v.armorMeshes) m.material = on ? armorMat : m.userData.normalMat; }
 
 let VID = 0;
-const _m4 = new THREE.Matrix4(), _ax = new V3(), _ay = new V3(), _az = new V3(), _wp = new V3(), _rr = new V3(), _vp = new V3(), _F = new V3(), _T = new V3(), _tn = new V3(), _tf = new V3(), _tl = new V3(), _fi = new V3(), _tmp = new V3();
-class Tank {
+export const nextId = () => ++VID;
+export const _ax = new V3(), _ay = new V3(), _az = new V3(), _tmp = new V3();
+const _m4 = new THREE.Matrix4(), _wp = new V3(), _rr = new V3(), _vp = new V3(), _F = new V3(), _T = new V3(), _tn = new V3(), _tf = new V3(), _tl = new V3(), _fi = new V3();
+export class Tank {
   constructor(key, team, who, x, z, yaw) {
-    this.id = ++VID; this.def = TANKS[key]; const D = this.def;
+    this.id = nextId(); this.def = TANKS[key]; const D = this.def;
     this.type = D.type; this.team = team; this.who = who; this.name = who ? who.name : D.name; this.isPlayer = !!(who && who.isPlayer);
     Object.assign(this, buildTank(D)); scene.add(this.root);
     // ---- corpo rígido ----
@@ -143,6 +158,7 @@ class Tank {
     this.Ib = new V3(D.mass / 12 * (Hh2 * Hh2 + D.L * D.L), D.mass / 12 * (D.W * D.W + D.L * D.L), D.mass / 12 * (D.W * D.W + Hh2 * Hh2));
     this.q = new QUAT().setFromAxisAngle(UP, yaw);
     this.pos = new V3(x, H(x, z) + this.comY + 0.05, z); this.vel = new V3(); this.w = new V3();
+    this.makeBody();
     this.contacts = [];
     const n = D.wheels;
     for (const s of [1, -1]) {
@@ -164,7 +180,7 @@ class Tank {
     this.throttle = 0; this.steer = 0; this.firing = false;
     this.crew = CREW.map(([role, label, short]) => ({ role, label, short, alive: true }));
     this.mods = {}; for (const k in MODS) this.mods[k] = { broken: false, rep: 0, label: MODS[k][0] };
-    this.fire = 0; this.fireTick = 0; this.ext = 0; this.extCd = 0; this.replace = {};
+    this.fire = 0; this.fireTick = 0; this.ext = 0; this.extCd = 0; this.replace = {}; this.repairT = 0; this.repairMax = 0; this.cruise = 0;
     this.alive = true; this.turretOn = true; this.lastHitBy = null; this.deadT = 0; this.spottedUntil = 0; this.oobT = 0; this.flipT = 0;
     this.dustT = 0; this.smokeT = 0; this.burnT = 0;
     this.hullMin = [-D.W / 2, 0.15, -D.L / 2]; this.hullMax = [D.W / 2, D.clr + D.Hh, D.L / 2];
@@ -198,6 +214,7 @@ class Tank {
 
   // Motor e câmbio automático: potência pela curva de RPM, troca com corte de tração
   drive(dt) {
+    this.syncIn();
     const D = this.def, can = this.canDrive();
     const thr = can ? this.throttle : 0, st = can ? this.steer : 0;
     this.axes();
@@ -233,136 +250,106 @@ class Tank {
     this.Fside = [this.cmd[0] * Fe / 2, this.cmd[1] * Fe / 2];
   }
 
-  physics(dt) {
-    const D = this.def, n = Math.max(1, Math.ceil(dt / 0.0045)), h = dt / n;
-    if (this.alive) this.drive(dt); else { this.cmd = [0, 0]; this.Fside = [0, 0]; }
-    const m = D.mass, nc = this.contacts.filter(c => !c.run).length, cLat = m / nc * 7, mu = 0.85, muS = 0.65;
-    for (let s = 0; s < n; s++) {
-      this.axes();
-      _F.set(0, -m * G, 0); _T.set(0, 0, 0);
-      let gl = 0, gr = 0;
-      for (const c of this.contacts) { c.on = false; }
-      for (const c of this.contacts) {
-        _rr.set(c.x, c.y - 0.12 - this.comY, c.z).applyQuaternion(this.q);
-        _wp.copy(this.pos).add(_rr);
-        const d = H(_wp.x, _wp.z) - _wp.y;
-        if (d <= 0) continue;
-        if (!c.n) c.n = new V3();
-        terrainNormal(_wp.x, _wp.z, c.n);
-        c.on = true; c.d = d * c.n.y; c.side > 0 ? gl++ : gr++; // profundidade medida ao longo da normal local
-      }
-      this.trackV[0] = this.trackV[1] = 0;
-      for (const c of this.contacts) {
-        if (!c.on) continue;
-        _rr.set(c.x, c.y - 0.12 - this.comY, c.z).applyQuaternion(this.q);
-        _vp.copy(this.w).cross(_rr).add(this.vel);
-        // contato com a normal LOCAL do terreno: a rampa empurra a lagarta para cima e para trás
-        const nrm = c.n;
-        _tf.copy(_az).addScaledVector(nrm, -_az.dot(nrm)).normalize();
-        _tl.copy(_ax).addScaledVector(nrm, -_ax.dot(nrm)).normalize();
-        const vn = _vp.dot(nrm);
-        let N = this.kSpr * Math.min(c.d, 0.6) - this.cSpr * vn;
-        if (c.d > 0.22) N += this.kSpr * 12 * (c.d - 0.22) - this.cSpr * 3 * Math.min(vn, 0);
-        N = Math.max(N, 0);
-        const vl = _vp.dot(_tf), vs = _vp.dot(_tl), si = c.side > 0 ? 0 : 1;
-        const cmd = this.cmd[si], cnt = c.side > 0 ? gl : gr;
-        let Fl;
-        if (Math.abs(cmd) > 0.02) {
-          // o motor sempre empurra no sentido comandado; freia só se a lagarta corre de fato no sentido oposto
-          Fl = this.Fside[si] / cnt;
-          if (vl * cmd < 0 && Math.abs(vl) > 0.6) Fl += clamp(-vl * m / nc * 4, -0.7 * mu * N, 0.7 * mu * N);
-        }
-        else Fl = clamp(-vl * m / nc * (Math.abs(vl) < 0.7 ? 6 : 1.2), -(Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N, (Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N); // freio-motor / estacionamento
-        Fl -= Math.sign(vl) * Math.min(0.035 * N, Math.abs(vl) * m / nc * 3); // resistência ao rolamento
-        Fl = clamp(Fl, -mu * N, mu * N);
-        const Fs = clamp(-vs * cLat, -muS * N, muS * N);
-        _fi.copy(nrm).multiplyScalar(N).addScaledVector(_tf, Fl).addScaledVector(_tl, Fs);
-        _F.add(_fi); _T.add(_tmp.copy(_rr).cross(_fi));
-        this.trackV[si] += vl / cnt;
-      }
-      // casco tocando o solo (fundo)
-      for (const lz of [-D.L / 2, D.L / 2]) for (const lx of [-D.W / 2, D.W / 2]) {
-        _rr.set(lx, D.clr - this.comY, lz).applyQuaternion(this.q); _wp.copy(this.pos).add(_rr);
-        const d = H(_wp.x, _wp.z) - _wp.y; if (d <= 0) continue;
-        _vp.copy(this.w).cross(_rr).add(this.vel);
-        const N = Math.max(0, this.kSpr * 6 * d - this.cSpr * 4 * _vp.y);
-        // casco raspando: atrito de Coulomb (μ≈0,4), não arrasto viscoso
-        const hs = Math.hypot(_vp.x, _vp.z);
-        _fi.set(hs > 0.05 ? -_vp.x / hs * 0.4 * N : 0, N, hs > 0.05 ? -_vp.z / hs * 0.4 * N : 0);
-        _F.add(_fi); _T.add(_tmp.copy(_rr).cross(_fi));
-      }
-      // integração (Euler semi-implícito); dinâmica angular no referencial do corpo
-      this.vel.addScaledVector(_F, h / m);
-      const qi = _tq2.copy(this.q).invert();
-      const wb = _wb.copy(this.w).applyQuaternion(qi), tb = _tb.copy(_T).applyQuaternion(qi), I = this.Ib;
-      const gx = wb.y * wb.z * (I.z - I.y), gy = wb.z * wb.x * (I.x - I.z), gz = wb.x * wb.y * (I.y - I.x);
-      wb.x += (tb.x - gx) / I.x * h; wb.y += (tb.y - gy) / I.y * h; wb.z += (tb.z - gz) / I.z * h;
-      this.w.copy(wb).applyQuaternion(this.q);
-      this.pos.addScaledVector(this.vel, h);
-      _dq.set(this.w.x * h * 0.5, this.w.y * h * 0.5, this.w.z * h * 0.5, 0).multiply(this.q);
-      this.q.x += _dq.x; this.q.y += _dq.y; this.q.z += _dq.z; this.q.w += _dq.w; this.q.normalize();
+  makeBody() {
+    const D = this.def, T = D.turret, hy = D.Hh / 2;
+    const b = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(this.pos.x, this.pos.y, this.pos.z).setRotation(this.q)
+      .setCanSleep(false).setLinearDamping(0.02).setAngularDamping(0.12)
+      .setAdditionalMassProperties(D.mass, { x: 0, y: 0, z: 0 }, { x: this.Ib.x, y: this.Ib.y, z: this.Ib.z }, { x: 0, y: 0, z: 0, w: 1 }));
+    world.createCollider(RAPIER.ColliderDesc.cuboid(D.W / 2, hy, D.L / 2).setTranslation(0, D.clr + hy - this.comY, 0).setDensity(0).setFriction(0.45).setRestitution(0.05).setCollisionGroups(COL.veh), b);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(D.W / 2, (D.clr - 0.15) / 2, D.L * 0.47).setTranslation(0, 0.2 + (D.clr - 0.15) / 2 - this.comY, 0).setDensity(0).setFriction(0.3).setCollisionGroups(COL.vehLow), b);
+    this.turCol = world.createCollider(RAPIER.ColliderDesc.cuboid(T.w / 2, T.h / 2, T.l / 2).setTranslation(0, D.clr + D.Hh + T.h / 2 - this.comY, T.z).setDensity(0).setFriction(0.4).setCollisionGroups(COL.veh), b);
+    this.body = b;
+  }
+  syncIn() {
+    if (!this.body) return;
+    const t = this.body.translation(), r = this.body.rotation(), v = this.body.linvel(), w = this.body.angvel();
+    this.pos.set(t.x, t.y, t.z); this.q.set(r.x, r.y, r.z, r.w); this.vel.set(v.x, v.y, v.z); this.w.set(w.x, w.y, w.z);
+  }
+  // Forças de suspensão e tração por contato (normal local do terreno); o Rapier integra e resolve colisões
+  prePhysics() {
+    this.syncIn();
+    const D = this.def, m = D.mass, nc = this.contacts.filter(c => !c.run).length, cLat = m / nc * 7, mu = 0.85, muS = 0.65;
+    if (!this.alive) { this.cmd = [0, 0]; this.Fside = [0, 0]; }
+    this.axes();
+    _F.set(0, 0, 0); _T.set(0, 0, 0);
+    let gl = 0, gr = 0;
+    for (const c of this.contacts) {
+      c.on = false;
+      _rr.set(c.x, c.y - 0.12 - this.comY, c.z).applyQuaternion(this.q);
+      _wp.copy(this.pos).add(_rr);
+      const d = H(_wp.x, _wp.z) - _wp.y;
+      if (d <= 0) continue;
+      if (!c.n) c.n = new V3();
+      terrainNormal(_wp.x, _wp.z, c.n);
+      c.on = true; c.d = d * c.n.y; c.side > 0 ? gl++ : gr++;
     }
-    // animação das lagartas e rodas
-    for (let i = 0; i < 2; i++) {
-      this.trackOff[i] += this.trackV[i] * dt;
-      (i === 0 ? this.trackL : this.trackR).map.offset.x = -this.trackOff[i] * 0.9;
+    this.trackV[0] = this.trackV[1] = 0;
+    for (const c of this.contacts) {
+      if (!c.on) continue;
+      _rr.set(c.x, c.y - 0.12 - this.comY, c.z).applyQuaternion(this.q);
+      _vp.copy(this.w).cross(_rr).add(this.vel);
+      const nrm = c.n;
+      _tf.copy(_az).addScaledVector(nrm, -_az.dot(nrm)).normalize();
+      _tl.copy(_ax).addScaledVector(nrm, -_ax.dot(nrm)).normalize();
+      const vn = _vp.dot(nrm);
+      let N = this.kSpr * Math.min(c.d, 0.6) - this.cSpr * vn;
+      if (c.d > 0.22) N += this.kSpr * 12 * (c.d - 0.22) - this.cSpr * 3 * Math.min(vn, 0);
+      N = Math.max(N, 0);
+      const vl = _vp.dot(_tf), vs = _vp.dot(_tl), si = c.side > 0 ? 0 : 1;
+      const cmd = this.cmd[si], cnt = c.side > 0 ? gl : gr;
+      let Fl;
+      if (Math.abs(cmd) > 0.02) {
+        // o motor sempre empurra no sentido comandado; freia só se a lagarta corre de fato no sentido oposto
+        Fl = this.Fside[si] / cnt;
+        if (vl * cmd < 0 && Math.abs(vl) > 0.6) Fl += clamp(-vl * m / nc * 4, -0.7 * mu * N, 0.7 * mu * N);
+      } else Fl = clamp(-vl * m / nc * (Math.abs(vl) < 0.7 ? 6 : 1.2), -(Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N, (Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N);
+      Fl -= Math.sign(vl) * Math.min(0.035 * N, Math.abs(vl) * m / nc * 3);
+      Fl = clamp(Fl, -mu * N, mu * N);
+      const Fs = clamp(-vs * cLat, -muS * N, muS * N);
+      _fi.copy(nrm).multiplyScalar(N).addScaledVector(_tf, Fl).addScaledVector(_tl, Fs);
+      _F.add(_fi); _T.add(_tmp.copy(_rr).cross(_fi));
+      this.trackV[si] += vl / cnt;
     }
+    this.body.resetForces(false); this.body.resetTorques(false);
+    this.body.addForce(_F, true); this.body.addTorque(_T, true);
+  }
+  // Depois dos passos do Rapier: animação, poeira, árvores, cercas vivas, limites
+  afterPhysics(dt) {
+    this.syncIn();
+    const D = this.def;
+    for (let i = 0; i < 2; i++) { this.trackOff[i] += this.trackV[i] * dt; (i === 0 ? this.trackL : this.trackR).map.offset.x = -this.trackOff[i] * 0.9; }
     for (const w of this.wheels) w.m.rotation.x += (w.side > 0 ? this.trackV[0] : this.trackV[1]) / w.r * dt;
-    // poeira
+    this.axes();
     const gs = this.groundSpeed();
     if (gs > 3 && (this.dustT -= dt) < 0) {
-      this.dustT = 0.09; this.axes();
+      this.dustT = 0.09;
       const b = _tmp.copy(this.pos).addScaledVector(_az, -D.L * 0.5);
       spawnP({ pos: new V3(b.x + rand(-1, 1), H(b.x, b.z) + 0.4, b.z), vel: new V3(rand(-1, 1), rand(.5, 1.5), rand(-1, 1)), life: rand(1.5, 2.5), size: 1.4, size1: 4.5, color: 0xa08f6c, op: .35, drag: 1 });
     }
-  }
-
-  collide() {
-    const D = this.def; this.axes();
-    const r = 0.9;
-    let hitWall = false;
-    for (const lz of [-D.L * 0.45, -D.L * 0.15, D.L * 0.15, D.L * 0.45]) for (const lx of [-D.W * 0.32, D.W * 0.32]) {
-      const cx = this.pos.x + _ax.x * lx + _az.x * lz, cz = this.pos.z + _ax.z * lx + _az.z * lz;
-      for (const b of obstNear(cx - r, cz - r, cx + r, cz + r)) {
-        if (b.mx[1] < this.pos.y - this.comY + 0.5) continue;
-        const qx = clamp(cx, b.mn[0], b.mx[0]), qz = clamp(cz, b.mn[2], b.mx[2]);
-        let dx = cx - qx, dz = cz - qz, d = Math.hypot(dx, dz);
-        if (d >= r) continue;
-        if (d < 1e-4) { // centro dentro da caixa: sai pela menor penetração
-          const px = Math.min(cx - b.mn[0], b.mx[0] - cx), pz = Math.min(cz - b.mn[2], b.mx[2] - cz);
-          if (px < pz) { dx = cx - b.mn[0] < b.mx[0] - cx ? -1 : 1; dz = 0; d = -px; } else { dz = cz - b.mn[2] < b.mx[2] - cz ? -1 : 1; dx = 0; d = -pz; }
-        } else { dx /= d; dz /= d; }
-        const push = r - d;
-        this.pos.x += dx * push; this.pos.z += dz * push;
-        const vn = this.vel.x * dx + this.vel.z * dz;
-        if (vn < 0) { this.vel.x -= dx * vn * 1.05; this.vel.z -= dz * vn * 1.05; hitWall = true; }
-      }
-    }
-    if (hitWall) { this.w.multiplyScalar(0.9); }
     const R = D.W * 0.5 + 0.3;
     for (const t of TREES) {
       if (t.down) continue;
       const dx = this.pos.x - t.x, dz = this.pos.z - t.z; if (Math.abs(dx) > D.L || Math.abs(dz) > D.L) continue;
       for (const k of [-0.35, 0, 0.35]) {
         const cx = this.pos.x + _az.x * D.L * k, cz = this.pos.z + _az.z * D.L * k, ex = cx - t.x, ez = cz - t.z, d = Math.hypot(ex, ez);
-        if (d < R) {
-          const gs = this.groundSpeed();
-          if (gs * D.mass > 40000) { fellTree(t, this.vel.x / (gs || 1), this.vel.z / (gs || 1)); this.vel.multiplyScalar(0.85); }
-          else if (d > 1e-3) { this.pos.x += ex / d * (R - d); this.pos.z += ez / d * (R - d); const vn = (this.vel.x * ex + this.vel.z * ez) / d; if (vn < 0) { this.vel.x -= ex / d * vn; this.vel.z -= ez / d * vn; } }
-          break;
+        if (d >= R) continue;
+        if (gs * D.mass > 40000) { fellTree(t, this.vel.x / (gs || 1), this.vel.z / (gs || 1)); this.body.setLinvel({ x: this.vel.x * .85, y: this.vel.y, z: this.vel.z * .85 }, true); }
+        else if (d > 1e-3) {
+          const vn = (this.vel.x * ex + this.vel.z * ez) / d;
+          if (vn < 0) this.body.setLinvel({ x: this.vel.x - ex / d * vn, y: this.vel.y, z: this.vel.z - ez / d * vn }, true);
         }
+        break;
       }
     }
-    // cercas vivas: atravessáveis, mas com resistência
-    for (const h of HEDGES) if (this.pos.x > h.mn[0] && this.pos.x < h.mx[0] && this.pos.z > h.mn[2] && this.pos.z < h.mx[2]) { this.vel.x *= 0.985; this.vel.z *= 0.985; }
-    // fora da área de combate / capotado
+    for (const hd of HEDGES) if (this.pos.x > hd.mn[0] && this.pos.x < hd.mx[0] && this.pos.z > hd.mn[2] && this.pos.z < hd.mx[2]) { this.body.setLinvel({ x: this.vel.x * 0.985, y: this.vel.y, z: this.vel.z * 0.985 }, true); break; }
     const out = Math.abs(this.pos.x) > LIMIT || Math.abs(this.pos.z) > LIMIT;
-    this.oobT = out && this.alive ? this.oobT + 1 / 60 : 0;
-    this.flipT = _ay.y < 0.3 && this.alive ? this.flipT + 1 / 60 : 0;
+    this.oobT = out && this.alive ? this.oobT + dt : 0;
+    this.flipT = _ay.y < 0.3 && this.alive ? this.flipT + dt : 0;
     if (this.oobT > 12) destroyVehicle(this, null, 'oob');
     if (this.flipT > 12) destroyVehicle(this, null, 'flip');
+    this.applyTransform();
   }
-
+  impulse(J, at) { if (!this.body) return; if (at) this.body.applyImpulseAtPoint(J, at, true); else this.body.applyImpulse(J, true); }
   updateTurret(dt) {
     if (!this.alive || !this.turretOn) return;
     const D = this.def, g = D.gun, T = D.turret;
@@ -414,9 +401,14 @@ class Tank {
         if (sp.alive && this.aliveCount() >= 2) { sp.alive = false; seat.alive = true; }
       }
     }
-    for (const k in this.mods) {
-      const m = this.mods[k];
-      if (m.broken && this.fire <= 0 && this.aliveCount() >= 2 && (m.rep -= dt) <= 0) { m.broken = false; if (this.isPlayer) showDmg(m.label + ' reparado', true); }
+    // reparo: iniciado com F (jogador) ou pela IA; conserta todos os módulos ao final
+    if (this.repairT > 0) {
+      if (this.fire > 0) { this.repairT = 0; if (this.isPlayer) showDmg('Reparo interrompido pelo incêndio'); }
+      else if ((this.repairT -= dt * (this.aliveCount() >= 4 ? 1 : 0.7)) <= 0) {
+        this.repairT = 0;
+        for (const k in this.mods) this.mods[k].broken = false;
+        if (this.isPlayer) showDmg('Reparo concluído', true);
+      }
     }
     if (this.extCd > 0) this.extCd -= dt;
     if (this.fire > 0) {
@@ -434,18 +426,24 @@ class Tank {
   }
   extinguish() { if (this.fire > 0 && this.ext <= 0 && this.extCd <= 0) { this.ext = 2.5; this.extCd = 14; if (this.isPlayer) showDmg('Extinguindo…', true); } }
   breakMod(k) { const m = this.mods[k]; m.broken = true; m.rep = MODS[k][1]; }
+  brokenCount() { return Object.values(this.mods).filter(m => m.broken).length; }
+  // Como no WT: o reparo leva tempo proporcional ao dano; pressionar de novo cancela; com fogo, extingue primeiro
+  toggleRepair() {
+    if (!this.alive) return;
+    if (this.fire > 0) { this.extinguish(); return; }
+    if (this.repairT > 0) { this.repairT = 0; if (this.isPlayer) showDmg('Reparo cancelado', true); return; }
+    const n = this.brokenCount();
+    if (!n) { if (this.isPlayer) showDmg('Nada para reparar', true); return; }
+    const worst = Math.max(...Object.keys(this.mods).filter(k => this.mods[k].broken).map(k => MODS[k][1]));
+    this.repairMax = this.repairT = 8 + 5 * n + worst * 0.4;
+    if (this.isPlayer) showDmg(`Reparando · ${Math.ceil(this.repairT)} s`, true);
+  }
   setFire() { if (this.fire <= 0) { this.fire = 0.01; this.fireTick = 0; } }
   selectAmmo(i) {
     if (i >= this.gun.ammo.length || this.ammoLeft[i] <= 0) return;
     if (this.sel !== i) { this.sel = i; if (this.loaded >= 0 && this.loaded !== i) { this.loaded = -1; this.reload = this.gun.reload; } }
   }
-  recoil(dir, J, at) {
-    this.vel.addScaledVector(dir, -J / this.mass);
-    const r = _rr.copy(at).sub(this.pos), imp = _tmp.copy(dir).multiplyScalar(-J);
-    const tq = r.cross(imp), qi = _tq2.copy(this.q).invert();
-    tq.applyQuaternion(qi); tq.x /= this.Ib.x; tq.y /= this.Ib.y; tq.z /= this.Ib.z; tq.applyQuaternion(this.q);
-    this.w.add(tq);
-  }
+  recoil(dir, J, at) { this.impulse(dir.clone().multiplyScalar(-J), at); }
   shoot() {
     if (this.gun.auto) return;
     if (!this.canFire()) return;
@@ -457,7 +455,7 @@ class Tank {
     this.loaded = -1; this.reload = this.gun.reload;
     this.recoil(dir, am.m * am.v * 1.6, pos);
     fxMuzzle(pos, dir, this.gun.cal); sndShot(pos, this.gun.cal);
-    if (this.isPlayer) { shakeCam(0.35); stats.shots++; }
+    if (this.isPlayer) { shakeCam(0.35); S.stats.shots++; }
   }
   shootAuto() {
     const am = this.gun.ammo[this.loaded], g = this.gun;
@@ -502,6 +500,6 @@ class Tank {
     }
     return out;
   }
-  remove() { scene.remove(this.root); if (this.popped) scene.remove(this.popped.obj); this.label.remove(); const i = tanks.indexOf(this); if (i >= 0) tanks.splice(i, 1); }
+  remove() { scene.remove(this.root); if (this.body) world.removeRigidBody(this.body); this.body = null; this.label.remove(); const i = tanks.indexOf(this); if (i >= 0) tanks.splice(i, 1); }
 }
-const _tq2 = new QUAT(), _dq = new QUAT(), _wb = new V3(), _tb = new V3();
+

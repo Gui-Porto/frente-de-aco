@@ -1,10 +1,17 @@
-'use strict';
+import { S, tanks, planes } from '../core/state.js';
+import { V3, UP, clamp, rand, angDiff } from '../core/util.js';
+import { H, POINTS, AIRSPAWN, AIRLIMIT } from '../world/terrain.js';
+import { obstNear } from '../world/scenery.js';
+import { G } from '../data/vehicles.js';
+import { los, losPts } from '../combat/ballistics.js';
+import { _az, _tmp } from '../vehicles/tank.js';
+import { _pf, _pt } from '../vehicles/plane.js';
 // =====================================================================
 // IA: blindados, antiaéreos e aeronaves (usam a mesma física do jogador)
 // =====================================================================
-function yawOf(t) { t.axes(); return Math.atan2(_az.x, _az.z); }
+export function yawOf(t) { t.axes(); return Math.atan2(_az.x, _az.z); }
 
-class TankBrain {
+export class TankBrain {
   constructor(t) {
     this.t = t; this.think = Math.random() * .4; this.target = null; this.aimT = 0; this.err = new V3();
     this.stuck = 0; this.rev = 0; this.revSteer = 1; this.hold = false; this.goal = null;
@@ -24,7 +31,7 @@ class TankBrain {
     if (!best) for (const e of tanks) {
       if (!e.alive || e.team === t.team) continue;
       const d = t.pos.distanceTo(e.pos);
-      if (d < (this.spaa ? 500 : 650) && los(t, e)) { e.spottedUntil = now + 4; if (d < bd) { best = e; bd = d; } }
+      if (d < (this.spaa ? 500 : 650) && los(t, e)) { e.spottedUntil = S.now + 4; if (d < bd) { best = e; bd = d; } }
     }
     if (best !== this.target) {
       this.target = best; this.aimT = 0;
@@ -70,6 +77,7 @@ class TankBrain {
     if (thr > .4 && t.groundSpeed() < .5 && t.canDrive()) { if ((this.stuck += dt) > 2.5) { this.rev = 1.6 + Math.random(); this.revSteer = Math.random() < .5 ? -1 : 1; this.stuck = 0; } }
     else this.stuck = Math.max(0, this.stuck - dt);
     t.throttle = thr; t.steer = st;
+    if (!this.target && t.brokenCount() && t.repairT <= 0 && t.fire <= 0) t.toggleRepair();
     const tg = this.target;
     t.firing = false; t.mgFiring = false;
     if (tg && tg.type === 'plane') {
@@ -99,7 +107,7 @@ class TankBrain {
 }
 
 const _bp = new V3(), _bv = new V3();
-class PlaneBrain {
+export class PlaneBrain {
   constructor(p) {
     this.p = p; this.corr = new V3(); this.think = 0; this.air = null; this.gt = null; this.state = 'approach'; this.t = 0; this.simT = 0; this.dropT = 0; this.rockT = 0;
     this.role = p.def.key === 'fw190' && Math.random() < .4 ? 'fighter' : 'attack';
