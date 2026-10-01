@@ -21,7 +21,7 @@ import { cam } from '../game/camera.js';
 // aquecimento, lock do míssil, ameaças, radar e silhueta de dano.
 // =====================================================================
 const cv = $('#airhud'), g = cv.getContext('2d');
-const C = { green: '#5cf06e', greenD: 'rgba(92,240,110,.55)', white: '#f2f2ee', out: 'rgba(0,0,0,.8)', ink: 'rgba(8,11,9,.62)', ph: '#e9dfb4', phd: 'rgba(233,223,180,.55)', amber: '#efa53c', enemy: '#e65a42', ally: '#6db4e3', sky: '#8fb7cf', ok: '#93cf6c' };
+const C = { green: '#6cff7a', greenD: 'rgba(108,255,122,.6)', white: '#eef1ec', out: 'rgba(0,0,0,.8)', ink: 'rgba(8,11,9,.62)', ph: '#e9dfb4', phd: 'rgba(233,223,180,.55)', amber: '#efa53c', enemy: '#e65a42', ally: '#6db4e3', sky: '#8fb7cf', ok: '#93cf6c' };
 const MONO = '"IBM Plex Mono", ui-monospace, monospace', UI = '"Barlow Condensed", "Arial Narrow", sans-serif';
 const _a = new V3(), _b = new V3(), _s = new V3();
 let W = 0, Hh = 0, dpr = 1, blink = 0;
@@ -62,10 +62,9 @@ export function updateAirHUD(dt) {
     speedLines(p);
     hurt(p);
     reticle(p);
-    flightInfo(p);
+    damagePanel(p, flightInfo(p));
     warnings(p);
     hitMessages();
-    damagePanel(p);
   } else if (S.state === 'spectate' && v) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, W / 2, Hh - 40, 15, C.ally, 'center', UI);
   }
@@ -142,76 +141,179 @@ function reticle(p) {
   const mk = B.marked, d = mk ? mk.pos.distanceTo(p.pos) : 0;
   const fpx = Hh / 2 / Math.tan(camera.fov * Math.PI / 360);
   if (pr) {
-    // anel que fecha com a distância do alvo marcado (encaixe o alvo no anel = alcance certo)
-    const inR = mk && d < 1200, R = inR ? clamp(11 / d * fpx, 16, 90) : 34;
-    g.beginPath(); g.arc(pr.x, pr.y, R, 0, 7); gstroke(1.3, inR ? C.green : C.greenD);
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), sn = Math.sin(a); g.beginPath(); g.moveTo(pr.x + c * (R - 6), pr.y + sn * (R - 6)); g.lineTo(pr.x + c * (R + 6), pr.y + sn * (R + 6)); gstroke(1.8); }
-    // cruz central (linha das armas)
-    g.beginPath(); g.moveTo(pr.x - 12, pr.y); g.lineTo(pr.x - 4, pr.y); g.moveTo(pr.x + 4, pr.y); g.lineTo(pr.x + 12, pr.y); g.moveTo(pr.x, pr.y - 12); g.lineTo(pr.x, pr.y - 4); g.moveTo(pr.x, pr.y + 4); g.lineTo(pr.x, pr.y + 12); gstroke(1.8);
-    g.beginPath(); g.arc(pr.x, pr.y, 1.6, 0, 7); g.fillStyle = C.green; g.fill();
-    if (inR) otxt(fmtD(d), pr.x + R + 8, pr.y + 5, 13, C.green, 'left', MONO, 500);
-    // marcador de acerto: X na mira a cada acerto (branco; laranja se foi forte)
+    const x = pr.x, y = pr.y, R = 15, inR = mk && d < 1200;
+    // anel partido: quatro arcos com folga nos pontos cardeais, traços para fora e ponto central
+    g.beginPath();
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; g.moveTo(x + Math.cos(a - 0.5) * R, y + Math.sin(a - 0.5) * R); g.arc(x, y, R, a - 0.5, a + 0.5); }
+    gstroke(1.5);
+    g.beginPath();
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * (R + 3), y + s * (R + 3)); g.lineTo(x + c * (R + 10), y + s * (R + 10)); }
+    gstroke(1.8);
+    g.beginPath(); g.arc(x, y, 1.7, 0, 7); g.fillStyle = C.out; g.fill(); g.beginPath(); g.arc(x, y, 1.2, 0, 7); g.fillStyle = C.green; g.fill();
+    // régua de alcance (como a barra do K-14): arco de 1200 m que encolhe até a distância do alvo marcado;
+    // a marca branca é a convergência das armas (400 m) — o alvo está no alcance ideal quando o arco passa dela
+    const RR = 30, a0 = -Math.PI / 2;
+    g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2); gstroke(0.8, 'rgba(108,255,122,.22)');
+    if (inR) {
+      const k = clamp(d / 1200, 0, 1), close = d < 450;
+      g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2 * k); gstroke(close ? 3 : 2.2, close ? C.green : C.greenD);
+      const ac = a0 + Math.PI * 2 * k; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 4), y + Math.sin(ac) * (RR - 4)); g.lineTo(x + Math.cos(ac) * (RR + 4), y + Math.sin(ac) * (RR + 4)); gstroke(1.6, C.green);
+      otxt(fmtD(d), x + RR + 10, y + 5, 13, close ? C.green : C.greenD, 'left', MONO, 500);
+    }
+    const ac = a0 + Math.PI * 2 / 3; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 3), y + Math.sin(ac) * (RR - 3)); g.lineTo(x + Math.cos(ac) * (RR + 3), y + Math.sin(ac) * (RR + 3)); gstroke(1.4, C.white);
+    // marcador de acerto: X que abre e some (branco; âmbar se foi forte)
     const ha = S.now - B.hitT;
-    if (ha < 0.18) {
-      const k = 1 - ha / 0.18, r1 = 8 + 6 * (1 - k), r2 = r1 + 9;
+    if (ha < 0.2) {
+      const k = 1 - ha / 0.2, r1 = 7 + 7 * (1 - k), r2 = r1 + 8;
       g.globalAlpha = k; g.beginPath();
-      for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { g.moveTo(pr.x + sx * r1, pr.y + sy * r1); g.lineTo(pr.x + sx * r2, pr.y + sy * r2); }
+      for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { g.moveTo(x + sx * r1, y + sy * r1); g.lineTo(x + sx * r2, y + sy * r2); }
       gstroke(2.4, B.hitBig ? C.amber : C.white); g.globalAlpha = 1;
     }
     // lock do míssil: cone do buscador ao redor do eixo
     if (B.seeker && p.missiles > 0) {
       const M = B.seeker.M, st = B.seeker.state, rc = Math.tan((M.acq || M.fov * 2.5) * Math.PI / 180) * fpx;
-      const col = st === LOCK.LOCKED ? C.enemy : st === LOCK.TRACK ? C.amber : st === LOCK.LOST ? C.enemy : C.greenD;
-      g.setLineDash(st === LOCK.SEARCH ? [4, 6] : []); g.beginPath(); g.arc(pr.x, pr.y, rc, 0, 7); gstroke(1.3, col); g.setLineDash([]);
-      otxt(LOCK_LABEL[st], pr.x, pr.y + rc + 18, 15, col, 'center');
+      const col = st === LOCK.LOCKED ? C.enemy : st === LOCK.TRACK ? C.amber : st === LOCK.LOST ? C.enemy : 'rgba(108,255,122,.35)';
+      g.setLineDash(st === LOCK.SEARCH ? [3, 7] : []); g.beginPath(); g.arc(x, y, rc, 0, 7); gstroke(1.2, col); g.setLineDash([]);
+      otxt(LOCK_LABEL[st], x, y + rc + 18, 14, col, 'center', UI, 600);
       const tg = B.seeker.target;
-      if (tg) { const tp = proj(tg.pos, P2); if (tp) { const s = st === LOCK.LOCKED ? 16 : 13 + Math.sin(blink * 18) * 3; g.beginPath(); g.rect(tp.x - s, tp.y - s, s * 2, s * 2); gstroke(2, col); if (st === LOCK.TRACK) { g.fillStyle = col; g.fillRect(tp.x - s, tp.y + s + 4, s * 2 * clamp(B.seeker.t / M.lockT, 0, 1), 3); } } }
+      if (tg) { const tp = proj(tg.pos, P2); if (tp) { const s = st === LOCK.LOCKED ? 15 : 12 + Math.sin(blink * 18) * 3; g.beginPath(); g.moveTo(tp.x, tp.y - s); g.lineTo(tp.x + s, tp.y); g.lineTo(tp.x, tp.y + s); g.lineTo(tp.x - s, tp.y); g.closePath(); gstroke(2, col); if (st === LOCK.TRACK) { g.fillStyle = col; g.fillRect(tp.x - s, tp.y + s + 5, s * 2 * clamp(B.seeker.t / M.lockT, 0, 1), 3); } } }
     }
   }
-  // círculo do mouse (para onde o instrutor leva o nariz)
+  // círculo do mouse (para onde o instrutor leva o nariz); some quando o nariz já está nele
   _b.copy(p.pos).addScaledVector(cam.aimDir, 1000);
   const ap = proj(_b, P2);
-  if (ap && acam.mode !== 3) { g.beginPath(); g.arc(ap.x, ap.y, 10, 0, 7); gstroke(1.4, C.white); }
+  if (ap && acam.mode !== 3) {
+    const near = pr ? Math.hypot(ap.x - pr.x, ap.y - pr.y) : 99;
+    g.globalAlpha = clamp((near - 6) / 20, 0.25, 1);
+    g.beginPath(); g.arc(ap.x, ap.y, 8, 0, 7); gstroke(1.3, C.white);
+    g.globalAlpha = 1;
+  }
 }
 
-// ---------- bloco de voo no canto superior esquerdo (como o do WT) ----------
+// ---------- coluna esquerda (como no WT): voo, motor, armas e dano numa só coluna ----------
 const FLAP_TXT = ['', 'COMBATE', 'DECOLAGEM', 'POUSO'];
+const COL_X = 22, LBL = 'rgba(238,241,236,.62)';
+function label(t, x, y) { g.letterSpacing = '1px'; otxt(t, x, y, 11, LBL, 'left', UI, 600); g.letterSpacing = '0px'; }
+function value(t, x, y, col = C.white, size = 18) { otxt(t, x, y, size, col, 'right', MONO, 500); }
+function unit(t, x, y, col = LBL) { otxt(t, x + 4, y, 12, col, 'left', UI, 500); }
+function chip(t, x, y, col) {
+  g.font = `600 11px ${UI}`; g.letterSpacing = '1px'; const w = g.measureText(t).width + 12;
+  g.fillStyle = C.out; g.fillRect(x, y - 11, w, 15); g.strokeStyle = col; g.lineWidth = 1; g.strokeRect(x + .5, y - 10.5, w - 1, 14);
+  g.fillStyle = col; g.textAlign = 'left'; g.fillText(t, x + 6, y); g.letterSpacing = '0px';
+  return x + w + 6;
+}
+function divider(y) { const gr = g.createLinearGradient(COL_X, 0, COL_X + 230, 0); gr.addColorStop(0, 'rgba(238,241,236,.35)'); gr.addColorStop(1, 'rgba(238,241,236,0)'); g.fillStyle = gr; g.fillRect(COL_X, y, 230, 1); }
 function flightInfo(p) {
-  const x = 20; let y = 30;
-  const line = (t, col = C.white, size = 16) => { otxt(t, x, y, size, col); y += size + 5; };
-  const D = p.def;
-  if (D.jet) line(`Empuxo ${Math.round(p.spool * 100)}%`);
-  else line(`Motor ${Math.round(p.throttle * 100)}%${p.wep ? '  WEP' : ''}`, p.wep ? C.amber : C.white);
-  line(`Vel. ${Math.round(p.ias * 3.6)} km/h${D.jet ? `   M ${(p.vel.length() / 340).toFixed(2).replace('.', ',')}` : ''}`, p.ias < stallV(p) * 1.15 ? C.amber : C.white);
+  const D = p.def, x = COL_X + 12, vx = x + 128;
+  // fundo: só um degradê para dar leitura sobre o céu claro (sem caixa)
+  const bh0 = Math.min(Hh, (flightInfo.h || 520) + 40);
+  g.save(); g.scale(1, bh0 / 340);
+  const bg = g.createRadialGradient(0, 120, 0, 0, 120, 360); bg.addColorStop(0, 'rgba(6,9,8,.42)'); bg.addColorStop(0.6, 'rgba(6,9,8,.22)'); bg.addColorStop(1, 'rgba(6,9,8,0)');
+  g.fillStyle = bg; g.fillRect(0, 0, 360, 480); g.restore();
+  let y = 34;
+  const row = (lb, v, u, col = C.white) => { label(lb, x, y); value(v, vx, y, col); if (u) unit(u, vx, y, col === C.white ? LBL : col); y += 25; };
+  // potência: barra vertical à esquerda das linhas (âmbar no WEP)
+  const thr = D.jet ? p.spool : p.throttle, bh = 4 * 25 - 8, by = y - 14;
+  g.fillStyle = C.out; g.fillRect(COL_X - 1, by - 1, 6, bh + 2);
+  g.fillStyle = 'rgba(238,241,236,.14)'; g.fillRect(COL_X, by, 4, bh);
+  g.fillStyle = p.wep ? C.amber : C.white; g.fillRect(COL_X, by + bh * (1 - thr), 4, bh * thr);
+  row(D.jet ? 'EMPUXO' : 'MOTOR', String(Math.round(thr * 100)), '%', p.wep ? C.amber : C.white);
+  if (p.wep) chip('WEP', vx + 26, y - 25, C.amber);
+  row('VEL', String(Math.round(p.ias * 3.6)), D.jet ? `km/h  M${(p.vel.length() / 340).toFixed(2).replace('.', ',')}` : 'km/h', p.ias < stallV(p) * 1.15 ? C.amber : C.white);
   const agl = p.pos.y - H(p.pos.x, p.pos.z);
-  line(`Alt. ${Math.round(p.pos.y)} m   ${p.vel.y >= 0 ? '▲' : '▼'}${Math.abs(p.vel.y).toFixed(0)} m/s`, agl < 150 ? C.amber : C.white);
-  line(`G ${p.n.toFixed(1).replace('.', ',')}`, Math.abs(p.n) > D.glim * 0.8 ? C.enemy : C.white);
-  // temperaturas: água/óleo (WT); laranja acima do limite, vermelho piscando no crítico
-  if (!p.engineOn) line('MOTOR PARADO', C.enemy);
+  row('ALT', String(Math.round(p.pos.y)), `m  ${p.vel.y >= 0 ? '▲' : '▼'}${Math.abs(p.vel.y).toFixed(0)}`, agl < 150 ? C.amber : C.white);
+  row('G', p.n.toFixed(1).replace('.', ','), '', Math.abs(p.n) > D.glim * 0.8 ? C.enemy : Math.abs(p.n) > 7 ? C.amber : C.white);
+  // temperaturas (água e óleo, como no WT): âmbar acima do limite, vermelho piscando no crítico
+  if (!p.engineOn) { label('MOTOR', x, y); otxt('PARADO', vx, y, 16, C.enemy, 'right', UI, 700); y += 25; }
   else {
     const L = HEAT_LIMITS[p.cooling], hc = (v, lim) => (v > lim + 10 ? (Math.sin(blink * 10) > 0 ? C.enemy : C.white) : v > lim ? C.amber : C.white);
-    if (L.water) { otxt(`Água ${Math.round(p.heat.water)}°`, x, y, 16, hc(p.heat.water, L.water)); otxt(`Óleo ${Math.round(p.heat.oil)}°`, x + 92, y, 16, hc(p.heat.oil, L.oil)); y += 21; }
-    else line(`${D.jet ? 'Turbina' : 'Óleo'} ${Math.round(p.heat.oil)}°`, hc(p.heat.oil, L.oil));
+    if (L.water) { label('ÁGUA', x, y); value(`${Math.round(p.heat.water)}°`, x + 82, y, hc(p.heat.water, L.water), 16); label('ÓLEO', x + 100, y); value(`${Math.round(p.heat.oil)}°`, x + 178, y, hc(p.heat.oil, L.oil), 16); }
+    else { label(D.jet ? 'TURBINA' : 'ÓLEO', x, y); value(`${Math.round(p.heat.oil)}°`, vx, y, hc(p.heat.oil, L.oil), 16); }
+    y += 25;
   }
-  if (p.flapStage || p.flaps > 0.02) line(`Flaps ${FLAP_TXT[p.flapStage] || 'SUBINDO'}`, C.green);
-  if (p.gear) line('Trem baixado', C.amber);
-  if (p.airbrake) line('Freio aerodinâmico', C.amber);
-  // munição
-  y += 6;
+  // estados mecânicos em etiquetas
+  let cx = x;
+  if (p.flapStage || p.flaps > 0.02) cx = chip(`FLAPS ${FLAP_TXT[p.flapStage] || '↑'}`, cx, y - 2, C.green);
+  if (p.gear) cx = chip('TREM', cx, y - 2, C.amber);
+  if (p.airbrake) cx = chip('FREIO', cx, y - 2, C.amber);
+  if (cx !== x) y += 22;
+  // armas
+  divider(y - 8); y += 12;
   for (const gg of p.guns) {
     const col = gg.broken || gg.jam ? C.enemy : gg.ammo < gg.max * 0.15 ? C.amber : C.white;
-    otxt(gg.W.name, x, y, 14, col, 'left', UI, 500);
-    otxt(gg.broken ? 'INOPERANTE' : gg.jam ? 'SUPERAQUECIDA' : String(gg.ammo), x + 200, y, 15, col, 'right', MONO, 500);
-    if (gg.heat > 0.05) { g.fillStyle = C.out; g.fillRect(x + 208, y - 9, 52, 6); g.fillStyle = gg.heat > 0.7 ? C.amber : C.white; g.fillRect(x + 209, y - 8, 50 * gg.heat, 4); }
-    y += 19;
+    otxt(gg.W.name, x, y, 14, gg.broken ? C.enemy : 'rgba(238,241,236,.85)', 'left', UI, 500);
+    value(gg.broken ? '—' : String(gg.ammo), x + 214, y, col, 16);
+    // aquecimento do cano: traço fino sob o nome
+    g.fillStyle = 'rgba(238,241,236,.12)'; g.fillRect(x, y + 4, 150, 2);
+    if (gg.heat > 0.02) { g.fillStyle = gg.jam ? C.enemy : gg.heat > 0.7 ? C.amber : 'rgba(238,241,236,.7)'; g.fillRect(x, y + 4, 150 * gg.heat, 2); }
+    if (gg.jam || gg.broken) otxt(gg.broken ? 'INOPERANTE' : 'SUPERAQUECIDA', x + 156, y + 8, 10, C.enemy, 'left', UI, 600);
+    y += 23;
   }
   if (D.missiles) {
-    otxt(MISSILES[D.missiles.w].short, x, y, 14, p.missiles ? C.white : C.phd, 'left', UI, 500);
-    for (let i = 0; i < D.missiles.n; i++) { g.fillStyle = C.out; g.fillRect(x + 64 + i * 22, y - 11, 18, 11); g.fillStyle = i < p.missiles ? C.white : 'rgba(255,255,255,.15)'; g.fillRect(x + 65 + i * 22, y - 10, 16, 9); }
-    otxt(`[${kb('a_missile')}]`, x + 70 + D.missiles.n * 22, y, 13, C.phd, 'left', UI, 500);
-    y += 19;
+    otxt(MISSILES[D.missiles.w].short, x, y, 14, 'rgba(238,241,236,.85)', 'left', UI, 500);
+    for (let i = 0; i < D.missiles.n; i++) { const mx = x + 214 - (D.missiles.n - i) * 16; g.fillStyle = C.out; g.fillRect(mx - 1, y - 12, 12, 14); g.fillStyle = i < p.missiles ? C.white : 'rgba(238,241,236,.15)'; g.fillRect(mx, y - 11, 10, 12); }
+    label(kb('a_missile').toUpperCase(), x, y + 14); y += 34;
   }
-  if (D.jet) { otxt(`Flares ${p.flares} · Chaff ${p.chaff}  [${kb('a_cm')}]`, x, y, 14, p.flares ? C.white : C.amber, 'left', UI, 500); y += 19; }
+  if (D.jet) { otxt('Flares · chaff', x, y, 14, 'rgba(238,241,236,.85)', 'left', UI, 500); value(`${p.flares} · ${p.chaff}`, x + 214, y, p.flares ? C.white : C.amber, 16); y += 23; }
+  divider(y - 8);
+  return y + 6;
+}
+
+// ---------- silhueta de dano (vista de cima com os componentes, como a do WT) ----------
+const fcol = f => (f <= 0 ? '#1d1d1d' : f < 0.35 ? C.enemy : f < 0.7 ? C.amber : 'rgba(238,241,236,.75)');
+function damagePanel(p, top) {
+  const D = p.def, M = p.mods, w = 214, sh = 132, x = COL_X + 12, y = top + 4;
+  const status = [];
+  if (p.fire > 0) status.push([`INCÊNDIO · [${kb('a_ext')}] extintor ${p.ext ? '×1' : 'usado'}`, C.enemy]);
+  const leak = fuelLeak(p); if (leak > 0 && p.fuel > 0) status.push([`VAZAMENTO · ${leak.toFixed(1).replace('.', ',')} kg/s`, C.amber]);
+  if (!p.engineOn) status.push(['MOTOR PARADO', C.enemy]); else if (p.hp.engine < p.maxHp.engine * 0.7) status.push([`MOTOR · ${Math.round(100 * (0.35 + 0.65 * p.hp.engine / p.maxHp.engine))}% de potência`, C.amber]);
+  if (p.oil) status.push([D.jet ? 'ÓLEO VAZANDO' : 'RADIADOR VAZANDO', C.amber]);
+  if (p.wounded) status.push(['PILOTO FERIDO', C.amber]);
+  const dead = ['elev', 'rud', 'ailL', 'ailR', 'cables', 'hyd'].filter(n => M[n] && M[n].dead).map(n => LABEL[n].toUpperCase());
+  if (dead.length) status.push([dead.join(' · ') + ' INOPERANTE' + (dead.length > 1 ? 'S' : ''), C.enemy]);
+  const s = Math.min(sh / D.L, w / D.span), ox = x + w / 2, oy = y + sh / 2;
+  const P = (lx, lz) => [ox - lx * s, oy - lz * s];
+  const sf = k => p.hp[k] / p.maxHp[k];
+  const OUT = 'rgba(0,0,0,.7)', LINE = 'rgba(238,241,236,.55)';
+  g.lineJoin = 'round';
+  const shape = (fill, f, drawPath, broken) => {
+    drawPath(); g.lineWidth = 3; g.strokeStyle = OUT; g.stroke();
+    if (broken) { g.lineWidth = 1.2; g.strokeStyle = C.enemy; g.setLineDash([3, 3]); g.stroke(); g.setLineDash([]); return; }
+    g.fillStyle = fill; g.globalAlpha = f >= 0.7 ? 0.16 : 0.42; g.fill(); g.globalAlpha = 1; g.lineWidth = 1; g.strokeStyle = f >= 0.7 ? LINE : fill; g.stroke();
+  };
+  // asas (com enflechamento), fuselagem e empenagem: cor = integridade da estrutura
+  const swp = D.span / 2 * Math.tan((D.sweep || 0) * Math.PI / 180);
+  for (const [side, k, on] of [[1, 'wingL', p.wingOn.L], [-1, 'wingR', p.wingOn.R]]) {
+    const pts = [P(side * D.fuseR, D.wingZ + D.chord * 0.35), P(side * D.span / 2, D.wingZ + D.tipChord * 0.3 - swp), P(side * D.span / 2, D.wingZ - D.tipChord * 0.7 - swp), P(side * D.fuseR, D.wingZ - D.chord * 0.65)];
+    shape(fcol(sf(k)), sf(k), () => { g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(...q) : g.moveTo(...q))); g.closePath(); }, !on);
+  }
+  { const [a, b] = P(D.span * 0.19, -D.L * 0.43); shape(fcol(sf('tail')), sf('tail'), () => { g.beginPath(); g.rect(a, b, D.span * 0.38 * s, D.L * 0.1 * s); }, !p.tailOn); }
+  { const [a, b] = P(D.fuseR, D.L * 0.47); shape(fcol(sf('fuse')), sf('fuse'), () => { g.beginPath(); g.roundRect(a, b, D.fuseR * 2 * s, D.L * 0.97 * s, D.fuseR * s); }, false); }
+  // componentes internos: só aparecem coloridos quando danificados (como no WT); intactos ficam discretos
+  for (const m of Object.values(M)) {
+    if ((m.name === 'ailL' && !p.wingOn.L) || (m.name === 'ailR' && !p.wingOn.R) || ((m.name === 'elev' || m.name === 'rud') && !p.tailOn)) continue;
+    const f = m.kind === 'engine' ? (p.engineOn ? p.hp.engine / p.maxHp.engine : 0) : modFrac(m);
+    const [a, b] = P(m.c[0] + m.h[0], m.c[2] + m.h[2]), ww = Math.max(3, m.h[0] * 2 * s), hh = Math.max(3, m.h[2] * 2 * s);
+    const flash = S.now - m.hitT < 0.25;
+    g.fillStyle = flash ? '#fff' : f >= 0.7 ? 'rgba(238,241,236,.3)' : fcol(f); g.beginPath();
+    if (m.kind === 'pilot') g.arc(a + ww / 2, b + hh / 2, Math.min(ww, hh) / 2 + 1, 0, 7); else g.roundRect(a, b, ww, hh, 1.5);
+    g.fill();
+    if (f <= 0) { g.strokeStyle = C.enemy; g.lineWidth = 1.3; g.beginPath(); g.moveTo(a, b); g.lineTo(a + ww, b + hh); g.moveTo(a + ww, b); g.lineTo(a, b + hh); g.stroke(); }
+    if (m.leak > 0 && p.fuel > 0) { g.fillStyle = C.sky; g.beginPath(); g.arc(a + ww + 3, b + hh / 2 + Math.sin(blink * 8) * 2, 2, 0, 7); g.fill(); }
+  }
+  if (p.fire > 0) { const [a, b] = P(p.fireAt[0], p.fireAt[2]); g.fillStyle = `rgba(255,${120 + Math.random() * 80},40,${0.5 + Math.random() * 0.3})`; g.beginPath(); g.arc(a, b, 8 + Math.random() * 3, 0, 7); g.fill(); }
+  // combustível
+  let fy = y + sh + 22;
+  const burn = D.jet ? 0.75 * Math.max(p.spool, 0.3) : (p.wep ? D.wep : D.hp) * 0.000105 * Math.max(p.throttle, 0.3);
+  const mins = p.fuel / Math.max(burn + leak, 0.01) / 60, low = p.fuel < p.fuelMax * 0.15;
+  label('COMBUSTÍVEL', x, fy);
+  otxt(`${mins > 99 ? '99+' : Math.floor(mins)} min`, x + w, fy, 14, low ? C.amber : C.white, 'right', MONO, 500);
+  g.fillStyle = C.out; g.fillRect(x - 1, fy + 5, w + 2, 5);
+  g.fillStyle = 'rgba(238,241,236,.14)'; g.fillRect(x, fy + 6, w, 3);
+  g.fillStyle = leak > 0 || low ? C.amber : C.white; g.fillRect(x, fy + 6, w * p.fuel / p.fuelMax, 3);
+  fy += 28;
+  for (const [t, c] of status) { otxt(t, x, fy, 13, c, 'left', UI, 600); fy += 18; }
+  flightInfo.h = fy;
 }
 
 // ---------- dano recebido: borda vermelha + arco na direção de quem atirou ----------
@@ -284,58 +386,6 @@ function warnings(p) {
   });
   // tons de alerta e do buscador
   B.warnTone = inc ? 'missile' : list.some(l => l[0] === 'ESTOL') ? 'stall' : null;
-}
-
-// ---------- condição da aeronave (vista de cima com os componentes, como o painel de dano do WT) ----------
-const fcol = f => (f <= 0 ? '#6b2119' : f < 0.35 ? C.enemy : f < 0.7 ? C.amber : 'rgba(147,207,108,.85)');
-function damagePanel(p) {
-  const D = p.def, M = p.mods, w = 236, sh = 168, x = W - w - 18;
-  const status = [];
-  if (p.fire > 0) status.push([`INCÊNDIO · [${kb('a_ext')}] extintor ${p.ext ? '×1' : 'usado'}`, C.enemy]);
-  const leak = fuelLeak(p); if (leak > 0 && p.fuel > 0) status.push([`VAZAMENTO · ${leak.toFixed(1).replace('.', ',')} kg/s`, C.amber]);
-  if (!p.engineOn) status.push(['MOTOR PARADO', C.enemy]); else if (p.hp.engine < p.maxHp.engine * 0.7) status.push([`MOTOR · ${Math.round(100 * (0.35 + 0.65 * p.hp.engine / p.maxHp.engine))}% de potência`, C.amber]);
-  if (p.oil) status.push([D.jet ? 'ÓLEO VAZANDO' : 'RADIADOR VAZANDO', C.amber]);
-  if (p.wounded) status.push(['PILOTO FERIDO', C.amber]);
-  const dead = ['elev', 'rud', 'ailL', 'ailR', 'cables', 'hyd'].filter(n => M[n] && M[n].dead).map(n => LABEL[n].toUpperCase());
-  if (dead.length) status.push([dead.join(' · ') + ' INOPERANTE' + (dead.length > 1 ? 'S' : ''), C.enemy]);
-  const h = sh + 50 + status.length * 17, y = Hh - h - 18;
-  panel(x, y, w, h, 'CONDIÇÃO DA AERONAVE');
-  const s = Math.min((sh - 16) / D.L, (w - 30) / D.span), ox = x + w / 2, oy = y + 22 + sh / 2;
-  const P = (lx, lz) => [ox - lx * s, oy - lz * s];
-  const sf = k => p.hp[k] / p.maxHp[k];
-  g.lineWidth = 1; g.lineJoin = 'round';
-  // asas (com enflechamento), fuselagem e empenagem: cor = integridade da estrutura
-  const swp = D.span / 2 * Math.tan((D.sweep || 0) * Math.PI / 180);
-  for (const [side, k, on] of [[1, 'wingL', p.wingOn.L], [-1, 'wingR', p.wingOn.R]]) {
-    const pts = [P(side * D.fuseR, D.wingZ + D.chord * 0.35), P(side * D.span / 2, D.wingZ + D.tipChord * 0.3 - swp), P(side * D.span / 2, D.wingZ - D.tipChord * 0.7 - swp), P(side * D.fuseR, D.wingZ - D.chord * 0.65)];
-    g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(...q) : g.moveTo(...q))); g.closePath();
-    if (on) { g.fillStyle = fcol(sf(k)); g.globalAlpha = 0.28; g.fill(); g.globalAlpha = 1; g.strokeStyle = 'rgba(233,223,180,.55)'; g.setLineDash([]); }
-    else { g.strokeStyle = C.enemy; g.setLineDash([3, 3]); }
-    g.stroke(); g.setLineDash([]);
-  }
-  if (p.tailOn) { const [a, b] = P(D.span * 0.19, -D.L * 0.43); g.fillStyle = fcol(sf('tail')); g.globalAlpha = 0.28; g.fillRect(a, b, D.span * 0.38 * s, D.L * 0.1 * s); g.globalAlpha = 1; g.strokeStyle = 'rgba(233,223,180,.55)'; g.strokeRect(a, b, D.span * 0.38 * s, D.L * 0.1 * s); }
-  { const [a, b] = P(D.fuseR, D.L * 0.47); g.fillStyle = fcol(sf('fuse')); g.globalAlpha = 0.28; g.beginPath(); g.roundRect(a, b, D.fuseR * 2 * s, D.L * 0.97 * s, D.fuseR * s); g.fill(); g.globalAlpha = 1; g.strokeStyle = 'rgba(233,223,180,.55)'; g.stroke(); }
-  // componentes internos
-  for (const m of Object.values(M)) {
-    if ((m.name === 'ailL' && !p.wingOn.L) || (m.name === 'ailR' && !p.wingOn.R) || ((m.name === 'elev' || m.name === 'rud') && !p.tailOn)) continue;
-    const f = m.kind === 'engine' ? (p.engineOn ? p.hp.engine / p.maxHp.engine : 0) : modFrac(m);
-    const [a, b] = P(m.c[0] + m.h[0], m.c[2] + m.h[2]), ww = Math.max(3, m.h[0] * 2 * s), hh = Math.max(3, m.h[2] * 2 * s);
-    const flash = S.now - m.hitT < 0.25;
-    g.fillStyle = flash ? '#fff' : fcol(f); g.beginPath();
-    if (m.kind === 'pilot') g.arc(a + ww / 2, b + hh / 2, Math.min(ww, hh) / 2 + 1, 0, 7); else g.roundRect(a, b, ww, hh, 2);
-    g.fill();
-    if (f <= 0) { g.strokeStyle = '#000'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(a, b); g.lineTo(a + ww, b + hh); g.moveTo(a + ww, b); g.lineTo(a, b + hh); g.stroke(); g.lineWidth = 1; }
-    if (m.leak > 0 && p.fuel > 0) { g.fillStyle = C.sky; g.beginPath(); g.arc(a + ww + 3, b + hh / 2 + Math.sin(blink * 8) * 2, 2, 0, 7); g.fill(); }
-  }
-  if (p.fire > 0) { const [a, b] = P(p.fireAt[0], p.fireAt[2]); g.fillStyle = `rgba(255,${120 + Math.random() * 80},40,${0.5 + Math.random() * 0.3})`; g.beginPath(); g.arc(a, b, 9 + Math.random() * 3, 0, 7); g.fill(); }
-  // combustível
-  const fy = y + 22 + sh + 8, burn = p.def.jet ? 0.75 * Math.max(p.spool, 0.3) : (p.wep ? D.wep : D.hp) * 0.000105 * Math.max(p.throttle, 0.3);
-  const mins = p.fuel / Math.max(burn + leak, 0.01) / 60;
-  txt('COMBUSTÍVEL', x + 10, fy + 9, 10, C.phd, 'left', UI);
-  txt(`${Math.round(p.fuel)} kg · ${mins > 99 ? '99+' : Math.floor(mins)} min`, x + w - 10, fy + 9, 12, p.fuel < p.fuelMax * 0.15 ? C.amber : C.ph, 'right');
-  g.fillStyle = 'rgba(233,223,180,.12)'; g.fillRect(x + 10, fy + 15, w - 20, 4);
-  g.fillStyle = leak > 0 ? C.amber : C.ph; g.fillRect(x + 10, fy + 15, (w - 20) * p.fuel / p.fuelMax, 4);
-  status.forEach(([t, c], i) => txt(t, x + 10, fy + 38 + i * 17, 12, c, 'left', UI));
 }
 
 // ---------- radar (rumo para cima, 5 km) ----------

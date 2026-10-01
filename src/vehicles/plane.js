@@ -80,7 +80,7 @@ export class Plane {
     const A = ctrlAuthority(this);
     if (this.mods.hyd && this.mods.hyd.dead) { this.flapStage = 0; this.airbrake = false; }
     // flaps por estágio (como no WT): acima do limite do estágio eles sobem um degrau sozinhos; o painel se move devagar
-    if (this.flapStage && this.ias > FLAP_VMAX[this.flapStage] / 3.6 * (D.jet ? 0.85 : 1)) { this.flapStage--; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[this.flapStage]} · velocidade alta`); }
+    if (this.flapStage && this.ias > FLAP_VMAX[this.flapStage] / 3.6 * (D.jet ? 0.85 : 1)) { this.flapStage--; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[this.flapStage]} · velocidade alta`, true); }
     this.flaps += clamp(FLAP_POS[this.flapStage] - this.flaps, -dt * 0.5, dt * 0.5);
     // motor danificado rende menos; a turbina responde com atraso (spool)
     const engK = this.engineOn ? 0.35 + 0.65 * clamp(this.hp.engine / this.maxHp.engine, 0, 1) : 0;
@@ -262,8 +262,8 @@ export class Plane {
   cycleFlaps() {
     if (this.mods.hyd && this.mods.hyd.dead) { if (this.isPlayer) showDmg('Hidráulico inoperante'); return; }
     const nx = (this.flapStage + 1) % FLAP_POS.length, lim = FLAP_VMAX[nx] / 3.6 * (this.def.jet ? 0.85 : 1);
-    if (nx && this.ias > lim) { if (this.isPlayer) showDmg(`Flaps de ${FLAP_NAME[nx].toLowerCase()}: abaixo de ${Math.round(lim * 3.6)} km/h`); return; }
-    this.flapStage = nx; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[nx]}`);
+    if (nx && this.ias > lim) { if (this.isPlayer) showDmg(`Flaps de ${FLAP_NAME[nx].toLowerCase()}: abaixo de ${Math.round(lim * 3.6)} km/h`, true); return; }
+    this.flapStage = nx; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[nx]}`, true);
   }
   engineStop() { this.engineOn = false; this.hp.engine = 0; if (this.isPlayer) showDmg('Motor parou'); }
   ignite(at) { if (this.fire <= 0) { this.fire = 0.01; this.fireAt = at.slice(); } }
