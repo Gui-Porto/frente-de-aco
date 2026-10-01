@@ -324,7 +324,7 @@ export class Tank {
     if (gs > 3 && (this.dustT -= dt) < 0) {
       this.dustT = 0.09;
       const b = _tmp.copy(this.pos).addScaledVector(_az, -D.L * 0.5);
-      spawnP({ pos: new V3(b.x + rand(-1, 1), H(b.x, b.z) + 0.4, b.z), vel: new V3(rand(-1, 1), rand(.5, 1.5), rand(-1, 1)), life: rand(1.5, 2.5), size: 1.4, size1: 4.5, color: 0xa08f6c, op: .35, drag: 1 });
+      spawnP({ pos: new V3(b.x + rand(-1.2, 1.2), H(b.x, b.z) + 0.6, b.z), vel: new V3(rand(-.6, .6), rand(.2, .7), rand(-.6, .6)), life: rand(2.5, 4), size: 1.6, size1: 6, color: 0x7d6e52, op: Math.min(.28, gs * .03), drag: 1.6 });
     }
     const R = D.W * 0.5 + 0.3;
     for (const t of TREES) {
