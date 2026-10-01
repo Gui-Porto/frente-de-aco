@@ -85,7 +85,7 @@ function fuselage(D) {
   g.setIndex([...top, ...bot]); g.addGroup(0, top.length, 0); g.addGroup(top.length, bot.length, 1);
   g.computeVertexNormals();
   // amostra da seção numa fração z (para insígnias e acessórios encostarem na chapa)
-  g.userData.at = zf => { let r = rings[0]; for (const q of rings) if (q[0] <= zf) r = q; return { hw: r[1] * fr, h: Math.min(r[2], r[3]) * fr, yc: r[4] * fr }; };
+  g.userData.at = zf => { let r = rings[0]; for (const q of rings) if (q[0] <= zf) r = q; return { hw: r[1] * fr, h: Math.min(r[2], r[3]) * fr, top: (r[2] + r[4]) * fr, yc: r[4] * fr }; };
   return g;
 }
 // lâmina de hélice afinando para a ponta e torcida
@@ -144,6 +144,19 @@ export function buildPlane(D) {
   can.scale.set(0.95, jet ? 0.95 : 0.72, jet ? 2.4 : 2.1);
   for (const dz of jet ? [0.5] : [0.55, -0.15]) { const r = add(new THREE.TorusGeometry(0.52, 0.035, 6, 16, Math.PI), dark, root, 0, fr * 0.92, cz + dz); r.scale.set(0.95, jet ? 0.95 : 0.72, 1); }
   add(new THREE.BoxGeometry(0.04, 0.05, 1.9), dark, root, 0, fr * 0.92 + 0.52 * (jet ? 1 : 0.72), cz);
+  if (jet) {
+    const at = fuseG.userData.at, olive = new THREE.MeshStandardMaterial({ color: 0x3d4130, roughness: .8 });
+    // carenagem dorsal: da traseira da capota até a deriva
+    const z0 = cz - 1.25, z1 = -L * 0.36, zm = (z0 + z1) / 2, spine = add(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), paint, root, 0, at(zm / L).top - 0.08, zm);
+    spine.scale.set(0.2, 0.26, (z0 - z1) / 2);
+    if (D.key === 'f86') {
+      add(new THREE.BoxGeometry(0.62, 0.02, 1.5), olive, root, 0, at((cz + 1.6) / L).top + 0.005, cz + 1.6); // painel antirreflexo
+      for (const sd of [1, -1]) for (let i = 0; i < 3; i++) { const z = L * 0.34, a = at(z / L); add(new THREE.BoxGeometry(0.05, 0.07, 0.28), dark, root, sd * (a.hw * 0.97), a.yc + 0.22 - i * 0.16, z); } // 3 M3 de cada lado
+    } else {
+      for (const [sd, r, k, dz] of [[1, 0.11, 0.45, 0], [-1, 0.09, 0.35, 0.2], [-1, 0.09, 0.62, -0.3]]) { const a = at(0.3); add(new THREE.CylinderGeometry(r, r * 0.8, 1.6, 10).rotateX(Math.PI / 2), paint, root, sd * a.hw * k, a.yc - a.h * 0.85, L * 0.3 + dz); } // carenagens: N-37 à direita, dois NR-23 à esquerda
+      add(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8).rotateX(Math.PI / 2), dark, root, D.noseR * 0.45, -D.noseR * 0.7, L * 0.42); // boca do N-37
+    }
+  }
   // asas (grupos separados para poder perdê-las)
   const ellip = D.key === 'spit9' || D.key === 'p47';
   const dih = (D.dih ?? (jet ? (D.key === 'mig15' ? -2 : 3) : 5.5)) * deg;

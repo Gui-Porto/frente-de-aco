@@ -18,11 +18,15 @@ const playing = () => S.state === 'play' || S.state === 'spectate';
 addEventListener('keydown', e => {
   if (input.capture) { e.preventDefault(); input.capture(e.code); return; }
   if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code) && S.state !== 'menu' && S.state !== 'airmenu') e.preventDefault();
+  // Ctrl reduz a potência do avião: bloqueia os atalhos do navegador com Ctrl durante a partida (Ctrl+S, Ctrl+D…)
+  if (e.ctrlKey && playing()) e.preventDefault();
   if (e.repeat) return;
   codeDown(e.code);
   if (e.code === 'Escape' && playing() && !input.locked && !S.paused) setPause(true);
 });
 addEventListener('keyup', e => codeUp(e.code));
+// Ctrl+W (potência − com manche para baixo) fecha a aba no Chrome e não dá para bloquear: pede confirmação antes
+addEventListener('beforeunload', e => { if (playing()) { e.preventDefault(); e.returnValue = ''; } });
 addEventListener('blur', () => clearInput());
 addEventListener('contextmenu', e => { if (S.state !== 'menu') e.preventDefault(); });
 addEventListener('mousedown', e => {

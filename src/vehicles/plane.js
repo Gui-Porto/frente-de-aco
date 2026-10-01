@@ -207,7 +207,8 @@ export class Plane {
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
     this.rud = clamp(K * 1.8 * yawErr * (1 - w * 0.7) - 0.5 * this.yr, -1, 1);
     const as = D.clmax / D.cla, aLim = as * (0.86 + this.flaps * 0.08);
-    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7);                  // sem estol
+    // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
+    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
     elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
     elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
     // proteção perto do solo (assistência arcade): não deixa mergulhar abaixo de ~60 m sem querer

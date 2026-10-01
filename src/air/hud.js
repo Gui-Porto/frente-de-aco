@@ -86,8 +86,21 @@ function topBar(v) {
 }
 
 // ---------- marcadores de aeronaves e setas fora da tela ----------
+// rótulos de alvo: fogem da mira e não se empilham uns sobre os outros
+const placed = [];
+function placeLabel(t, x, y, r, col, rx, ry) {
+  g.font = `500 11px ${MONO}`; const w = g.measureText(t).width + 6, h = 13;
+  // perto da mira o rótulo sobe para cima do colchete (a mira fica livre embaixo)
+  let ly = Math.hypot(x - rx, y - ry) < 90 ? y - r - 10 : y + r + 14;
+  const hit = yy => placed.some(b => Math.abs(b.x - x) < (b.w + w) / 2 && Math.abs(b.y - yy) < h) || Math.hypot(x - rx, yy - ry) < 46;
+  for (let i = 0; i < 6 && hit(ly); i++) ly += ly < y ? -h : h;
+  placed.push({ x, y: ly, w });
+  otxt(t, x, ly, 11, col, 'center', MONO, 500);
+}
 function targets(v, live) {
   const mk = B.marked;
+  placed.length = 0;
+  _a.set(0, 0, 400).applyMatrix4(v.root.matrixWorld); const rp = proj(_a, P2), rx = rp ? rp.x : W / 2, ry = rp ? rp.y : Hh / 2;
   for (const e of planes) {
     if (!e.alive || e === v) continue;
     const d = e.pos.distanceTo(camera.position), en = e.team !== 1, col = en ? C.enemy : C.ally;
@@ -105,7 +118,7 @@ function targets(v, live) {
     } else { g.beginPath(); g.moveTo(pr.x - 7, pr.y - r * 0.6); g.lineTo(pr.x, pr.y - r * 0.6 + 6); g.lineTo(pr.x + 7, pr.y - r * 0.6); g.stroke(); }
     g.shadowBlur = 0;
     const lab = en ? `${e.def.short}  ${fmtD(d)}` : `${e.who ? e.who.name : ''}`;
-    if (en || d < 1500) txt(lab, pr.x, pr.y + r + 14, 11, col, 'center');
+    if (en || d < 1500) placeLabel(lab, pr.x, pr.y, r, col, rx, ry);
     // avanço (lead) do alvo marcado: onde mirar para as balas encontrarem o alvo
     if (live && e === mk && d < 1600) {
       const Wg = v.guns.find(q => q.ammo > 0) || v.guns[0];
@@ -337,13 +350,13 @@ function hitMessages() {
     const age = S.now - m.at, life = m.lvl >= 3 ? 2.2 : 1.1;
     if (age < life) {
       const col = [C.white, C.amber, C.amber, C.enemy][m.lvl], size = [20, 22, 24, 30][m.lvl] * (1 + Math.max(0, 0.25 - age) * 1.2);
-      g.globalAlpha = clamp((life - age) * 3, 0, 1); otxt(m.t, W / 2, Hh * 0.36, size, col, 'center', UI, 700); g.globalAlpha = 1;
+      g.globalAlpha = clamp((life - age) * 3, 0, 1); otxt(m.t, W / 2, Hh * 0.2, size, col, 'center', UI, 700); g.globalAlpha = 1;
     }
   }
   let i = 0;
   for (const c of B.critLog) {
     const age = S.now - c.at; if (age > 2.5) continue;
-    g.globalAlpha = clamp(2.5 - age, 0, 1); otxt(c.t, W / 2, Hh * 0.36 + 26 + i * 20, 15, C.amber, 'center'); i++;
+    g.globalAlpha = clamp(2.5 - age, 0, 1); otxt(c.t, W / 2, Hh * 0.2 + 26 + i * 20, 15, C.amber, 'center'); i++;
   }
   g.globalAlpha = 1;
 }
