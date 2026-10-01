@@ -61,7 +61,7 @@ void main(){
   col = mix(col, fogColor, f * (vKind > 0.5 ? 0.6 : 1.0));
   gl_FragColor = vec4(col, a);
 }`;
-function makeLayer(additive) {
+export function makeLayer(additive) {
   const g = new THREE.InstancedBufferGeometry();
   const base = new THREE.PlaneGeometry(1, 1);
   g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('uv', base.attributes.uv);

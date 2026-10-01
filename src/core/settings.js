@@ -19,20 +19,27 @@ export const ACTIONS = [
   ['t_cruise_up', 'Tanque', 'Controle de cruzeiro +', ['KeyE']],
   ['t_cruise_dn', 'Tanque', 'Controle de cruzeiro −', ['KeyQ']],
   ['t_binoc', 'Tanque', 'Binóculo (alternar)', ['KeyB']],
-  ['a_thr_up', 'Avião', 'Aumentar potência', ['KeyW']],
-  ['a_thr_dn', 'Avião', 'Reduzir potência', ['KeyS']],
+  ['a_thr_up', 'Avião', 'Aumentar potência', ['ShiftLeft']],
+  ['a_thr_dn', 'Avião', 'Reduzir potência', ['ControlLeft']],
   ['a_roll_l', 'Avião', 'Rolar à esquerda', ['KeyA']],
   ['a_roll_r', 'Avião', 'Rolar à direita', ['KeyD']],
   ['a_yaw_l', 'Avião', 'Leme à esquerda', ['KeyQ']],
   ['a_yaw_r', 'Avião', 'Leme à direita', ['KeyE']],
-  ['a_pitch_up', 'Avião', 'Cabrar (teclado)', ['ArrowDown']],
-  ['a_pitch_dn', 'Avião', 'Picar (teclado)', ['ArrowUp']],
+  ['a_pitch_up', 'Avião', 'Cabrar (subir o nariz)', ['KeyS', 'ArrowDown']],
+  ['a_pitch_dn', 'Avião', 'Picar (baixar o nariz)', ['KeyW', 'ArrowUp']],
   ['a_guns', 'Avião', 'Disparar armas', ['Mouse0']],
   ['a_bomb', 'Avião', 'Lançar bombas', ['Space']],
   ['a_rocket', 'Avião', 'Disparar foguetes', ['KeyR']],
   ['a_flaps', 'Avião', 'Flaps (alternar)', ['KeyF']],
   ['a_airbrake', 'Avião', 'Freio aerodinâmico', ['KeyH']],
-  ['a_zoom', 'Avião', 'Zoom (segurar)', ['Mouse2']],
+  ['a_zoom', 'Avião', 'Zoom / câmera de mira (segurar)', ['Mouse2']],
+  // mesmos comandos nas batalhas terrestres e na Batalha Aérea (padrão do War Thunder com mouse aim)
+  ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Mouse1', 'Space']],
+  ['a_cm', 'Avião', 'Contramedidas (flares + chaff)', ['KeyX']],
+  ['a_gear', 'Avião', 'Trem de pouso', ['KeyG']],
+  ['a_ext', 'Avião', 'Extintor de incêndio', ['KeyK']],
+  ['a_cam', 'Avião', 'Trocar câmera (cockpit / externa)', ['KeyV']],
+  ['a_target', 'Avião', 'Trocar alvo marcado', ['KeyT']],
   ['freelook', 'Geral', 'Olhar livre (segurar)', ['KeyC']],
   ['score', 'Geral', 'Placar (segurar)', ['Tab']],
   ['map', 'Geral', 'Mapa ampliado (segurar)', ['KeyM']],
@@ -54,6 +61,7 @@ export function defaults() {
     mouse: { tank: 1.0, sight: 1.0, plane: 1.0, invertY: false },
     graphics: { quality: 'alta' },
     audio: { master: 0.8, sfx: 1.0, engine: 0.8 },
+    bindsV: 2,
     gameplay: { tankAssist: true, leadMarker: true, flightMode: 'instrutor', camSmooth: true, hitcam: true },
   };
 }
@@ -65,7 +73,17 @@ function merge(base, o) {
   return base;
 }
 export const settings = defaults();
-try { const s = localStorage.getItem(KEY); if (s) merge(settings, JSON.parse(s)); } catch (e) { /* sem armazenamento: usa padrões */ }
+let saved = null;
+try { const s = localStorage.getItem(KEY); if (s) merge(settings, saved = JSON.parse(s)); } catch (e) { /* sem armazenamento: usa padrões */ }
+// configurações salvas antes do atalho de teclado: míssil só no botão do meio (touchpad não tem)
+if (settings.binds.a_missile.join() === 'Mouse1') settings.binds.a_missile.push('Space');
+// esquema de voo v2 (Shift/Ctrl potência, W/S manche, A/D rolagem, Q/E leme, C olhar livre):
+// aplicado uma vez também sobre configurações salvas no esquema antigo (W/S era potência)
+if (saved && saved.binds && (saved.bindsV || 1) < 2) {
+  const d = defaults().binds;
+  for (const id of ['a_thr_up', 'a_thr_dn', 'a_pitch_up', 'a_pitch_dn', 'a_roll_l', 'a_roll_r', 'a_yaw_l', 'a_yaw_r', 'freelook']) settings.binds[id] = [...d[id]];
+  settings.bindsV = 2;
+}
 const listeners = [];
 export function onSettings(fn) { listeners.push(fn); }
 export function saveSettings() {

@@ -3,6 +3,7 @@ import { S, tanks } from '../core/state.js';
 import { settings, codeDown, codeUp, isDown, pressed, mouse, clearInput } from '../core/settings.js';
 import { clamp } from '../core/util.js';
 import { cam } from './camera.js';
+import { airMouse } from '../air/camera.js';
 import { los } from '../combat/ballistics.js';
 import { setPause } from '../ui/menus.js';
 import { drawScore } from '../ui/hud.js';
@@ -16,12 +17,16 @@ const playing = () => S.state === 'play' || S.state === 'spectate';
 
 addEventListener('keydown', e => {
   if (input.capture) { e.preventDefault(); input.capture(e.code); return; }
-  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code) && S.state !== 'menu') e.preventDefault();
+  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code) && S.state !== 'menu' && S.state !== 'airmenu') e.preventDefault();
+  // Ctrl reduz a potência do avião: bloqueia os atalhos do navegador com Ctrl durante a partida (Ctrl+S, Ctrl+D…)
+  if (e.ctrlKey && playing()) e.preventDefault();
   if (e.repeat) return;
   codeDown(e.code);
   if (e.code === 'Escape' && playing() && !input.locked && !S.paused) setPause(true);
 });
 addEventListener('keyup', e => codeUp(e.code));
+// Ctrl+W (potência − com manche para baixo) fecha a aba no Chrome e não dá para bloquear: pede confirmação antes
+addEventListener('beforeunload', e => { if (playing()) { e.preventDefault(); e.returnValue = ''; } });
 addEventListener('blur', () => clearInput());
 addEventListener('contextmenu', e => { if (S.state !== 'menu') e.preventDefault(); });
 addEventListener('mousedown', e => {
@@ -40,6 +45,8 @@ addEventListener('mousemove', e => {
   const inSight = cam.sniper || cam.binoc;
   const base = 0.0022 * (air ? settings.mouse.plane : inSight ? settings.mouse.sight * Math.max(cam.fov, 3) / 60 : settings.mouse.tank);
   const inv = settings.mouse.invertY ? -1 : 1;
+  // Batalha Aérea: mira livre em quaternion (permite loop, sem trava perto da vertical)
+  if (S.mode === 'air') { airMouse(e.movementX * base, e.movementY * base * inv); return; }
   cam.yaw -= e.movementX * base;
   cam.pitch = clamp(cam.pitch - e.movementY * base * inv, air ? -1.5 : -0.6, air ? 1.5 : 0.55);
 });
@@ -83,8 +90,7 @@ function controlPlane(p, dt) {
   if (isDown('a_thr_up')) { p.throttle = Math.min(1, p.throttle + dt * 0.6); if (p.throttle >= 1) wepHold += dt; } else wepHold = 0;
   if (isDown('a_thr_dn')) { p.throttle = Math.max(0, p.throttle - dt * 0.6); p.wep = false; }
   if (wepHold > 0.5) p.wep = true;
-  if (pressed('a_flaps')) { p.flaps = p.flaps ? 0 : 1; }
-  if (p.flaps && p.ias > 340 / 3.6) { p.flaps = 0; }
+  if (pressed('a_flaps')) p.cycleFlaps();
   p.airbrake = isDown('a_airbrake');
   const kx = (isDown('a_roll_r') ? 1 : 0) - (isDown('a_roll_l') ? 1 : 0);
   const ky = (isDown('a_yaw_l') ? 1 : 0) - (isDown('a_yaw_r') ? 1 : 0);

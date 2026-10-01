@@ -14,6 +14,7 @@
   <div id="hud" hidden>
     <div id="labels"></div>
     <canvas id="scope"></canvas>
+    <canvas id="airhud" hidden></canvas>
     <div id="gdark"></div>
     <div class="tickets">
       <div class="tk ally"><span id="tkA">800</span><div class="bar"><i id="tkAbar"></i></div></div>
@@ -76,6 +77,7 @@
       <div class="grp">Seu lineup</div>
       <div class="lineup" id="lineup"></div>
       <div class="sidebtns"><button class="go" id="startBtn">Entrar em combate</button><button class="ghost" id="setBtn">Configurações</button></div>
+      <button class="airgo" id="airBtn"><small>Novo modo</small><b>Batalha aérea</b><span>Caças a pistão e os primeiros jatos contra a IA. Duelo, equipes, interceptação.</span></button>
       <p class="note">Controles no padrão do War Thunder e remapeáveis em Configurações. Tab placar, M mapa, Esc pausa.</p>
     </div>
     <div class="sheet" id="sheet">
@@ -115,6 +117,53 @@
       <div class="btnrow"><button class="go" id="setClose">Fechar</button><button class="ghost" id="setReset">Restaurar padrões desta aba</button></div>
     </div>
   </div>
+
+  <div id="air" hidden>
+    <section id="airSel">
+      <header class="abar">
+        <button class="aback" id="airBack">← Menu principal</button>
+        <div class="atitle"><small>Esquadrilha</small><b>Batalha aérea</b></div>
+        <div id="airPilot"></div>
+      </header>
+      <nav id="airList" aria-label="Aeronaves"></nav>
+      <article id="airPlate">
+        <div class="pmk" id="apMaker"></div>
+        <h2 id="apName"></h2>
+        <div class="prl" id="apRole"></div>
+        <div id="apRates"></div>
+        <dl id="apSpecs"></dl>
+        <h4>Armamento</h4><ul id="apArms"></ul>
+        <div class="pcols"><div><h4>Pontos fortes</h4><ul id="apStrong"></ul></div><div><h4>Cuidados</h4><ul id="apWeak"></ul></div></div>
+      </article>
+      <div id="airViews" role="group" aria-label="Vista da aeronave">
+        <button data-v="tres" aria-pressed="true">3/4</button><button data-v="frente" aria-pressed="false">Frente</button><button data-v="lado" aria-pressed="false">Perfil</button><button data-v="cima" aria-pressed="false">Planta</button><button data-v="tras" aria-pressed="false">Traseira</button>
+      </div>
+      <p class="ahint">Arraste para girar · roda do mouse aproxima</p>
+      <button class="go" id="airGo">Preparar missão</button>
+    </section>
+    <section id="airCfg" hidden>
+      <div class="order">
+        <div class="ohead"><small>Ordem de missão</small><h3>Configurar batalha</h3></div>
+        <div id="cfgBody"></div>
+        <aside><h4>Resumo</h4><dl id="cfgSum"></dl></aside>
+        <div class="btnrow"><button class="ghost" id="cfgBack">Voltar ao hangar</button><button class="go" id="cfgGo">Decolar</button></div>
+      </div>
+    </section>
+    <section id="airLoad" hidden>
+      <div class="load"><small>Decolagem</small><h3 id="loadTitle"></h3><p id="loadDesc"></p><div class="lbar"><i id="loadBar"></i></div><ul id="loadSteps"></ul></div>
+    </section>
+    <section id="airRes" hidden>
+      <div class="debrief">
+        <small>Relatório de missão</small>
+        <h3 id="resTitle"></h3>
+        <p id="resWhy"></p>
+        <div id="resGrid"></div>
+        <div id="resScore"></div>
+        <div class="btnrow"><button class="go" id="resBack">Voltar ao hangar</button><button class="ghost" id="resAgain">Repetir missão</button></div>
+      </div>
+    </section>
+  </div>
+  <div id="airToast" role="status"></div>
 
   <div class="ov" id="end" hidden>
     <div class="box">

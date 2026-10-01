@@ -42,7 +42,7 @@ export function addFeed(k, v, cause) {
 }
 
 // ---------- Painel de estado do veículo (silhueta vista de cima) ----------
-const sc = $('#status'), sx = sc.getContext('2d');
+const sc = $('#status'), sx = sc.getContext('2d'), SX = sx;
 const C = { ok: '#c9c4ab', warn: '#efa53c', bad: '#e65a42', dead: '#5a1f18', dim: 'rgba(201,196,171,.35)', line: 'rgba(221,214,183,.55)', crew: '#93cf6c' };
 const modCol = m => (m.broken ? C.bad : C.ok);
 function drawTankStatus(t) {
@@ -87,8 +87,8 @@ function drawTankStatus(t) {
   if (t.fire > 0) { sx.fillStyle = `rgba(255,${100 + Math.random() * 80},30,${0.35 + Math.random() * 0.25})`; const [a, b] = P(D.W / 2, D.L / 2); sx.fillRect(a, b, D.W * s, D.L * s); }
   if (t.repairT > 0) { sx.strokeStyle = C.warn; sx.lineWidth = 4; sx.beginPath(); sx.arc(W - 20, 20, 13, -Math.PI / 2, -Math.PI / 2 + (1 - t.repairT / t.repairMax) * Math.PI * 2); sx.stroke(); }
 }
-function drawPlaneStatus(p) {
-  const W = sc.width, Hh = sc.height, D = p.def;
+export function drawPlaneStatus(p, sx = SX, W = sc.width, Hh = sc.height) {
+  const D = p.def;
   sx.clearRect(0, 0, W, Hh);
   const s = Math.min((Hh - 20) / D.L, (W - 20) / D.span) * 0.95, ox = W / 2, oy = Hh / 2;
   const col = k => { const f = p.hp[k] / p.maxHp[k]; return f <= 0 ? C.dead : f < .35 ? C.bad : f < .7 ? C.warn : C.ok; };
