@@ -12,7 +12,9 @@ import { clamp, lerp, rand, angDiff, REDUCED } from '../core/util.js';
 // =====================================================================
 export const hv = { yaw: 0.75, pitch: 0.16, dist: 19, ty: 0.75, tp: 0.16, td: 19, idle: 0, drag: false, built: false };
 let hs = null, show = null, dust = null, keyL = null, t = 0, cur = 'p47';
-const VIEWS = { tres: [0.75, 0.16, 19], frente: [0, 0.05, 15], lado: [Math.PI / 2, 0.04, 17], cima: [0.3, 1.25, 21], tras: [Math.PI, 0.12, 17] };
+// distância da câmera pelo maior lado do avião (os jatos são mais compridos que largos)
+const sizeK = k => Math.max(1, Math.max(PLANES[k].span, PLANES[k].L) / 11) * 1.15;
+const VIEWS = { tres: [0.75, 0.16, 19], frente: [0, 0.05, 15], lado: [Math.PI / 2, 0.04, 21], cima: [0.3, 1.25, 21], tras: [Math.PI, 0.12, 17] };
 
 function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
 function build() {
@@ -91,9 +93,9 @@ export function showcase(key) {
   if (!D.jet) show.root.rotation.x = -Math.atan2(lift - nl, D.L * 0.46 + D.wingZ + 0.4) * 0.9; // pousado na bequilha
   show.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   hs.add(show.root);
-  keyL.target.position.set(0, 1, 0); hv.td = Math.max(15, D.span * 1.6);
+  keyL.target.position.set(0, 1, 0); hv.td = VIEWS.tres[2] * sizeK(key);
 }
-export function setView(k) { const v = VIEWS[k]; if (!v) return; hv.ty = hv.yaw + angDiff(hv.yaw, v[0]); hv.tp = v[1]; hv.td = v[2] * Math.max(1, PLANES[cur].span / 11); hv.idle = 0; }
+export function setView(k) { const v = VIEWS[k]; if (!v) return; hv.ty = hv.yaw + angDiff(hv.yaw, v[0]); hv.tp = v[1]; hv.td = v[2] * sizeK(cur); hv.idle = 0; }
 export function openHangar(key) { if (!hv.built) build(); showcase(key); setScene(hs); }
 export function closeHangar() { setScene(world); camera.clearViewOffset(); }
 
@@ -103,7 +105,7 @@ export function updateHangar(dt) {
   if (!hv.drag && hv.idle > 5 && !REDUCED) hv.ty += dt * 0.06; // giro lento quando ninguém mexe
   hv.yaw = lerp(hv.yaw, hv.ty, 1 - Math.exp(-dt * 5)); hv.pitch = lerp(hv.pitch, hv.tp, 1 - Math.exp(-dt * 5)); hv.dist = lerp(hv.dist, hv.td, 1 - Math.exp(-dt * 5));
   const wide = innerWidth > 900;
-  camera.setViewOffset(innerWidth, innerHeight, wide ? -innerWidth * 0.08 : 0, wide ? innerHeight * 0.04 : innerHeight * 0.12, innerWidth, innerHeight);
+  camera.setViewOffset(innerWidth, innerHeight, wide ? innerWidth * 0.05 : 0, wide ? innerHeight * 0.04 : innerHeight * 0.12, innerWidth, innerHeight);
   if (Math.abs(camera.fov - 40) > 0.01) { camera.fov = 40; camera.updateProjectionMatrix(); }
   const cy = 2.2;
   camera.position.set(Math.sin(hv.yaw) * Math.cos(hv.pitch) * hv.dist, cy + Math.sin(hv.pitch) * hv.dist, Math.cos(hv.yaw) * Math.cos(hv.pitch) * hv.dist);

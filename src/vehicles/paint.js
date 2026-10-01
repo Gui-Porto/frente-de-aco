@@ -63,6 +63,8 @@ const AIR = {
   EUA: decal(g => { g.translate(64, 64); g.fillStyle = '#1d2f5a'; g.beginPath(); g.arc(0, 0, 40, 0, 7); g.fill(); g.fillStyle = '#ece8dc'; g.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 15 : 38, a = i / 10 * Math.PI * 2 - Math.PI / 2; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); g.fill(); g.fillRect(28, -9, 34, 18); g.fillRect(-62, -9, 34, 18); }),
   URSS: decal(g => { g.translate(64, 64); g.fillStyle = '#ece8dc'; g.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 24 : 58, a = i / 10 * Math.PI * 2 - Math.PI / 2; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); g.fill(); g.fillStyle = '#b3241c'; g.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 19 : 50, a = i / 10 * Math.PI * 2 - Math.PI / 2; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); g.fill(); }),
   Alemanha: DEC.cross,
+  // RAF tipo C1 (1943+): anel amarelo, azul, branco estreito e centro vermelho
+  'Reino Unido': decal(g => { g.translate(64, 64); for (const [r, c] of [[58, '#d9b53a'], [50, '#27345e'], [26, '#ece8dc'], [20, '#a82a22']]) { g.fillStyle = c; g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill(); } }),
 };
 // Insígnias nas asas e na fuselagem
 // o (opcional): posição da insígnia no extradorso { x, y, z, size }, calculada pelo modelo da asa
@@ -74,6 +76,7 @@ export function planeDecals(D, root, wingL, wingR, o) {
   };
   const w = o || { x: D.span * 0.36, y: 0.27 + D.span * 0.36 * 0.06, z: D.wingZ - D.chord * 0.15, size: D.chord * 0.75 };
   for (const [wg, s] of [[wingL, 1], [wingR, -1]]) mk(wg, w.size, s * w.x, w.y, w.z, -Math.PI / 2, 0);
-  const fx = D.fuseR * (D.jet ? 0.95 : 0.82); // raio da fuselagem torneada nesta estação
-  for (const s of [1, -1]) mk(root, D.fuseR * 1.2, s * fx, 0.05, -D.L * 0.14, 0, s * Math.PI / 2);
+  // lateral da fuselagem na estação da insígnia (vem do loft em planeModel; 2 cm para fora da chapa)
+  const zf = -0.14, f = o && o.fuseAt ? o.fuseAt(zf) : { hw: D.fuseR * 0.82, yc: 0.05 };
+  for (const s of [1, -1]) mk(root, Math.min(D.fuseR * 1.2, f.h * 1.5 || 9), s * (f.hw + 0.02), f.yc, D.L * zf, 0, s * Math.PI / 2);
 }

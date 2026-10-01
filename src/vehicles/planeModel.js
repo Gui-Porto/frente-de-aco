@@ -45,16 +45,47 @@ export function wingGeometry(o) {
   return g;
 }
 
-// fuselagem por revolução: perfil [z/L, r/fr], com nariz que se ajusta ao motor
+// Fuselagem em loft: cada estação tem meia-largura, altura do dorso, profundidade do ventre e
+// deslocamento da linha central (frações de fuseR; z em fração de L). Seção superelíptica (um pouco
+// "quadrada" como chapa sobre cavernas); o dorso segue quase reto até a cauda e o ventre sobe,
+// deixando a cauda em lâmina vertical. Grupo 0 = metade de cima (camuflagem), 1 = ventre.
+const FUSE = {
+  inline: [[-0.5, .05, .1, .08, .4], [-0.44, .14, .22, .2, .34], [-0.32, .34, .46, .42, .24], [-0.16, .6, .74, .7, .1], [0, .8, .96, .9, 0], [0.12, .88, 1, .98, 0], [0.24, .84, .94, 1.02, -.02], [0.34, .74, .84, .96, -.04], [0.41, 'n.9', 'n.92', 'n.98', -.04], [0.46, 'n.5', 'n.5', 'n.55', -.04]],
+  radial: [[-0.5, .05, .1, .08, .4], [-0.44, .16, .24, .22, .32], [-0.32, .38, .5, .48, .2], [-0.16, .68, .8, .8, .08], [0, .9, .98, .98, 0], [0.14, .98, 1, 1.02, 0], [0.27, 'n1.02', 'n1.02', 'n1.02', 0], [0.38, 'n1', 'n1', 'n1', 0], [0.43, 'n.94', 'n.94', 'n.94', 0], [0.455, 'n.6', 'n.6', 'n.6', 0]],
+  intake: [[-0.53, .44, .46, .44, .06], [-0.46, .52, .56, .52, .08], [-0.34, .68, .76, .7, .06], [-0.18, .86, .96, .9, .03], [0, .98, 1.06, 1, 0], [0.14, 1, 1.06, 1, 0], [0.28, .92, .98, .94, -.02], [0.38, 'n1.04', 'n1.06', 'n1.04', -.02], [0.46, 'n.98', 'n.98', 'n.98', -.02]],
+};
 function fuselage(D) {
-  const L = D.L, fr = D.fuseR, nr = D.noseR / fr;
-  const P = D.jet
-    ? [[-0.53, 0.5], [-0.48, 0.56], [-0.36, 0.72], [-0.18, 0.92], [0, 1], [0.18, 1], [0.32, 0.96], [0.41, nr * 1.02], [0.46, nr * 0.98]]
-    : D.cowl === 'radial'
-      ? [[-0.5, 0.05], [-0.45, 0.2], [-0.32, 0.46], [-0.16, 0.78], [0, 0.95], [0.14, 1], [0.27, nr * 1.02], [0.38, nr], [0.43, nr * 0.93], [0.45, nr * 0.62]]
-      : [[-0.5, 0.05], [-0.45, 0.2], [-0.32, 0.45], [-0.16, 0.76], [0, 0.94], [0.14, 1], [0.27, 0.98], [0.37, nr * 1.15], [0.43, nr * 0.98], [0.46, nr * 0.55]];
-  const g = new THREE.LatheGeometry(P.map(([z, r]) => new THREE.Vector2(r * fr, z * L)), 30);
-  g.rotateX(Math.PI / 2); g.scale(1, D.jet ? 1.05 : 1.14, 1);
+  const L = D.L, fr = D.fuseR, nr = D.noseR / fr, kind = D.jet ? 'intake' : D.cowl === 'radial' ? 'radial' : 'inline';
+  const belly = D.key === 'p47' ? 1.18 : D.key === 'mig15' ? 1.06 : 1, tall = D.key === 'f86' ? 1.06 : 1;
+  const st = FUSE[kind].map(r => r.map((v, i) => (typeof v === 'string' ? nr * +v.slice(1) : v) * (i === 3 ? (r[0] < 0.3 ? belly : 1) : i === 2 ? tall : 1)));
+  // Catmull-Rom entre estações (suaviza o perfil sem precisar de dezenas de pontos à mão)
+  const cr = (a, b, c, d, t) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+  const SEG = 5, rings = [];
+  for (let i = 0; i < st.length - 1; i++) for (let k = 0; k < (i === st.length - 2 ? SEG + 1 : SEG); k++) {
+    const t = k / SEG, P = j => st[Math.max(0, Math.min(st.length - 1, j))];
+    rings.push([0, 1, 2, 3, 4].map(c => cr(P(i - 1)[c], P(i)[c], P(i + 1)[c], P(i + 2)[c], t)));
+  }
+  const NR = 32, ex = 2 / 2.4, pos = [], uv = [], top = [], bot = [];
+  const z0 = rings[0][0], z1 = rings[rings.length - 1][0];
+  for (const [z, hw, tp, bt, yc] of rings) for (let k = 0; k <= NR; k++) {
+    const a = k / NR * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    const x = Math.sign(c) * Math.abs(c) ** ex * Math.max(hw, 0.01), y = (s >= 0 ? tp : bt) * Math.sign(s) * Math.abs(s) ** ex;
+    pos.push(x * fr, (y + yc) * fr, z * L); uv.push(k / NR, (z - z0) / (z1 - z0));
+  }
+  const row = NR + 1;
+  for (let j = 0; j < rings.length - 1; j++) for (let k = 0; k < NR; k++) {
+    const a = j * row + k, b = a + 1, c = a + row, d = c + 1;
+    (k < NR / 2 ? top : bot).push(a, b, c, b, d, c);
+  }
+  // tampas: cauda sempre; nariz só nos motores a pistão (o jato tem a entrada de ar aberta)
+  const cap = (j, flip) => { const ci = pos.length / 3, r = rings[j]; pos.push(0, r[4] * fr, r[0] * L); uv.push(0.5, j ? 1 : 0); for (let k = 0; k < NR; k++) { const a = j * row + k; (k < NR / 2 ? top : bot).push(...(flip ? [ci, a + 1, a] : [ci, a, a + 1])); } };
+  if (!D.jet) { cap(0, false); cap(rings.length - 1, true); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex([...top, ...bot]); g.addGroup(0, top.length, 0); g.addGroup(top.length, bot.length, 1);
+  g.computeVertexNormals();
+  // amostra da seção numa fração z (para insígnias e acessórios encostarem na chapa)
+  g.userData.at = zf => { let r = rings[0]; for (const q of rings) if (q[0] <= zf) r = q; return { hw: r[1] * fr, h: Math.min(r[2], r[3]) * fr, yc: r[4] * fr }; };
   return g;
 }
 // lâmina de hélice afinando para a ponta e torcida
@@ -74,10 +105,10 @@ function metalTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
   g.fillStyle = '#c4c7c8'; g.fillRect(0, 0, 512, 512);
   for (let i = 0; i < 46; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '40,45,50'},${Math.random() * .08})`; g.fillRect(Math.floor(Math.random() * 8) * 64, Math.floor(Math.random() * 16) * 32, 64, 32); }
-  g.strokeStyle = 'rgba(60,64,68,.45)'; g.lineWidth = 1.5;
+  g.strokeStyle = 'rgba(60,64,68,.2)'; g.lineWidth = 1.2;
   for (let x = 0; x <= 512; x += 64) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 512); g.stroke(); }
   for (let y = 0; y <= 512; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
-  g.fillStyle = 'rgba(70,74,78,.5)'; for (let x = 0; x < 512; x += 64) for (let y = 4; y < 512; y += 8) g.fillRect(x + 3, y, 1.4, 1.4);
+  g.fillStyle = 'rgba(70,74,78,.25)'; for (let x = 0; x < 512; x += 64) for (let y = 4; y < 512; y += 8) g.fillRect(x + 3, y, 1.4, 1.4);
   for (let i = 0; i < 4000; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * .05})`; g.fillRect(Math.random() * 512, Math.random() * 512, 2, 1); }
   metalTex = new THREE.CanvasTexture(c); metalTex.colorSpace = THREE.SRGBColorSpace; metalTex.wrapS = metalTex.wrapT = THREE.RepeatWrapping; metalTex.anisotropy = 8;
   return metalTex;
@@ -97,7 +128,7 @@ export function buildPlane(D) {
   const pair = [paint, under];
   const add = (g, m, p = root, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; p.add(o); return o; };
   // fuselagem, coberta inferior e nariz
-  add(fuselage(D), paint);
+  const fuseG = fuselage(D); add(fuseG, pair);
   if (jet) {
     add(new THREE.TorusGeometry(D.noseR * 0.9, 0.07, 8, 28), paint, root, 0, 0, L * 0.46);           // lábio da entrada de ar
     add(new THREE.CylinderGeometry(fr * 0.5, fr * 0.46, 0.5, 18, 1, true).rotateX(Math.PI / 2), dark, root, 0, 0, -L * 0.53); // tubeira
@@ -110,9 +141,9 @@ export function buildPlane(D) {
   // cabine: bolha de vidro com montantes
   const cz = jet ? L * 0.24 : D.key === 'il2' ? L * 0.08 : -L * 0.02;
   const can = add(new THREE.SphereGeometry(0.55, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), glass, root, 0, fr * 0.92, cz);
-  can.scale.set(0.95, 0.95, jet ? 2.4 : 2.1);
-  for (const dz of jet ? [0.5] : [0.55, -0.15]) { const r = add(new THREE.TorusGeometry(0.52, 0.035, 6, 16, Math.PI), dark, root, 0, fr * 0.92, cz + dz); r.scale.set(0.95, 0.95, 1); }
-  add(new THREE.BoxGeometry(0.04, 0.05, 1.9), dark, root, 0, fr * 0.92 + 0.52, cz);
+  can.scale.set(0.95, jet ? 0.95 : 0.72, jet ? 2.4 : 2.1);
+  for (const dz of jet ? [0.5] : [0.55, -0.15]) { const r = add(new THREE.TorusGeometry(0.52, 0.035, 6, 16, Math.PI), dark, root, 0, fr * 0.92, cz + dz); r.scale.set(0.95, jet ? 0.95 : 0.72, 1); }
+  add(new THREE.BoxGeometry(0.04, 0.05, 1.9), dark, root, 0, fr * 0.92 + 0.52 * (jet ? 1 : 0.72), cz);
   // asas (grupos separados para poder perdê-las)
   const ellip = D.key === 'spit9' || D.key === 'p47';
   const dih = (D.dih ?? (jet ? (D.key === 'mig15' ? -2 : 3) : 5.5)) * deg;
@@ -173,7 +204,7 @@ export function buildPlane(D) {
   // pitot na ponta da asa esquerda / nariz dos jatos
   add(new THREE.CylinderGeometry(0.015, 0.015, 0.8, 4).rotateX(Math.PI / 2), dark, jet ? root : wingL, jet ? fr * 0.7 : fr * 0.55 + half * 0.82, jet ? 0.3 : -fr * 0.25 + half * 0.82 * Math.tan(dih) - 0.1, jet ? L * 0.47 : D.wingZ + D.chord * 0.25);
   const ws = 0.72, wz = D.wingZ + D.chord * 0.1 - half * ws * Math.tan((D.sweep || 0) * deg);
-  planeDecals(D, root, wingL, wingR, { y: -fr * 0.25 + half * ws * Math.tan(dih) + D.chord * 0.075, x: fr * 0.55 + half * ws, z: wz - D.chord * 0.1, size: Math.min(D.chord * 0.7, 1.6) });
+  planeDecals(D, root, wingL, wingR, { y: -fr * 0.25 + half * ws * Math.tan(dih) + D.chord * 0.075, x: fr * 0.55 + half * ws, z: wz - D.chord * 0.1, size: Math.min(D.chord * 0.7, 1.6), fuseAt: fuseG.userData.at });
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
   return { root, wingL, wingR, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under] };
 }
