@@ -40,3 +40,9 @@ Módulos ES; o estado mutável compartilhado fica em `core/state.js` (`S`, `tank
 ## Testes manuais
 
 `window.__game` expõe `S`, `simulate(dt)`, `spawnVehicle`, etc. para rodar partidas aceleradas sem renderizar (Playwright). Em navegador sem GPU use qualidade "baixa" (`localStorage fda.settings.v1 = {graphics:{quality:'baixa'}}`).
+
+## Renderização — decisões importantes
+
+- **Sem bloom**: o céu Preetham tem brilho HDR muito acima de 1; o UnrealBloom deixava a tela leitosa ("neblina estourada"). Se reativar, teste isolando passes.
+- **Partículas instanciadas** (`fx/particles.js`): 1 draw call por modo de mistura e um único `ShaderMaterial`. Sprites individuais custavam um draw call cada e compilavam shader novo no primeiro abate (travada). Fumaça sempre em tons claros/médios — nunca quase-preto, que vira "sombra".
+- **Shaders pré-compilados** no carregamento (`renderer.compile`): nenhum material novo deve aparecer só durante a partida. Ao criar material novo, garanta que exista na cena antes do compile ou reutilize um existente. Teste: `renderer.info.programs.length` não pode crescer ao destruir um veículo.

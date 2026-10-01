@@ -10,7 +10,7 @@ export const hePen = tnt => 15 * Math.cbrt(tnt);
 export const TANKS = {
   sherman: {
     key: 'sherman', type: 'tank', name: 'M4A3 (76) W', nation: 'EUA', year: 1944, color: 0x3a4126, sp: 170,
-    mass: 33700, hp: 450, rpm: 2600, vmax: 42 / 3.6, vrev: 7 / 3.6, wheels: 6, rpmTraverse: false,
+    mass: 33700, hp: 450, rpm: 2600, vmax: 42 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 6, rpmTraverse: false,
     L: 5.9, W: 2.62, Hh: 1.45, clr: 0.45, trackW: 0.42, transFront: true,
     turret: { w: 1.85, l: 2.1, h: 0.85, z: 0.25, shape: 'round' },
     armor: { front: [63, 47], lfront: [63, 35], side: [38, 0], rear: [38, 10], top: 19, bottom: 13, tFront: [89, 0], tSide: [64, 5], tRear: [64, 0], tTop: 25 },
@@ -23,7 +23,7 @@ export const TANKS = {
   },
   t34: {
     key: 't34', type: 'tank', name: 'T-34-85', nation: 'URSS', year: 1944, color: 0x34442a, sp: 170,
-    mass: 32000, hp: 500, rpm: 1800, vmax: 54 / 3.6, vrev: 8 / 3.6, wheels: 5, rpmTraverse: false,
+    mass: 32000, hp: 500, rpm: 1800, vmax: 54 * 1.15 / 3.6, vrev: 8 * 1.25 / 3.6, wheels: 5, rpmTraverse: false,
     L: 6.1, W: 3.0, Hh: 1.25, clr: 0.4, trackW: 0.5, transFront: false,
     turret: { w: 2.0, l: 2.5, h: 0.8, z: 0.35, shape: 'hex' },
     armor: { front: [45, 60], lfront: [45, 53], side: [45, 20], rear: [45, 47], top: 20, bottom: 15, tFront: [90, 0], tSide: [75, 20], tRear: [52, 10], tTop: 20 },
@@ -36,7 +36,7 @@ export const TANKS = {
   },
   pz4: {
     key: 'pz4', type: 'tank', name: 'Pz.Kpfw. IV H', nation: 'Alemanha', year: 1943, color: 0x6f6541, sp: 150,
-    mass: 25900, hp: 300, rpm: 3000, vmax: 38 / 3.6, vrev: 7 / 3.6, wheels: 8, rpmTraverse: true,
+    mass: 25900, hp: 300, rpm: 3000, vmax: 38 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: true,
     L: 5.9, W: 2.88, Hh: 1.3, clr: 0.4, trackW: 0.4, transFront: true,
     turret: { w: 1.8, l: 2.35, h: 0.78, z: 0.1, shape: 'hex' },
     armor: { front: [80, 10], lfront: [80, 14], side: [30, 0], rear: [20, 10], top: 12, bottom: 10, tFront: [80, 10], tSide: [30, 25], tRear: [30, 15], tTop: 16 },
@@ -49,7 +49,7 @@ export const TANKS = {
   },
   tiger: {
     key: 'tiger', type: 'tank', name: 'Tiger H1', nation: 'Alemanha', year: 1943, color: 0x7d6f45, sp: 220,
-    mass: 56900, hp: 650, rpm: 2500, vmax: 40 / 3.6, vrev: 7 / 3.6, wheels: 8, rpmTraverse: true,
+    mass: 56900, hp: 650, rpm: 2500, vmax: 40 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: true,
     L: 6.3, W: 3.56, Hh: 1.45, clr: 0.47, trackW: 0.72, transFront: true,
     turret: { w: 2.3, l: 2.9, h: 0.9, z: -0.1, shape: 'box' },
     armor: { front: [100, 9], lfront: [100, 24], side: [80, 0], rear: [80, 9], top: 25, bottom: 25, tFront: [120, 0], tSide: [80, 0], tRear: [80, 0], tTop: 25 },
@@ -62,7 +62,7 @@ export const TANKS = {
   },
   wirbel: {
     key: 'wirbel', type: 'spaa', name: 'Flakpanzer IV Wirbelwind', short: 'Wirbelwind', nation: 'Alemanha', year: 1944, color: 0x6f6541, sp: 110,
-    mass: 22000, hp: 300, rpm: 3000, vmax: 38 / 3.6, vrev: 7 / 3.6, wheels: 8, rpmTraverse: false,
+    mass: 22000, hp: 300, rpm: 3000, vmax: 38 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: false,
     L: 5.9, W: 2.88, Hh: 1.3, clr: 0.4, trackW: 0.4, transFront: true,
     turret: { w: 2.2, l: 2.2, h: 0.75, z: -0.2, shape: 'open' },
     armor: { front: [80, 10], lfront: [80, 14], side: [30, 0], rear: [20, 10], top: 12, bottom: 10, tFront: [16, 25], tSide: [16, 25], tRear: [16, 25], tTop: 0 },

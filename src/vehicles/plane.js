@@ -194,7 +194,7 @@ export class Plane {
       if (Math.random() < dt * 30) fxBurn(this.pos.clone().addScaledVector(_pf.set(0, 0, 1).applyQuaternion(this.q), 1), 1.2);
       if (this.fire > 22 && this.alive) destroyVehicle(this, this.lastHitBy, 'fire');
     } else if (this.hp.engine < this.maxHp.engine * 0.5 || this.oil > 0) {
-      if (Math.random() < dt * 14) fxTrail(this.pos.clone(), this.oil > 0 ? 0x2a2622 : 0x9a968c, 1, 3);
+      if (Math.random() < dt * 14) fxTrail(this.pos.clone(), this.oil > 0 ? 0x5e5952 : 0xb8b4ac, 1, 3);
     }
     this.prop.rotation.z += (this.engineOn ? 60 : Math.min(this.ias / 4, 20)) * dt;
     this.prop.children[this.prop.children.length - 1].visible = this.engineOn;

@@ -7,7 +7,7 @@ import { world, STEP } from '../world/physics.js';
 import { grass, waveFlags } from '../world/scenery.js';
 import { Q } from '../core/render.js';
 import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle } from '../combat/ballistics.js';
-import { updateParts, fxBurn } from '../fx/particles.js';
+import { updateParts, fxBurn, spawnP, TEX } from '../fx/particles.js';
 import { eng } from '../fx/audio.js';
 import { updateMatch, startMatch, spawnPlayer, mkWho, spawnVehicle } from './match.js';
 import { controlPlayer } from './controls.js';
@@ -63,8 +63,10 @@ function frame(ts) {
   endFrame();
 }
 initMenus();
+// compila todos os shaders agora (evita travadas por compilação no meio da partida)
+import('../core/render.js').then(R => { try { R.renderer.compile(R.scene, R.camera); } catch (e) { /* opcional */ } });
 requestAnimationFrame(frame);
 // gancho para testes automatizados
 import * as R from '../core/render.js';
 window.__r = R;
-window.__game = { S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, world, H, cam };
+window.__game = { spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, world, H, cam };
