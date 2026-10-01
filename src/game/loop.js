@@ -28,7 +28,7 @@ export function simulate(dt) {
   if (n === 8) acc = 0;
   for (const t of tanks) {
     t.afterPhysics(dt);
-    if (!t.alive && t.burnT > 0) { t.burnT -= dt; if ((t.smokeT -= dt) < 0) { t.smokeT = .12; fxBurn(t.centerPos(new V3()).add(rv(1)), 1.2); } }
+    if (!t.alive && t.burnT > 0) { t.burnT -= dt; if ((t.smokeT -= dt) < 0) { t.smokeT = .22; fxBurn(t.centerPos(new V3()).add(rv(1)), 1.2); } }
   }
   for (const p of planes) { p.physics(dt); p.updateWeapons(dt); p.applyTransform(); }
   updateProjs(dt); updatePopped(); updateParts(dt);
