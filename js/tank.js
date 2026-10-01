@@ -145,8 +145,13 @@ class Tank {
     this.pos = new V3(x, H(x, z) + this.comY + 0.05, z); this.vel = new V3(); this.w = new V3();
     this.contacts = [];
     const n = D.wheels;
-    for (const s of [1, -1]) for (let i = 0; i < n; i++) this.contacts.push({ x: s * (D.W / 2 - D.trackW / 2), z: -D.L * 0.41 + i * (D.L * 0.82 / (n - 1)), side: s });
-    const nc = this.contacts.length;
+    for (const s of [1, -1]) {
+      const x = s * (D.W / 2 - D.trackW / 2);
+      for (let i = 0; i < n; i++) this.contacts.push({ x, y: 0, z: -D.L * 0.41 + i * (D.L * 0.82 / (n - 1)), side: s });
+      // trecho inclinado da esteira até a roda tensora/motriz: dá ângulo de ataque/saída e tração na rampa
+      for (const e of [1, -1]) { this.contacts.push({ x, y: 0.16, z: e * (D.L * 0.41 + 0.22), side: s, run: true }); this.contacts.push({ x, y: 0.36, z: e * D.L * 0.475, side: s, run: true }); }
+    }
+    const nc = this.contacts.filter(c => !c.run).length;
     this.kSpr = D.mass * G / (nc * 0.12); this.cSpr = 2 * 0.55 * Math.sqrt(this.kSpr * D.mass / nc);
     this.gear = 1; this.rpm = 700; this.shiftT = 0; this.trackV = [0, 0]; this.trackOff = [0, 0];
     this.vFwd = 0;
@@ -214,9 +219,9 @@ class Tank {
     const tgtRpm = 700 + (D.rpm - 700) * (busy ? Math.max(x, 0.55 * Math.max(Math.abs(thr), Math.abs(st))) : x * 0.6);
     this.rpm += (tgtRpm - this.rpm) * Math.min(1, dt * 6);
     const xr = this.rpm / D.rpm;
-    const P = D.hp * 745.7 * 0.7 * clamp(1.9 * xr - 0.9 * xr * xr, 0.3, 1) * (this.mods.engine.broken ? 0.22 : 1);
+    const P = D.hp * 745.7 * 0.85 * clamp(1.9 * xr - 0.9 * xr * xr, 0.3, 1) * (this.mods.engine.broken ? 0.22 : 1);
     let Fe = this.shiftT > 0 ? 0 : P / Math.max(vTrack, 0.8);
-    Fe = Math.min(Fe, 0.8 * D.mass * G);
+    Fe = Math.min(Fe, 0.9 * D.mass * G);
     if (x >= 1 && Math.abs(this.vFwd) >= top * 0.98) Fe = 0; // regulador de velocidade
     // mistura de comandos por lagarta (+1 = esquerda, local +x)
     let cl, cr;
@@ -231,51 +236,59 @@ class Tank {
   physics(dt) {
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.0045)), h = dt / n;
     if (this.alive) this.drive(dt); else { this.cmd = [0, 0]; this.Fside = [0, 0]; }
-    const m = D.mass, nc = this.contacts.length, cLat = m / nc * 7, mu = 0.75, muS = 0.6;
+    const m = D.mass, nc = this.contacts.filter(c => !c.run).length, cLat = m / nc * 7, mu = 0.85, muS = 0.65;
     for (let s = 0; s < n; s++) {
       this.axes();
       _F.set(0, -m * G, 0); _T.set(0, 0, 0);
-      terrainNormal(this.pos.x, this.pos.z, _tn);
-      _tf.copy(_az).addScaledVector(_tn, -_az.dot(_tn)).normalize();
-      _tl.copy(_ax).addScaledVector(_tn, -_ax.dot(_tn)).normalize();
       let gl = 0, gr = 0;
       for (const c of this.contacts) { c.on = false; }
       for (const c of this.contacts) {
-        _rr.set(c.x, -0.12 - this.comY, c.z).applyQuaternion(this.q);
+        _rr.set(c.x, c.y - 0.12 - this.comY, c.z).applyQuaternion(this.q);
         _wp.copy(this.pos).add(_rr);
         const d = H(_wp.x, _wp.z) - _wp.y;
         if (d <= 0) continue;
-        c.on = true; c.d = d; c.side > 0 ? gl++ : gr++;
+        if (!c.n) c.n = new V3();
+        terrainNormal(_wp.x, _wp.z, c.n);
+        c.on = true; c.d = d * c.n.y; c.side > 0 ? gl++ : gr++; // profundidade medida ao longo da normal local
       }
       this.trackV[0] = this.trackV[1] = 0;
       for (const c of this.contacts) {
         if (!c.on) continue;
-        _rr.set(c.x, -0.12 - this.comY, c.z).applyQuaternion(this.q);
+        _rr.set(c.x, c.y - 0.12 - this.comY, c.z).applyQuaternion(this.q);
         _vp.copy(this.w).cross(_rr).add(this.vel);
-        const vn = _vp.dot(_ay);
+        // contato com a normal LOCAL do terreno: a rampa empurra a lagarta para cima e para trás
+        const nrm = c.n;
+        _tf.copy(_az).addScaledVector(nrm, -_az.dot(nrm)).normalize();
+        _tl.copy(_ax).addScaledVector(nrm, -_ax.dot(nrm)).normalize();
+        const vn = _vp.dot(nrm);
         let N = this.kSpr * Math.min(c.d, 0.6) - this.cSpr * vn;
         if (c.d > 0.22) N += this.kSpr * 12 * (c.d - 0.22) - this.cSpr * 3 * Math.min(vn, 0);
         N = Math.max(N, 0);
         const vl = _vp.dot(_tf), vs = _vp.dot(_tl), si = c.side > 0 ? 0 : 1;
         const cmd = this.cmd[si], cnt = c.side > 0 ? gl : gr;
         let Fl;
-        if (Math.abs(cmd) > 0.02 && Math.sign(cmd) === Math.sign(vl || cmd)) Fl = this.Fside[si] / cnt;
-        else if (Math.abs(cmd) > 0.02) Fl = clamp(-vl * m / nc * 4, -0.7 * mu * N, 0.7 * mu * N) + this.Fside[si] / cnt * 0.3; // freio da lagarta
+        if (Math.abs(cmd) > 0.02) {
+          // o motor sempre empurra no sentido comandado; freia só se a lagarta corre de fato no sentido oposto
+          Fl = this.Fside[si] / cnt;
+          if (vl * cmd < 0 && Math.abs(vl) > 0.6) Fl += clamp(-vl * m / nc * 4, -0.7 * mu * N, 0.7 * mu * N);
+        }
         else Fl = clamp(-vl * m / nc * (Math.abs(vl) < 0.7 ? 6 : 1.2), -(Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N, (Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N); // freio-motor / estacionamento
         Fl -= Math.sign(vl) * Math.min(0.035 * N, Math.abs(vl) * m / nc * 3); // resistência ao rolamento
         Fl = clamp(Fl, -mu * N, mu * N);
         const Fs = clamp(-vs * cLat, -muS * N, muS * N);
-        _fi.copy(_ay).multiplyScalar(N).addScaledVector(_tf, Fl).addScaledVector(_tl, Fs);
+        _fi.copy(nrm).multiplyScalar(N).addScaledVector(_tf, Fl).addScaledVector(_tl, Fs);
         _F.add(_fi); _T.add(_tmp.copy(_rr).cross(_fi));
         this.trackV[si] += vl / cnt;
       }
       // casco tocando o solo (fundo)
       for (const lz of [-D.L / 2, D.L / 2]) for (const lx of [-D.W / 2, D.W / 2]) {
-        _rr.set(lx, D.clr * 0.5 - this.comY, lz).applyQuaternion(this.q); _wp.copy(this.pos).add(_rr);
+        _rr.set(lx, D.clr - this.comY, lz).applyQuaternion(this.q); _wp.copy(this.pos).add(_rr);
         const d = H(_wp.x, _wp.z) - _wp.y; if (d <= 0) continue;
         _vp.copy(this.w).cross(_rr).add(this.vel);
         const N = Math.max(0, this.kSpr * 6 * d - this.cSpr * 4 * _vp.y);
-        _fi.set(0, N, 0).addScaledVector(_vp, -m * 0.5 / dt * 0.02);
+        // casco raspando: atrito de Coulomb (μ≈0,4), não arrasto viscoso
+        const hs = Math.hypot(_vp.x, _vp.z);
+        _fi.set(hs > 0.05 ? -_vp.x / hs * 0.4 * N : 0, N, hs > 0.05 ? -_vp.z / hs * 0.4 * N : 0);
         _F.add(_fi); _T.add(_tmp.copy(_rr).cross(_fi));
       }
       // integração (Euler semi-implícito); dinâmica angular no referencial do corpo
