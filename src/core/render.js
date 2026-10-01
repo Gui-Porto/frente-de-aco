@@ -84,7 +84,7 @@ export function applyQuality() {
     if (!gtao) { gtao = new GTAOPass(scene, camera, w, h); gtao.blendIntensity = 0.85; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 }); }
     composer.addPass(gtao);
   }
-  if (Q.bloom) { if (!bloom) bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.32, 0.5, 0.92); composer.addPass(bloom); }
+  if (Q.bloom) { if (!bloom) bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.22, 0.35, 4.0); composer.addPass(bloom); }
   composer.addPass(output);
   aa = Q.aa === 'smaa' ? new SMAAPass() : new FXAAPass();
   composer.addPass(aa);

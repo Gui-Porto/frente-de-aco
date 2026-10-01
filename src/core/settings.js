@@ -41,9 +41,9 @@ export const ACTIONS = [
 
 export const QUALITY = {
   baixa: { pr: 0.85, shadow: 1024, cascades: 2, ao: false, bloom: false, aa: 'fxaa', grass: 0, far: 0.6 },
-  media: { pr: 1.0, shadow: 2048, cascades: 3, ao: false, bloom: true, aa: 'smaa', grass: 6000, far: 0.8 },
-  alta: { pr: 1.25, shadow: 2048, cascades: 3, ao: true, bloom: true, aa: 'smaa', grass: 14000, far: 1.0 },
-  ultra: { pr: 1.5, shadow: 4096, cascades: 4, ao: true, bloom: true, aa: 'smaa', grass: 24000, far: 1.0 },
+  media: { pr: 1.0, shadow: 2048, cascades: 3, ao: false, bloom: false, aa: 'smaa', grass: 6000, far: 0.8 },
+  alta: { pr: 1.25, shadow: 2048, cascades: 3, ao: true, bloom: false, aa: 'smaa', grass: 14000, far: 1.0 },
+  ultra: { pr: 1.5, shadow: 4096, cascades: 4, ao: true, bloom: false, aa: 'smaa', grass: 24000, far: 1.0 },
 };
 
 export function defaults() {
