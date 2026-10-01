@@ -236,7 +236,7 @@ export class Tank {
     const tgtRpm = 700 + (D.rpm - 700) * (busy ? Math.max(x, 0.55 * Math.max(Math.abs(thr), Math.abs(st))) : x * 0.6);
     this.rpm += (tgtRpm - this.rpm) * Math.min(1, dt * 6);
     const xr = this.rpm / D.rpm;
-    const P = D.hp * 745.7 * 0.85 * clamp(1.9 * xr - 0.9 * xr * xr, 0.3, 1) * (this.mods.engine.broken ? 0.22 : 1);
+    const P = D.hp * 745.7 * 0.95 * clamp(1.9 * xr - 0.9 * xr * xr, 0.3, 1) * (this.mods.engine.broken ? 0.22 : 1);
     let Fe = this.shiftT > 0 ? 0 : P / Math.max(vTrack, 0.8);
     Fe = Math.min(Fe, 0.9 * D.mass * G);
     if (x >= 1 && Math.abs(this.vFwd) >= top * 0.98) Fe = 0; // regulador de velocidade

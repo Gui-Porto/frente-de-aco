@@ -187,3 +187,4 @@ h1 span{display:block;color:var(--amber)}
 .sidebtns{display:flex;gap:8px;flex-wrap:wrap}
 @media (max-width:760px){.brow{grid-template-columns:1fr 90px 90px}#weapons .slot{min-width:80px}}
 @media (max-width:1150px){#vehHud{width:200px}#status{width:180px;height:150px}#weaponBar{left:auto;right:250px;transform:none}#weapons .slot{min-width:84px}#reloadWrap{width:260px}}
+@media (max-width:900px){.sheet{display:none}}
