@@ -1,4 +1,5 @@
 import './styles.css';
+import './air/air.css';
 import RAPIER from '@dimforge/rapier3d-compat';
 
 // O Rapier é WebAssembly: inicializa antes de carregar os módulos que criam o mundo físico.

@@ -13,6 +13,8 @@ export const S = {
   shake: 0,
   flashT: 0,
   xray: null,
+  mode: 'ground', // ground | air (Batalha Aérea)
+  air: null, airLimit: 0,
 };
 export const tanks = [];
 export const planes = [];

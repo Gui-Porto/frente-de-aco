@@ -25,10 +25,11 @@ Módulos ES; o estado mutável compartilhado fica em `core/state.js` (`S`, `tank
 | `core/` | `render.js` (Three, céu Preetham, IBL, sombras, pós-processamento GTAO/bloom/SMAA, presets de qualidade), `settings.js` (ações/teclas no padrão WT, persistência em `localStorage` `fda.settings.v1`), `state.js`, `util.js` |
 | `world/` | `terrain.js` (altura analítica `H(x,z)` usada pela física, malhas com shader de camadas, mapa de altura em textura), `scenery.js` (construções, cercas vivas, árvores, grama instanciada na GPU, colisores), `physics.js` (mundo Rapier, heightfield, grupos de colisão) |
 | `data/vehicles.js` | dados históricos aproximados dos veículos, munições e tabelas balísticas |
-| `vehicles/` | `tank.js` (corpo rígido Rapier + forças próprias de suspensão/tração por contato, câmbio, dano por componente, reparo), `plane.js` (modelo de voo 6DOF próprio, instrutor "mouse aim"), `paint.js` (camuflagem e insígnias procedurais) |
+| `vehicles/` | `tank.js` (corpo rígido Rapier + forças próprias de suspensão/tração por contato, câmbio, dano por componente, reparo), `plane.js` (modelo de voo 6DOF próprio, instrutor "mouse aim"), `planeModel.js` (modelo 3D procedural: asas/empenagem com perfil NACA, fuselagem torneada), `paint.js` (camuflagem e insígnias procedurais) |
 | `combat/ballistics.js` | projéteis com arrasto, blindagem inclinada/normalização/ricochete, pós-penetração, explosivos (HE/bombas), destroços como corpos Rapier |
 | `ai/brains.js` | IA de tanque, antiaéreo e avião (usa a mesma física do jogador) |
 | `ui/` | HUD (silhueta de estado, retículos, assistências), raio-X, minimapa, menus (hangar, spawn com SP, pausa, configurações, fim) |
+| `air/` | Batalha Aérea (modo separado, `S.mode === 'air'`, estado de menu `airmenu`): `battle.js` (BattleManager), `missions.js` (objetivos plugáveis), `ai.js` (FighterBrain), `targeting.js` (lock/PN/avanço, puro e testado), `missiles.js`, `input.js` (comando normalizado teclado/mouse/gamepad), `camera.js`, `hud.js` (canvas), `hangar.js` (cena própria via `setScene`), `environment.js` (horário/clima/nuvens/chuva), `screens.js`, `sound.js` |
 | `game/` | `loop.js` (física em passo fixo 1/120 s), `match.js` (tickets, captura, SP, respawn), `controls.js`, `camera.js` |
 
 ## Física — decisões importantes

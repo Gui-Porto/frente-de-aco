@@ -104,6 +104,35 @@ export const PLANES = {
     guns: [{ w: 'MG131', n: 2, span: [0.25], z: 2.0, ammo: 475 }, { w: 'MG151', n: 2, span: [0.9], z: 0.9, ammo: 250 }],
     bombs: [{ name: 'SC 500', m: 500, tnt: 220, d: 0.47, n: 1, x: [0] }, { name: 'SC 50', m: 50, tnt: 25, d: 0.2, n: 2, x: [1.6, -1.6] }],
     rockets: null
+  },
+  // ---- Batalha aérea: caças sem carga externa e os primeiros jatos ----
+  spit9: {
+    key: 'spit9', type: 'plane', name: 'Spitfire LF Mk IX', short: 'Spitfire IX', nation: 'Reino Unido', year: 1943, color: 0x59604a, sp: 300,
+    mass: 3400, S: 22.48, span: 11.23, L: 9.5, cla: 4.9, clmax: 1.5, cd0: 0.0195, e: 0.85, hp: 1580, wep: 1720, eta: 0.82,
+    vne: 760 / 3.6, glim: 12, kda: 0.055, kde: 0.36, kdr: 0.05, armor: { pilot: 7 },
+    hpParts: { wingL: 28, wingR: 28, tail: 22, engine: 20, fuel: 16, fuse: 32 },
+    fuseR: 0.6, noseR: 0.5, wingZ: 0.55, chord: 2.5, tipChord: 0.9, cowl: 'inline',
+    guns: [{ w: 'Hispano', n: 2, span: [1.9], z: 0.8, ammo: 120 }, { w: 'M2', n: 2, span: [2.6], z: 0.8, ammo: 250 }],
+    bombs: [], rockets: null
+  },
+  f86: {
+    key: 'f86', type: 'plane', name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
+    mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.0145, e: 0.78, thrust: 26.3, eta: 1, mcrit: 0.9, vctrl: 290,
+    vne: 1150 / 3.6, glim: 12, kda: 0.05, kde: 0.3, kdr: 0.04, armor: { pilot: 8 },
+    hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
+    fuseR: 0.72, noseR: 0.62, wingZ: 0.0, chord: 3.3, tipChord: 1.6, cowl: 'intake',
+    guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300 }],
+    missiles: { w: 'AIM9B', n: 2 },
+    bombs: [], rockets: null
+  },
+  mig15: {
+    key: 'mig15', type: 'plane', name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
+    mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.016, e: 0.78, thrust: 26.5, eta: 1, mcrit: 0.86, vctrl: 270,
+    vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
+    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 },
+    fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
+    guns: [{ w: 'N37', n: 1, span: [0.45], z: 2.8, ammo: 40 }, { w: 'NR23', n: 2, span: [0.5], z: 2.6, ammo: 80 }],
+    bombs: [], rockets: null
   }
 };
 
@@ -113,7 +142,17 @@ export const GUNS = {
   ShKAS: { name: '7,62 mm ShKAS', cal: 7.62, rpm: 1800, v: 825, m: 0.0096, pen: 10, he: 0, dmg: 0.45, tracer: 4 },
   VYa: { name: '23 mm VYa-23', cal: 23, rpm: 600, v: 905, m: 0.2, pen: 35, he: 0.01, dmg: 3.2, tracer: 3 },
   MG131: { name: '13 mm MG 131', cal: 13, rpm: 900, v: 750, m: 0.034, pen: 18, he: 0.001, dmg: 1.1, tracer: 4 },
-  MG151: { name: '20 mm MG 151/20', cal: 20, rpm: 740, v: 705, m: 0.092, pen: 8, he: 0.0185, dmg: 3.5, tracer: 3 }
+  MG151: { name: '20 mm MG 151/20', cal: 20, rpm: 740, v: 705, m: 0.092, pen: 8, he: 0.0185, dmg: 3.5, tracer: 3 },
+  Hispano: { name: '20 mm Hispano Mk II', cal: 20, rpm: 600, v: 880, m: 0.13, pen: 20, he: 0.011, dmg: 3.4, tracer: 3 },
+  M3: { name: '12,7 mm M3', cal: 12.7, rpm: 1200, v: 890, m: 0.046, pen: 24, he: 0, dmg: 1.2, tracer: 4 },
+  N37: { name: '37 mm N-37D', cal: 37, rpm: 400, v: 690, m: 0.735, pen: 40, he: 0.04, dmg: 12, tracer: 2 },
+  NR23: { name: '23 mm NR-23', cal: 23, rpm: 850, v: 680, m: 0.2, pen: 25, he: 0.015, dmg: 3.6, tracer: 3 }
+};
+
+// Mísseis ar-ar (guiamento por navegação proporcional; buscador infravermelho de aspecto traseiro)
+export const MISSILES = {
+  AIM9B: { name: 'AIM-9B Sidewinder', short: 'AIM-9B', mass: 70, d: 0.127, len: 2.83, thrust: 17800, burn: 2.2, cd: 0.45,
+    life: 22, range: 4600, minRange: 250, gimbal: 30, fov: 4, acq: 14, lockT: 0.9, maxG: 13, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 95 }
 };
 
 export const VEHICLES = Object.assign({}, TANKS, PLANES);

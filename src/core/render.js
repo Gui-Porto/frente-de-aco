@@ -48,20 +48,27 @@ export const flash = new THREE.PointLight(0xffb060, 0, 70, 2);
 scene.add(flash);
 
 // Iluminação baseada em imagem gerada a partir do próprio céu (reflexos no metal e pintura)
-const pmrem = new THREE.PMREMGenerator(renderer);
-{
-  const envScene = new THREE.Scene();
-  const s2 = new Sky(); s2.scale.setScalar(1000);
-  for (const k in sky.material.uniforms) s2.material.uniforms[k].value = sky.material.uniforms[k].value;
-  s2.material.uniforms.showSunDisc.value = 0;
-  envScene.add(s2);
-  scene.environment = pmrem.fromScene(envScene, 0, 0.1, 2000).texture;
-  scene.environmentIntensity = 0.12;
+export const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene(), envSky = new Sky(); envSky.scale.setScalar(1000); envScene.add(envSky);
+let envRT = null;
+// refeito quando o horário/clima muda (Batalha Aérea)
+export function refreshEnvMap() {
+  for (const k in sky.material.uniforms) envSky.material.uniforms[k].value = sky.material.uniforms[k].value;
+  envSky.material.uniforms.showSunDisc.value = 0;
+  if (envRT) envRT.dispose();
+  envRT = pmrem.fromScene(envScene, 0, 0.1, 2000);
+  scene.environment = envRT.texture;
 }
+refreshEnvMap();
+scene.environmentIntensity = 0.12;
+export const env = { fogMul: 1 };
 
 // ---------- Pós-processamento ----------
 export const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
+let activeScene = scene;
+// troca a cena desenhada (o hangar da Batalha Aérea tem cena própria)
+export function setScene(s) { activeScene = s; renderPass.scene = s; if (gtao) gtao.scene = s; }
 let gtao = null, bloom = null, aa = null;
 const output = new OutputPass();
 let shadowSize = 0;
@@ -81,7 +88,7 @@ export function applyQuality() {
   composer.addPass(renderPass);
   const w = innerWidth * renderer.getPixelRatio(), h = innerHeight * renderer.getPixelRatio();
   if (Q.ao) {
-    if (!gtao) { gtao = new GTAOPass(scene, camera, w, h); gtao.blendIntensity = 0.85; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 }); }
+    if (!gtao) { gtao = new GTAOPass(activeScene, camera, w, h); gtao.blendIntensity = 0.85; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 }); }
     composer.addPass(gtao);
   }
   if (Q.bloom) { if (!bloom) bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.22, 0.35, 4.0); composer.addPass(bloom); }
@@ -105,7 +112,7 @@ export function frameLighting(focus, camY, groundY, S, dt) {
   sun.position.copy(focus).addScaledVector(SUN_DIR, 400);
   sun.target.position.copy(focus);
   const agl = camY - groundY;
-  scene.fog.density = lerp(0.00075, 0.00018, clamp(agl / 700, 0, 1)) / Q.far;
+  scene.fog.density = lerp(0.00075, 0.00018, clamp(agl / 700, 0, 1)) / Q.far * env.fogMul;
   sky.position.copy(camera.position);
   sky.material.uniforms.time.value += dt;
   if (S.flashT > 0) { S.flashT -= dt; if (S.flashT <= 0) flash.intensity = 0; }

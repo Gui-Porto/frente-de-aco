@@ -1,0 +1,176 @@
+import { S, planes } from '../core/state.js';
+import { V3, UP, clamp, rand } from '../core/util.js';
+import { H } from '../world/terrain.js';
+import { G, MISSILES } from '../data/vehicles.js';
+import { AIR } from './aircraft.js';
+import { Seeker, leadPoint, energyHeight, fwdOf } from './targeting.js';
+import { launchMissile, incomingTo, dropCM } from './missiles.js';
+// =====================================================================
+// IA de caça. Usa o MESMO instrutor de voo do jogador (steerTo), então
+// obedece à física: perde energia em curva, estola, quebra a asa com G.
+// Estados: patrulha → perseguição → ataque; defesa (break), evasão de míssil,
+// extensão (recupera energia), fuga (danificado). Percebe e perde alvos.
+// =====================================================================
+export const DIFF = {
+  facil: { label: 'Fácil', react: 0.75, aimErr: 0.018, glim: 6, detect: 2200, defend: 0.35, fireRange: 450, jink: false, energy: false, missileP: 0.3 },
+  normal: { label: 'Normal', react: 0.4, aimErr: 0.008, glim: 8, detect: 3000, defend: 0.75, fireRange: 600, jink: true, energy: false, missileP: 0.6 },
+  dificil: { label: 'Difícil', react: 0.2, aimErr: 0.003, glim: 9.5, detect: 4000, defend: 1, fireRange: 700, jink: true, energy: true, missileP: 1 },
+};
+const _d = new V3(), _f = new V3(), _r = new V3(), _u = new V3(), _l = new V3(), _a = new V3(), _b = new V3();
+
+export class FighterBrain {
+  constructor(p, diffKey = 'normal', opts = {}) {
+    this.p = p; this.d = DIFF[diffKey] || DIFF.normal; this.style = (AIR[p.def.key] || {}).ai || 'turn';
+    this.role = opts.role || (this.style === 'bomber' ? 'bomber' : 'fighter'); this.goal = opts.goal || null; this.escort = opts.escort || null;
+    this.think = Math.random() * this.d.react; this.target = null; this.lostT = 0; this.state = 'patrol'; this.stateT = 0;
+    this.err = new V3(); this.jinkT = 0; this.jinkS = Math.random() < .5 ? 1 : -1; this.mslT = rand(3, 6);
+    this.home = new V3(p.pos.x * 0.5, p.pos.y, p.pos.z * 0.5); this.patrolA = Math.random() * 6.28;
+    this.seeker = p.def.missiles ? new Seeker(MISSILES[p.def.missiles.w]) : null;
+    this.threat = null; this.missile = null;
+  }
+  // percepção e decisão (em frequência menor que a física)
+  decide() {
+    const p = this.p, d = this.d;
+    p.axes(); fwdOf(p.q, _f);
+    // ameaça: inimigo atrás e apontando para mim
+    this.threat = null; let td = 1e9;
+    for (const e of planes) {
+      if (!e.alive || e.team === p.team) continue;
+      _r.copy(p.pos).sub(e.pos); const dist = _r.length(); if (dist > 1100) continue;
+      _r.divideScalar(dist);
+      const behind = _r.dot(_f) > 0.35, aiming = fwdOf(e.q, _a).dot(_r) > 0.94;
+      if (behind && aiming && dist < td && Math.random() < d.defend) { td = dist; this.threat = e; }
+    }
+    this.missile = incomingTo(p);
+    // contramedidas: flares contra míssil chegando, chaff quando alguém está colado na cauda
+    if (this.missile && this.missile.pos.distanceTo(p.pos) < 2200 && Math.random() < d.missileP) dropCM(p);
+    else if (this.threat && p.chaff > 0 && Math.random() < 0.12 * d.missileP) dropCM(p);
+    if (this.role === 'bomber') return;
+    // chaff do alvo confunde a pontaria (perde o alvo por um instante)
+    if (this.target && this.target.chaffUntil > S.now && Math.random() < 0.35) { this.target = null; this.lostT = 0; }
+    // alvo: mantém o atual com histerese; senão o mais "barato" (perto e à frente)
+    const t = this.target;
+    if (t && (!t.alive || t.pos.distanceTo(p.pos) > d.detect * 1.4)) { this.lostT += d.react; if (!t.alive || this.lostT > 3) { this.target = null; this.lostT = 0; } }
+    else this.lostT = 0;
+    if (!this.target) {
+      let best = null, bs = 1e9;
+      for (const e of planes) {
+        if (!e.alive || e.team === p.team) continue;
+        const dist = e.pos.distanceTo(p.pos); if (dist > d.detect) continue;
+        _r.copy(e.pos).sub(p.pos).divideScalar(dist);
+        const sc = dist + (1 - _r.dot(_f)) * 700 - (e.isPlayer ? 150 : 0);
+        if (sc < bs) { bs = sc; best = e; }
+      }
+      if (best) { this.target = best; this.err.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)); }
+    }
+    // escolta: só se afasta dos bombardeiros quando o inimigo chega perto
+    if (this.escort && this.target && this.escort.alive && this.target.pos.distanceTo(this.escort.pos) > 1800) this.target = null;
+    this.err.multiplyScalar(0.85).add(_a.set(rand(-.3, .3), rand(-.3, .3), rand(-.3, .3)));
+    const hpF = Object.keys(p.hp).reduce((s, k) => s + Math.max(0, p.hp[k]) / p.maxHp[k], 0) / Object.keys(p.hp).length;
+    const ammo = p.guns.some(g => g.ammo > 0) || p.missiles > 0;
+    // decisão de estado (prioridades)
+    let st = 'patrol';
+    if (this.missile && this.missile.pos.distanceTo(p.pos) < 2600) st = 'evade';
+    else if (this.threat) st = 'defend';
+    else if ((hpF < 0.35 || !ammo) && this.target) st = 'flee';
+    else if (this.target) {
+      const eMine = energyHeight(p.pos.y, p.vel.length()), eTgt = energyHeight(this.target.pos.y, this.target.vel.length());
+      if (d.energy && this.state !== 'attack' && eMine < eTgt - 450 && this.target.pos.distanceTo(p.pos) > 900) st = 'extend';
+      else if (this.state === 'zoom' && this.stateT < 5) st = 'zoom';
+      else st = this.target.pos.distanceTo(p.pos) < 1300 ? 'attack' : 'pursue';
+    }
+    if (st !== this.state) { this.state = st; this.stateT = 0; }
+  }
+  update(dt) {
+    const p = this.p; if (!p.alive) { p.firing = false; return; }
+    this.stateT += dt;
+    if ((this.think -= dt) <= 0) { this.think = this.d.react * rand(0.8, 1.2); this.decide(); }
+    p.axes(); fwdOf(p.q, _f);
+    const d = this.d, dir = _d.set(0, 0, 0); let glim = d.glim, fire = false;
+    // WEP só em combate e com o motor frio (acima de ~118 °C ele se degrada)
+    p.throttle = 1; p.airbrake = false; p.wep = this.state !== 'patrol' && this.state !== 'pursue' && p.temp < 105;
+    const fwdFlat = _l.set(_f.x, 0, _f.z).normalize();
+    const tg = this.target;
+    switch (this.role === 'bomber' ? 'bomber' : this.state) {
+      case 'bomber': { // segue para o objetivo em linha; se atacado, serpenteia
+        const g = this.goal || this.home;
+        dir.set(g.x - p.pos.x, (g.y - p.pos.y) * 0.4, g.z - p.pos.z).normalize();
+        if (this.threat) { dir.addScaledVector(_a.crossVectors(fwdFlat, UP), Math.sin(S.now * 1.3) * 0.5).normalize(); glim = 4; }
+        p.wep = false; glim = Math.min(glim, 4); break;
+      }
+      case 'evade': { // míssil: curva máxima perpendicular à linha de visada (estoura o gimbal/limite de G)
+        const m = this.missile; _r.copy(m.pos).sub(p.pos).normalize();
+        _a.crossVectors(_r, UP).normalize(); if (_a.dot(_f) < 0) _a.negate();
+        dir.copy(_a).addScaledVector(UP, -0.25).normalize(); glim = p.def.glim - 1; break;
+      }
+      case 'defend': { // break turn para o lado do atacante; jink inverte o sentido (tesoura)
+        const e = this.threat; _r.copy(e.pos).sub(p.pos);
+        const side = Math.sign(_r.dot(_u.crossVectors(UP, _f))) || 1;
+        if (d.jink && (this.jinkT -= dt) <= 0) { this.jinkT = rand(1.6, 3); if (Math.random() < .45) this.jinkS *= -1; }
+        _a.crossVectors(UP, _f).normalize().multiplyScalar(side * (d.jink ? this.jinkS : 1));
+        dir.copy(_a).addScaledVector(_f, 0.15).addScaledVector(UP, d.jink ? Math.sin(S.now * 0.9) * 0.4 : 0.1).normalize();
+        glim = p.def.glim - 1.5; break;
+      }
+      case 'flee': { // estende para longe, mergulhando para ganhar velocidade, rumo à base
+        _r.copy(p.pos).sub(tg.pos).setY(0).normalize();
+        dir.copy(_r).add(_a.copy(this.home).sub(p.pos).setY(0).normalize()).normalize().setY(-0.15).normalize(); glim = 4; break;
+      }
+      case 'extend': { // energia baixa: descarrega G, ganha velocidade e altitude longe do alvo
+        _r.copy(p.pos).sub(tg.pos).setY(0).normalize();
+        dir.copy(_r).setY(p.ias < 170 ? -0.1 : 0.25).normalize(); glim = 3; break;
+      }
+      case 'zoom': { dir.copy(fwdFlat).addScaledVector(UP, 0.9).normalize(); glim = 6; if (p.ias < 110) this.state = 'pursue'; break; }
+      case 'pursue': case 'attack': {
+        const dist = tg.pos.distanceTo(p.pos), W = p.guns[0].W;
+        if (this.state === 'pursue') {
+          // aproximação: lag pursuit com vantagem de altura (estilo energia ganha altura antes)
+          dir.copy(tg.pos).addScaledVector(tg.vel, -1.2).sub(p.pos).normalize();
+          if (this.style === 'boom' && p.pos.y < tg.pos.y + 350 && p.ias > 120) dir.y += 0.25;
+          dir.normalize(); glim = Math.min(glim, 6.5);
+        } else {
+          leadPoint(p.pos, p.vel, tg.pos, tg.vel, W.v, _a);
+          _a.addScaledVector(this.err, dist * d.aimErr);
+          dir.copy(_a).sub(p.pos).normalize();
+          const al = dir.dot(_f);
+          fire = dist < d.fireRange && al > Math.cos(Math.max(0.012, 9 / dist));
+          // evita ultrapassar: reduz potência e usa freio aéreo se fechando rápido por trás
+          const closing = -_r.copy(tg.vel).sub(p.vel).dot(_b.copy(tg.pos).sub(p.pos).normalize());
+          if (dist < 320 && closing > 55 && d.energy) { p.throttle = 0.3; p.airbrake = closing > 90; p.wep = false; }
+          // passou do alvo: energia (boom) sobe; curva (turn) continua girando
+          _b.copy(tg.pos).sub(p.pos).normalize();
+          if (this.style === 'boom' && dist < 250 && _b.dot(_f) < 0) { this.state = 'zoom'; this.stateT = 0; }
+        }
+        // mísseis: travou, distância boa → dispara (com probabilidade pela dificuldade)
+        if (this.seeker && p.missiles > 0) {
+          this.seeker.update(dt, p, [tg], tg, S.now);
+          if ((this.mslT -= dt) <= 0 && this.seeker.locked && dist > this.seeker.M.minRange && dist < this.seeker.M.range * 0.8) {
+            this.mslT = rand(5, 9); if (Math.random() < d.missileP) launchMissile(p, tg);
+          }
+        }
+        break;
+      }
+      default: { // patrulha em círculo largo na altitude de cruzeiro
+        this.patrolA += dt * 0.05;
+        const wx = this.home.x + Math.cos(this.patrolA) * 1400, wz = this.home.z + Math.sin(this.patrolA) * 1400;
+        dir.set(wx - p.pos.x, (Math.max(this.home.y, 1200) - p.pos.y) * 0.3, wz - p.pos.z).normalize(); glim = 4; p.wep = false;
+      }
+    }
+    // evita colisão com outros aviões
+    for (const o of planes) {
+      if (o === p || !o.alive) continue;
+      _r.copy(o.pos).sub(p.pos); const dist = _r.length(); if (dist > 140) continue;
+      const closing = -_a.copy(o.vel).sub(p.vel).dot(_r) / dist;
+      if (closing > 0 && dist / closing < 2.5) { dir.addScaledVector(_r.normalize(), -1.4).normalize(); fire = false; }
+    }
+    // solo: altitude mínima para recuperar de mergulho, R = v²/(g(n−1))
+    const agl = p.pos.y - H(p.pos.x, p.pos.z), V = p.vel.length(), sinD = clamp(-p.vel.y / Math.max(V, 1), 0, 1);
+    const pullAlt = V * V / (G * 4) * (1 - Math.sqrt(1 - sinD * sinD)) + 160;
+    if (agl < pullAlt) { dir.copy(fwdFlat).addScaledVector(UP, 1.0).normalize(); glim = Math.max(glim, 7); fire = false; }
+    else if (dir.y < 0 && agl < 450) dir.y *= 0.2;
+    // limite do mapa
+    const lim = (S.airLimit || 4000) - 500;
+    if (Math.max(Math.abs(p.pos.x), Math.abs(p.pos.z)) > lim) dir.set(-p.pos.x, 0, -p.pos.z).normalize().addScaledVector(UP, .15).normalize();
+    p.firing = fire;
+    p.steerTo(dir, dt, { glim: Math.min(glim, p.def.glim - 1) });
+  }
+}

@@ -75,7 +75,7 @@ export function initMenus() {
   $('#resumeBtn').onclick = () => setPause(false);
   $('#pSetBtn').onclick = () => openSettings();
   $('#bailBtn').onclick = () => { setPause(false); if (S.player && S.player.alive) destroyVehicle(S.player, null, 'bail'); };
-  $('#quitBtn').onclick = () => { setPause(false); exitPointer(); toMenu(); };
+  $('#quitBtn').onclick = () => { setPause(false); exitPointer(); if (S.mode === 'air') import('../air/screens.js').then(m => m.exitToHangar()); else toMenu(); };
   $('#againBtn').onclick = () => toMenu();
   $('#spawnBtn').onclick = onSpawnBtn;
   buildSettings();
@@ -87,7 +87,7 @@ function begin() {
   startMatch();
 }
 export function toMenu() {
-  ['#end', '#hud', '#pause', '#spawn'].forEach(s => ($(s).hidden = true)); $('#menu').hidden = false;
+  ['#end', '#hud', '#pause', '#spawn', '#air'].forEach(s => ($(s).hidden = true)); $('#menu').hidden = false; S.mode = 'ground';
   if (eng.tank) eng.tank.g.gain.value = 0; if (eng.air) eng.air.g.gain.value = 0;
   clearWorld(); S.state = 'menu'; S.player = null; syncLineup();
 }
@@ -129,7 +129,7 @@ function onSpawnBtn() {
     : `${k('t_fwd')}${k('t_left')}${k('t_back')}${k('t_right')} dirigir · ${k('t_fire')} canhão · ${k('t_sight')} mira · ${k('t_zoom')} zoom · ${k('t_mg')} metralhadora · ${k('t_repair')} reparar · ${k('t_cruise_up')}/${k('t_cruise_dn')} cruzeiro`);
   lockPointer();
 }
-addEventListener('keydown', e => { if (S.state === 'spectate' && e.code === 'Enter') openSpawn(''); });
+addEventListener('keydown', e => { if (S.state === 'spectate' && S.mode !== 'air' && e.code === 'Enter') openSpawn(''); });
 
 // ---------- Pausa e fim ----------
 export function setPause(p) {

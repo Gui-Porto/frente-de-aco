@@ -72,6 +72,7 @@ export function spawnPlayer(key) {
   return S.player;
 }
 export function onVehicleDestroyed(v, k, cause) {
+  if (S.mode === 'air') return S.air && S.air.onDestroyed(v, k, cause);
   const air = v.type === 'plane';
   S.tickets[v.team] = Math.max(0, S.tickets[v.team] - (air ? 20 : 30));
   if (v.who) v.who.deaths++;

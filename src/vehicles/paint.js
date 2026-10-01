@@ -65,12 +65,15 @@ const AIR = {
   Alemanha: DEC.cross,
 };
 // Insígnias nas asas e na fuselagem
-export function planeDecals(D, root, wingL, wingR) {
+// o (opcional): posição da insígnia no extradorso { x, y, z, size }, calculada pelo modelo da asa
+export function planeDecals(D, root, wingL, wingR, o) {
   const tex = AIR[D.nation];
   const mk = (parent, size, x, y, z, rx, ry) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshStandardMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, roughness: .8 }));
     m.position.set(x, y, z); m.rotation.set(rx, ry, 0); parent.add(m);
   };
-  for (const [wg, s] of [[wingL, 1], [wingR, -1]]) mk(wg, D.chord * 0.75, s * D.span * 0.36, 0.27 + D.span * 0.36 * 0.06, D.wingZ - D.chord * 0.15, -Math.PI / 2, 0);
-  for (const s of [1, -1]) mk(root, D.fuseR * 1.4, s * (D.fuseR * 0.98), 0.05, -D.L * 0.28, 0, s * Math.PI / 2);
+  const w = o || { x: D.span * 0.36, y: 0.27 + D.span * 0.36 * 0.06, z: D.wingZ - D.chord * 0.15, size: D.chord * 0.75 };
+  for (const [wg, s] of [[wingL, 1], [wingR, -1]]) mk(wg, w.size, s * w.x, w.y, w.z, -Math.PI / 2, 0);
+  const fx = D.fuseR * (D.jet ? 0.95 : 0.82); // raio da fuselagem torneada nesta estação
+  for (const s of [1, -1]) mk(root, D.fuseR * 1.2, s * fx, 0.05, -D.L * 0.14, 0, s * Math.PI / 2);
 }

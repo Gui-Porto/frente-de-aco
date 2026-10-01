@@ -9,6 +9,7 @@ import { PLANES, prepAmmo, penAt, hePen, DEG, G } from '../data/vehicles.js';
 import { spawnP, TEX, fxDust, fxSparks, fxExplosion, fxBigBlast, fxTrail } from '../fx/particles.js';
 import { sndBoom, sndPing, sndClank } from '../fx/audio.js';
 import { MODS } from '../vehicles/tank.js';
+import { hitPlaneModules, blastPlaneModules } from '../vehicles/planeDamage.js';
 import { showDmg, shakeCam, shakeAt, flashVign, hitMarker } from '../ui/hud.js';
 import { xrayShot, xrayReport } from '../ui/xray.js';
 import { onVehicleDestroyed } from '../game/match.js';
@@ -388,9 +389,10 @@ export function blast(pos, tnt, owner, opts = {}) {
     if (d > Ra) continue;
     const f = 1 - d / Ra;
     pl.damage(nearestPlanePart(pl, pos), 40 * Math.sqrt(tnt) * f + 1, owner, true);
+    if (pl.mods && !pl.gone) { const l = pos.clone().applyMatrix4(pl.inv); blastPlaneModules(pl, l.x, l.y, l.z, Ra * 0.8, 20 * Math.sqrt(tnt) * f, owner); }
   }
 }
-function nearestPlanePart(pl, pos) {
+export function nearestPlanePart(pl, pos) {
   const l = pos.clone().applyMatrix4(pl.inv);
   if (l.z < -pl.def.L * 0.32) return 'tail';
   if (Math.abs(l.x) > 1.4) return l.x > 0 ? 'wingL' : 'wingR';
@@ -400,22 +402,18 @@ function nearestPlanePart(pl, pos) {
 function impactPlane(pr, hit, sp, dir) {
   const pl = hit.plane, am = pr.am, sh = pr.owner;
   if (sh && sh.team === pl.team && sh !== pl) { /* fogo amigo também causa dano */ }
-  const lp = hit.lp, D = pl.def;
-  let part = hit.box === 'wingL' ? 'wingL' : hit.box === 'wingR' ? 'wingR' : hit.box === 'tail' || hit.box === 'fin' ? 'tail' : null;
-  if (!part) {
-    if (lp[2] > D.L * 0.22) part = 'engine';
-    else if (lp[2] > -0.05 * D.L && lp[1] > 0.15) part = 'pilot';
-    else if (lp[2] > -0.25 * D.L) part = 'fuel';
-    else part = 'fuse';
-  }
-  // blindagem localizada (Il-2 tinha casco blindado)
-  const armor = (D.armor && D.armor[part]) || 0;
+  const D = pl.def;
+  // a casca atingida (estrutura) e, por dentro, os componentes no caminho do projétil
+  const shell = hit.box === 'wingL' ? 'wingL' : hit.box === 'wingR' ? 'wingR' : hit.box === 'tail' || hit.box === 'fin' ? 'tail' : 'fuse';
   const pen = am.type === 'HE' ? hePen(am.tnt) : penAt(am, sp);
   let dmg = am.dmg || (pr.kind === 'shell' ? 60 : 1);
-  if (armor && pen < armor) { dmg *= 0.08; if (Math.random() < .3) fxSparks(hit.point, 2); }
+  // casco blindado (Il-2): balas que não perfuram quase não fazem estrago
+  const plate = shell === 'fuse' && D.armor ? Math.max(D.armor.engine || 0, D.armor.fuel || 0) : 0;
+  if (plate && pen < plate) { dmg *= 0.08; if (Math.random() < .3) fxSparks(hit.point, 2); }
   if (Math.random() < .5) fxSparks(hit.point, 2);
-  pl.damage(part, dmg, sh, false, pen >= armor);
+  hitPlaneModules(pl, hit.lp, hit.ld, am, dmg, pen, sh, shell);
   if (am.type === 'HEF' || am.type === 'HE') blast(hit.point, am.tnt || 0.01, sh, { skipPlane: pl });
+  if (sh && sh.type === 'plane' && sh.team !== pl.team) sh.hitsN++;
   if (sh && sh.isPlayer) hitMarker();
   return true;
 }

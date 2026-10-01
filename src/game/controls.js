@@ -3,6 +3,7 @@ import { S, tanks } from '../core/state.js';
 import { settings, codeDown, codeUp, isDown, pressed, mouse, clearInput } from '../core/settings.js';
 import { clamp } from '../core/util.js';
 import { cam } from './camera.js';
+import { airMouse } from '../air/camera.js';
 import { los } from '../combat/ballistics.js';
 import { setPause } from '../ui/menus.js';
 import { drawScore } from '../ui/hud.js';
@@ -16,7 +17,7 @@ const playing = () => S.state === 'play' || S.state === 'spectate';
 
 addEventListener('keydown', e => {
   if (input.capture) { e.preventDefault(); input.capture(e.code); return; }
-  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code) && S.state !== 'menu') e.preventDefault();
+  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code) && S.state !== 'menu' && S.state !== 'airmenu') e.preventDefault();
   if (e.repeat) return;
   codeDown(e.code);
   if (e.code === 'Escape' && playing() && !input.locked && !S.paused) setPause(true);
@@ -40,6 +41,8 @@ addEventListener('mousemove', e => {
   const inSight = cam.sniper || cam.binoc;
   const base = 0.0022 * (air ? settings.mouse.plane : inSight ? settings.mouse.sight * Math.max(cam.fov, 3) / 60 : settings.mouse.tank);
   const inv = settings.mouse.invertY ? -1 : 1;
+  // Batalha Aérea: mira livre em quaternion (permite loop, sem trava perto da vertical)
+  if (S.mode === 'air') { airMouse(e.movementX * base, e.movementY * base * inv); return; }
   cam.yaw -= e.movementX * base;
   cam.pitch = clamp(cam.pitch - e.movementY * base * inv, air ? -1.5 : -0.6, air ? 1.5 : 0.55);
 });

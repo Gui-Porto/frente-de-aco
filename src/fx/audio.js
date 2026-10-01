@@ -26,8 +26,20 @@ export function audioInit() {
     };
     eng.tank = mk('sawtooth', 32, 240);
     eng.air = mk('sawtooth', 70, 650);
+    // turbina: ruído filtrado (rugido) + apito agudo
+    const jn = AC.createBufferSource(); jn.buffer = noiseBuf; jn.loop = true;
+    const jf = AC.createBiquadFilter(); jf.type = 'bandpass'; jf.frequency.value = 500; jf.Q.value = 0.6;
+    const jw = AC.createOscillator(); jw.type = 'sine'; jw.frequency.value = 2600;
+    const jwg = AC.createGain(); jwg.gain.value = 0.04; const jg = AC.createGain(); jg.gain.value = 0;
+    jn.connect(jf); jf.connect(jg); jw.connect(jwg); jwg.connect(jg); jg.connect(engBus); jn.start(); jw.start();
+    eng.jet = { g: jg, f: jf, w: jw };
+    // tons do cockpit: buscador do míssil (rosnado/tom) e alarmes
+    const tone = (type) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; g.gain.value = 0; o.connect(g); g.connect(sfx); o.start(); return { o, g }; };
+    eng.seek = tone('triangle'); eng.warn = tone('square');
   } catch (e) { AC = null; }
 }
+export function sndCm(pos) { const a = at(pos, 0.7); if (!a) return; noiseBurst(a.t, Math.min(a.vol, .6), 3200, 0.35, 2); noiseBurst(a.t + 0.12, Math.min(a.vol, .5), 2600, 0.3, 2); }
+export function sndLaunch(pos) { const a = at(pos, 1.2); if (!a) return; noiseBurst(a.t, Math.min(a.vol, 1), 1600, 1.6, 0.5); }
 export function audioPause(p) { if (AC) p ? AC.suspend() : AC.resume(); }
 function at(pos, base) { if (!AC) return null; const d = camera.position.distanceTo(pos); return { t: AC.currentTime + d / 343, vol: base / (1 + d / 40), d }; }
 function noiseBurst(t, vol, freq, dur, q = 0.7) {
