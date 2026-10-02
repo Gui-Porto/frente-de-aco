@@ -3,7 +3,7 @@ vi.mock('../src/combat/ballistics.js', () => ({ segBox: () => null }));
 vi.mock('../src/fx/particles.js', () => ({ fxExplosion() {} }));
 vi.mock('../src/ui/hud.js', () => ({ showDmg() {} }));
 vi.mock('../src/core/state.js', () => ({ S: { now: 0 } }));
-const { planeModules, applyMod, powered, ctrlAuthority, fuelInit, fuelStep, fuelLeak, modsOf } = await import('../src/vehicles/planeDamage.js');
+const { planeModules, applyMod, powered, ctrlAuthority, fuelInit, fuelStep, fuelLeak, modsOf, sparFrac } = await import('../src/vehicles/planeDamage.js');
 const { PLANES } = await import('../src/data/vehicles.js');
 const { tipBreak, tipArea } = await import('../src/vehicles/planeGeom.js');
 
@@ -78,5 +78,40 @@ describe('ponta da asa destacável', () => {
   it('quebra na dobra do F-4 e no início do aileron dos outros; a ponta leva uma fração plausível da área', () => {
     expect(tipBreak(PLANES.f4e)).toBe(0.66);
     for (const k of Object.keys(PLANES)) { const a = tipArea(PLANES[k]); expect(a).toBeGreaterThan(0.08); expect(a).toBeLessThan(0.5); }
+  });
+});
+
+describe('estrutura e sistemas (física de dano)', () => {
+  const mk2 = key => { const pl = mk(key); pl.cut = []; pl.cutSpar = seg => pl.cut.push(seg); pl.loseTail = () => (pl.tailGone = true); return pl; };
+  it('cada asa tem longarina em raiz e segmento externo, ao longo da envergadura', () => {
+    for (const k of Object.keys(PLANES)) {
+      const S = modsOf(mk(k), 'spar');
+      expect(new Set(S.map(m => m.seg))).toEqual(new Set(['L0', 'L1', 'R0', 'R1']));
+      const L0 = S.filter(m => m.seg === 'L0'), L1 = S.filter(m => m.seg === 'L1');
+      expect(Math.max(...L0.map(m => m.c[0]))).toBeLessThan(Math.min(...L1.map(m => m.c[0])));
+    }
+  });
+  it('dano na longarina reduz a integridade; só cortar derruba a asa (raiz) ou a ponta (externa)', () => {
+    const pl = mk2('f86'), m = pl.mods.sparL01, HE = { tnt: 0.01 };
+    applyMod(pl, m, m.max * 0.5, null, null); // perfurante: metade do dano em estrutura grande
+    expect(sparFrac(pl, 'L0')).toBeCloseTo(0.75); expect(pl.cut).toEqual([]);
+    applyMod(pl, m, m.max * 0.5, null, HE); expect(sparFrac(pl, 'L0')).toBeCloseTo(0.25);
+    applyMod(pl, m, m.max, null, HE); expect(pl.cut).toEqual(['L0']);
+    applyMod(pl, pl.mods.sparR12, 999, null, null); expect(pl.cut).toEqual(['L0', 'R1']);
+  });
+  it('cone de cauda cortado solta a empenagem', () => {
+    const pl = mk2('mig15'); kill(pl, 'boom'); expect(pl.tailGone).toBe(true);
+  });
+  it('radiador do Spitfire vaza ÁGUA; tanque de óleo vaza ÓLEO; radial vaza óleo pelo radiador', () => {
+    const s = mk2('spit9'); s.cooling = 'liquid'; applyMod(s, s.mods.radL, 2, null, null); expect(s.water).toBeGreaterThan(0); expect(s.oil || 0).toBe(0);
+    applyMod(s, s.mods.oil, 2, null, null); expect(s.oil).toBeGreaterThan(0);
+    const j = mk2('f86'); expect(j.mods.oil).toBeTruthy();
+  });
+  it('profundor em duas metades: perder um lado reduz a autoridade e cria assimetria', () => {
+    const pl = mk2('fw190'), a0 = ctrlAuthority(pl);
+    expect(a0.elevBias).toBe(0);
+    kill(pl, 'elevL');
+    const a1 = ctrlAuthority(pl);
+    expect(a1.elev).toBeLessThan(a0.elev); expect(a1.elevBias).toBeLessThan(0);
   });
 });

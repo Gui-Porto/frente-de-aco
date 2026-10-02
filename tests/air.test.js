@@ -87,6 +87,11 @@ describe('temperatura do motor (água → óleo → desgaste)', () => {
   it('WEP nivelado rápido aguenta 2 min sem estragar o motor', () => {
     expect(run('liquid', 1, true, 120, 120).wear).toBeLessThan(0.05);
   });
+  it('sem água o motor a líquido ferve; sem óleo qualquer motor engripa em menos de um minuto', () => {
+    const e = { water: 85, oil: 70 }; for (let t = 0; t < 60; t += 0.1) stepHeat(e, 'liquid', 0.8, false, 120, { water: 1, oil: 0 }, 0.1);
+    expect(heatLevel(e, 'liquid')).toBeGreaterThan(0);
+    for (const kind of ['liquid', 'radial', 'jet']) { const f = { water: 85, oil: 70 }; let w = 0; for (let t = 0; t < 55; t += 0.1) w += stepHeat(f, kind, 0.8, false, 120, { water: 0, oil: 1 }, 0.1); expect(w).toBeGreaterThan(1); }
+  });
   it('WEP subindo devagar: água esquenta antes do óleo e o motor acaba danificado', () => {
     const a = run('liquid', 1, true, 65, 30);
     expect(heatLevel(a.e, 'liquid')).toBeGreaterThan(0);
