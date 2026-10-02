@@ -9,6 +9,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 //   prop         — hélice/fan que gira (o último filho some com o motor parado)
 //   hp_1..hp_N   — pontos duros, na ordem das estantes de def.missiles
 //   paint        — material(is) que escurecem quando o avião queima (opcional)
+//   ailL, ailR, flapL, flapR, elevL, elevR, rud — superfícies de comando (opcionais), giram no próprio
+//                  eixo X local (rud: Y); a origem do nó deve estar na dobradiça
 // O que faltar no arquivo vira um grupo vazio; sem arquivo (ou falha ao carregar)
 // o jogo segue com o modelo procedural (planeModel.js), que também serve de LOD.
 // Eixos esperados após rot/scale: +z nariz, +y cima, +x asa esquerda; origem no CG.
@@ -52,5 +54,9 @@ export function gltfPlane(D, missileMesh) {
     missileMeshes.push(m);
   }
   if (!mats.size) body.traverse(o => { if (o.isMesh && !mats.size) mats.add(o.material); });
-  return { root, wingL, wingR, tail, prop, bombMeshes: [], rocketMeshes: [], missileMeshes, mats: [...mats] };
+  const surf = {};
+  for (const [n, max] of [['ailL', 20], ['ailR', 20], ['flapL', 40], ['flapR', 40], ['elevL', 25], ['elevR', 25], ['rud', 25]]) {
+    const o = find(n); if (o) surf[n] = { pivot: o, axis: new THREE.Vector3(n === 'rud' ? 0 : 1, n === 'rud' ? 1 : 0, 0), max: max * Math.PI / 180, base: o.quaternion.clone() };
+  }
+  return { root, wingL, wingR, tail, prop, bombMeshes: [], rocketMeshes: [], missileMeshes, mats: [...mats], surf };
 }

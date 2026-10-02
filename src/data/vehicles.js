@@ -82,6 +82,10 @@ export const PLANES = {
     vne: 810 / 3.6, glim: 12, kda: 0.04, kde: 0.32, kdr: 0.05, armor: { pilot: 9, engine: 0 },
     hpParts: { wingL: 38, wingR: 38, tail: 28, engine: 26, fuel: 20, fuse: 45 },
     fuseR: 0.78, noseR: 0.72, wingZ: 0.6, chord: 2.6, tipChord: 1.3, cowl: 'radial',
+    // peças reais: dois tanques na fuselagem sob a cabine (sem tanque na asa no D-28), turbocompressor no ventre traseiro, radiadores de óleo na carenagem, flaps hidráulicos
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque principal', z: 0.04, y: -0.4, s: [0.55, 0.35, 0.6] }, { id: 'fuelA', k: 'fuel', n: 'Tanque auxiliar', z: -0.1, y: -0.45, s: [0.5, 0.3, 0.4] },
+      { id: 'turbo', k: 'turbo', n: 'Turbocompressor', z: -0.3, y: -0.6, s: [0.35, 0.3, 0.45] }, { id: 'oilc', k: 'cool', n: 'Radiadores de óleo', z: 0.26, y: -0.75, s: [0.55, 0.18, 0.35] },
+      { id: 'hyd', k: 'act', n: 'Hidráulico', does: ['flaps'], z: -0.12, y: -0.1, s: [0.3, 0.2, 0.3] }],
     guns: [{ w: 'M2', n: 8, span: [1.9, 2.6, 3.0, 3.4], z: 0.9, ammo: 425 }],
     bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.0, -2.0] }],
     rockets: { name: 'M8/HVAR', m: 61, tnt: 3.5, v: 330, n: 6 }
@@ -92,6 +96,10 @@ export const PLANES = {
     vne: 620 / 3.6, glim: 9, kda: 0.035, kde: 0.3, kdr: 0.05, armor: { pilot: 12, engine: 6, fuel: 6 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 30, fuel: 22, fuse: 55 },
     fuseR: 0.72, noseR: 0.55, wingZ: 0.35, chord: 2.9, tipChord: 1.3, cowl: 'inline',
+    // tudo dentro da banheira blindada: três tanques na fuselagem, radiador sob o motor; flaps pneumáticos
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque superior', z: 0.2, y: 0.3, s: [0.45, 0.25, 0.4] }, { id: 'fuelU', k: 'fuel', n: 'Tanque inferior', z: 0.05, y: -0.5, s: [0.5, 0.25, 0.5] },
+      { id: 'fuelA', k: 'fuel', n: 'Tanque traseiro', z: -0.08, y: 0, s: [0.45, 0.35, 0.35] }, { id: 'cool', k: 'cool', n: 'Radiador', z: 0.27, y: -0.7, s: [0.35, 0.2, 0.4] },
+      { id: 'pneu', k: 'act', n: 'Pneumático', does: ['flaps'], z: -0.18, y: 0, s: [0.25, 0.25, 0.3] }],
     guns: [{ w: 'VYa', n: 2, span: [2.4], z: 0.6, ammo: 150 }, { w: 'ShKAS', n: 2, span: [2.0], z: 0.6, ammo: 750 }],
     bombs: [{ name: 'FAB-100', m: 100, tnt: 40, d: 0.27, n: 4, x: [1.5, -1.5, 2.2, -2.2] }],
     rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 350, n: 8 }
@@ -102,6 +110,10 @@ export const PLANES = {
     vne: 850 / 3.6, glim: 12, kda: 0.06, kde: 0.32, kdr: 0.05, armor: { pilot: 8, engine: 6 },
     hpParts: { wingL: 30, wingR: 30, tail: 24, engine: 22, fuel: 18, fuse: 36 },
     fuseR: 0.66, noseR: 0.66, wingZ: 0.7, chord: 2.2, tipChord: 1.1, cowl: 'radial',
+    // tanques dianteiro e traseiro sob o piso da cabine, sem tanque na asa; radiador de óleo em anel blindado na frente do motor;
+    // flaps e disparo das armas elétricos
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque dianteiro', z: 0.04, y: -0.5, s: [0.45, 0.25, 0.45] }, { id: 'fuelA', k: 'fuel', n: 'Tanque traseiro', z: -0.1, y: -0.45, s: [0.45, 0.28, 0.5] },
+      { id: 'oilc', k: 'cool', n: 'Radiador de óleo (anel)', z: 0.42, s: [0.6, 0.6, 0.1], hp: 14 }, { id: 'elec', k: 'act', n: 'Sistema elétrico', does: ['flaps', 'guns'], z: -0.2, y: 0, s: [0.3, 0.25, 0.3] }],
     guns: [{ w: 'MG131', n: 2, span: [0.25], z: 2.0, ammo: 475 }, { w: 'MG151', n: 2, span: [0.9], z: 0.9, ammo: 250 }],
     bombs: [{ name: 'SC 500', m: 500, tnt: 220, d: 0.47, n: 1, x: [0] }, { name: 'SC 50', m: 50, tnt: 25, d: 0.2, n: 2, x: [1.6, -1.6] }],
     rockets: null
@@ -113,6 +125,10 @@ export const PLANES = {
     vne: 760 / 3.6, glim: 12, kda: 0.055, kde: 0.36, kdr: 0.05, armor: { pilot: 7 },
     hpParts: { wingL: 28, wingR: 28, tail: 22, engine: 20, fuel: 16, fuse: 32 },
     fuseR: 0.6, noseR: 0.5, wingZ: 0.55, chord: 2.5, tipChord: 0.9, cowl: 'inline',
+    // dois tanques entre o motor e a cabine (sem tanque na asa), um radiador sob cada asa; flaps e disparo das armas pneumáticos
+    flap: [0.04, 0.42],
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque superior', z: 0.13, y: 0.25, s: [0.4, 0.28, 0.42] }, { id: 'fuelU', k: 'fuel', n: 'Tanque inferior', z: 0.13, y: -0.4, s: [0.4, 0.22, 0.42] },
+      { id: 'rad', k: 'cool', n: 'Radiador', w: [0.2, 0.45], dy: -0.22, s: [0.22, 0.12, 0.5] }, { id: 'pneu', k: 'act', n: 'Pneumático', does: ['flaps', 'guns'], z: -0.15, y: -0.2, s: [0.25, 0.2, 0.3] }],
     guns: [{ w: 'Hispano', n: 2, span: [1.9], z: 0.8, ammo: 120 }, { w: 'M2', n: 2, span: [2.6], z: 0.8, ammo: 250 }],
     bombs: [], rockets: null
   },
@@ -124,6 +140,12 @@ export const PLANES = {
     fuseR: 0.72, noseR: 0.62, wingZ: 0.0, chord: 3.3, tipChord: 1.6, cowl: 'intake',
     fuse: [[-0.53, .4, .42, .4, .04], [-0.44, .5, .55, .5, .06], [-0.3, .7, .8, .72, .05], [-0.14, .9, 1.02, .92, .02], [0.02, 1, 1.1, 1, 0], [0.16, 1, 1.12, 1, 0], [0.28, .94, 1.02, .96, -.03], [0.38, 'n1.02', 'n.98', 'n1.04', -.05], [0.46, 'n.98', 'n.9', 'n1', -.06]],
     canopy: { z: 0.22, len: 2.7, w: 0.44, h: 0.62, frames: [0.24] },
+    // tanques na fuselagem (dianteiro e central) e integrais nas asas; comandos hidráulicos (normal + alternativo) com profundor todo móvel
+    stab: 'all', boost: { ch: ['elev', 'ail'], manual: 0.12 },
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque dianteiro', z: 0.1, s: [0.5, 0.45, 0.7] }, { id: 'fuelC', k: 'fuel', n: 'Tanque central', z: -0.03, y: 0.15, s: [0.5, 0.4, 0.55] },
+      { id: 'fuelW', k: 'fuel', n: 'Tanque da asa', w: [0.22, 0.35], s: [0.6, 0.1, 0.55] },
+      { id: 'hyd', k: 'act', n: 'Hidráulico utilitário', does: ['flaps', 'brake'], z: -0.02, y: -0.45, s: [0.3, 0.18, 0.4] },
+      { id: 'hydN', k: 'act', n: 'Comando hidráulico', does: ['ctl'], z: -0.3, y: 0.3, s: [0.2, 0.15, 0.4] }, { id: 'hydA', k: 'act', n: 'Comando alternativo', does: ['ctl'], z: -0.3, y: -0.3, s: [0.2, 0.15, 0.4] }],
     guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300 }],
     missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30',
     bombs: [], rockets: null
@@ -136,6 +158,10 @@ export const PLANES = {
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
     fuse: [[-0.53, .42, .46, .44, .08], [-0.45, .56, .62, .58, .08], [-0.32, .78, .86, .82, .05], [-0.16, .96, 1.04, 1, .02], [0, 1.04, 1.1, 1.06, 0], [0.14, 1.04, 1.1, 1.06, 0], [0.27, .98, 1.02, 1, -.01], [0.37, 'n1.06', 'n1.06', 'n1.06', -.02], [0.46, 'n1', 'n1', 'n1', -.02]],
     canopy: { z: 0.22, len: 2.3, w: 0.42, h: 0.55, frames: [0.24, 0.6] },
+    // tanque principal entre a cabine e o motor e tanque traseiro (sem tanque na asa); hidráulico único: flaps, freios e servo do aileron (bis)
+    boost: { ch: ['ail'], manual: 0.55 },
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque principal', z: 0.08, s: [0.55, 0.55, 0.75] }, { id: 'fuelA', k: 'fuel', n: 'Tanque traseiro', z: -0.36, y: 0.3, s: [0.3, 0.2, 0.3] },
+      { id: 'hyd', k: 'act', n: 'Hidráulico', does: ['flaps', 'brake', 'ctl'], z: -0.02, y: -0.45, s: [0.3, 0.18, 0.4] }],
     guns: [{ w: 'N37', n: 1, span: [0.45], z: 2.8, ammo: 40 }, { w: 'NR23', n: 2, span: [0.5], z: 2.6, ammo: 80 }],
     bombs: [], rockets: null
   },
@@ -152,6 +178,13 @@ export const PLANES = {
     radar: 'apq120', rwr: 'apr36',
     fuse: [[-0.53, .72, .42, .5, -.1], [-0.46, .78, .5, .56, -.08], [-0.36, .86, .62, .66, -.04], [-0.2, .95, .86, .82, 0], [0, 1, 1, .95, 0], [0.14, .92, 1.02, .9, 0], [0.26, .7, .92, .78, .02], [0.36, .52, .7, .62, 0], [0.45, 'n1', 'n1', 'n1', 0]],
     canopy: { z: 0.27, len: 5.0, w: 0.46, h: 0.62, frames: [0.2, 0.5, 0.76] }, smoke: 0.8,
+    // 7 células na fuselagem (em três blocos) + tanques integrais nas asas; dois J79; estabilizador todo móvel;
+    // PC-1 e PC-2 movem os comandos, o utilitário move flaps e freios
+    stab: 'all', boost: { ch: ['elev', 'ail', 'rud'], manual: 0.08 }, ail: [0.3, 0.6], flap: [0.04, 0.29],
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Células dianteiras', z: 0.12, y: 0.25, s: [0.6, 0.45, 1.2] }, { id: 'fuelC', k: 'fuel', n: 'Células centrais', z: -0.02, y: 0.4, s: [0.6, 0.4, 1.3] },
+      { id: 'fuelA', k: 'fuel', n: 'Células traseiras', z: -0.17, y: 0.45, s: [0.5, 0.3, 1.0] }, { id: 'fuelW', k: 'fuel', n: 'Tanque da asa', w: [0.25, 0.35], s: [1.0, 0.12, 0.9] },
+      { id: 'hydU', k: 'act', n: 'Hidráulico utilitário', does: ['flaps', 'brake'], z: 0.0, y: -0.7, s: [0.35, 0.2, 0.5] },
+      { id: 'pc1', k: 'act', n: 'Hidráulico PC-1', does: ['ctl'], x: 0.5, z: -0.3, y: 0.2, s: [0.2, 0.2, 0.5] }, { id: 'pc2', k: 'act', n: 'Hidráulico PC-2', does: ['ctl'], x: -0.5, z: -0.3, y: 0.2, s: [0.2, 0.2, 0.5] }],
     guns: [{ w: 'M61', n: 1, span: [0], z: 8.2, ammo: 640 }],
     missiles: [{ w: 'AIM7E', n: 4 }, { w: 'AIM9J', n: 4 }],
     bombs: [], rockets: null
@@ -166,6 +199,12 @@ export const PLANES = {
     radar: 'rp22', rwr: 'spo10',
     fuse: [[-0.53, .82, .84, .82, 0], [-0.44, .86, .9, .86, 0], [-0.3, .92, 1, .92, 0], [-0.1, .96, 1.18, .96, 0], [0.08, .98, 1.22, .98, 0], [0.2, .98, 1.18, .98, 0], [0.3, .94, 1, .94, 0], [0.39, 'n1.18', 'n1.18', 'n1.18', 0], [0.46, 'n1.1', 'n1.1', 'n1.1', 0]],
     canopy: { z: 0.26, len: 2.7, w: 0.38, h: 0.5, frames: [0.26, 0.62] },
+    // tanques na fuselagem e nas asas; estabilizador todo móvel; dois hidráulicos (principal e de reforço) movem os comandos
+    stab: 'all', boost: { ch: ['elev', 'ail'], manual: 0.1 }, flap: [0.04, 0.42], ail: [0.48, 0.9],
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque dianteiro', z: 0.12, y: 0.35, s: [0.4, 0.3, 1.0] }, { id: 'fuelC', k: 'fuel', n: 'Tanque central', z: -0.05, y: 0.35, s: [0.4, 0.3, 0.9] },
+      { id: 'fuelW', k: 'fuel', n: 'Tanque da asa', w: [0.25, 0.3], s: [0.6, 0.1, 1.0] },
+      { id: 'hydM', k: 'act', n: 'Hidráulico principal', does: ['flaps', 'brake', 'ctl'], z: 0.0, y: -0.55, s: [0.3, 0.18, 0.5] },
+      { id: 'hydB', k: 'act', n: 'Hidráulico de reforço', does: ['ctl'], z: -0.25, y: 0.4, s: [0.25, 0.18, 0.5] }],
     guns: [{ w: 'GSh23', n: 1, span: [0], z: 1.0, ammo: 200 }],
     missiles: [{ w: 'R3R', n: 2 }, { w: 'R3S', n: 2 }],
     bombs: [], rockets: null
