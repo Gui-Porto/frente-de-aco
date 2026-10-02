@@ -63,8 +63,9 @@ export function pilot(p, c, aimDir, dt) {
     const r = 1 - Math.exp(-dt * 6);
     p.elev += (c.pitch - p.elev) * r; p.ail += (c.roll - p.ail) * r; p.rud += (c.yaw - p.rud) * r;
   } else {
-    // instrutor: nariz (linha das armas) no círculo do mouse, resposta mais viva que a da IA
-    p.steerTo(aimDir, dt, { glim: Math.min(p.def.glim - 1.5, 10), groundAssist: true, nose: true, gain: 1.3, lead: 0.3 });
+    // instrutor: nariz (linha das armas) no círculo do mouse, resposta mais viva que a da IA.
+    // lead 0,1 s: com o integral e a inclinação de curva da mira, 0,3 deixava o nariz ~3° À FRENTE do círculo em curva
+    p.steerTo(aimDir, dt, { glim: Math.min(p.def.glim - 1.5, 10), groundAssist: true, nose: true, gain: 1.3, lead: 0.1 });
   }
 }
 export const manualAxes = c => !!(c.pitch || c.roll || c.yaw);
