@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { planeDecals, camoTexture } from './paint.js';
 import { MISSILES } from '../data/vehicles.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { hasModel, gltfPlane } from './modelLibrary.js';
 // =====================================================================
 // Modelo 3D procedural das aeronaves (só visual; física e caixas de
 // colisão vêm dos dados). Asas e empenagem são sólidos de perfil NACA
@@ -81,6 +83,7 @@ function fuselage(D) {
   // tampas: cauda sempre; nariz só nos motores a pistão (o jato tem a entrada de ar aberta)
   const cap = (j, flip) => { const ci = pos.length / 3, r = rings[j]; pos.push(0, r[4] * fr, r[0] * L); uv.push(0.5, j ? 1 : 0); for (let k = 0; k < NR; k++) { const a = j * row + k; (k < NR / 2 ? top : bot).push(...(flip ? [ci, a + 1, a] : [ci, a, a + 1])); } };
   if (!D.jet) { cap(0, false); cap(rings.length - 1, true); }
+  else if (D.intakes === 'side') cap(rings.length - 1, true); // nariz fechado (radome); entradas de ar nas laterais
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex([...top, ...bot]); g.addGroup(0, top.length, 0); g.addGroup(top.length, bot.length, 1);
@@ -116,11 +119,19 @@ function metalTexture() {
 }
 
 export function buildPlane(D) {
+  // modelo glTF carregado para esta aeronave? (modelLibrary.js) — senão, procedural
+  if (hasModel(D)) {
+    const w = new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .7 }), gl = new THREE.MeshStandardMaterial({ color: 0x3a4c58, roughness: .05, metalness: .9, transparent: true, opacity: .62 });
+    const r = gltfPlane(D, id => { const M = MISSILES[id]; return new THREE.Mesh(missileGeometry(M), [w, M.seeker === 'sarh' ? w : gl]); });
+    if (r) return r;
+  }
   const root = new THREE.Group(), L = D.L, fr = D.fuseR, jet = !!D.jet;
-  const paint = jet
+  // jato sem pintura (metal) a menos que a ficha peça camuflagem (def.finish = 'camo')
+  const metal = jet && D.finish !== 'camo';
+  const paint = metal
     ? new THREE.MeshStandardMaterial({ color: 0xffffff, map: metalTexture(), roughness: 0.32, metalness: 0.78 })
     : new THREE.MeshStandardMaterial({ color: 0xffffff, map: camoTexture(D), roughness: 0.58, metalness: 0.18 });
-  const under = jet ? paint : new THREE.MeshStandardMaterial({ color: D.key === 'il2' ? 0x6f8aa0 : D.key === 'fw190' ? 0x9aa3a6 : D.key === 'spit9' ? 0x9ea19a : 0x8d8c80, roughness: .6, metalness: .2 });
+  const under = metal ? paint : D.underColor ? new THREE.MeshStandardMaterial({ color: D.underColor, roughness: .6, metalness: .2 }) : new THREE.MeshStandardMaterial({ color: D.key === 'il2' ? 0x6f8aa0 : D.key === 'fw190' ? 0x9aa3a6 : D.key === 'spit9' ? 0x9ea19a : 0x8d8c80, roughness: .6, metalness: .2 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1b1b1a, roughness: .45, metalness: .5 });
   const glass = new THREE.MeshStandardMaterial({ color: 0x3a4c58, roughness: .05, metalness: .9, transparent: true, opacity: .62 });
   const white = new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .7 });
@@ -130,10 +141,28 @@ export function buildPlane(D) {
   const add = (g, m, p = root, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; p.add(o); return o; };
   // fuselagem, coberta inferior e nariz
   const fuseG = fuselage(D); add(fuseG, pair);
+  const sideIn = jet && D.intakes === 'side';
   if (jet) {
-    add(new THREE.TorusGeometry(D.noseR * 0.9, 0.07, 8, 28), paint, root, 0, 0, L * 0.46);           // lábio da entrada de ar
-    add(new THREE.CylinderGeometry(fr * 0.5, fr * 0.46, 0.5, 18, 1, true).rotateX(Math.PI / 2), dark, root, 0, 0, -L * 0.53); // tubeira
-    add(new THREE.CircleGeometry(fr * 0.46, 18).rotateY(Math.PI), black, root, 0, 0, -L * 0.52);
+    if (!sideIn) add(new THREE.TorusGeometry(D.noseR * 0.9, 0.07, 8, 28), paint, root, 0, 0, L * 0.46); // lábio da entrada de ar
+    else {
+      // radome cinza-escuro e entradas laterais com placa separadora da camada-limite
+      const at = fuseG.userData.at, nz = L * 0.455, an = at(0.44);
+      add(new THREE.ConeGeometry(an.hw * 0.92, L * 0.09, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x3b3f3c, roughness: .55 }), root, 0, an.yc, nz + L * 0.045);
+      for (const s of [1, -1]) {
+        const a = at(0.2), ix = s * (a.hw + 0.28);
+        add(new THREE.BoxGeometry(0.55, a.h * 1.5, L * 0.16), paint, root, ix, a.yc - 0.05, L * 0.16);
+        add(new THREE.PlaneGeometry(0.42, a.h * 1.35), black, root, ix, a.yc - 0.05, L * 0.16 + L * 0.081);
+        add(new THREE.BoxGeometry(0.04, a.h * 1.6, 0.9), paint, root, ix + s * 0.33, a.yc - 0.05, L * 0.235); // placa separadora
+      }
+    }
+    // tubeiras: uma central ou várias lado a lado (def.nozzles)
+    const nn = D.nozzles || 1, nr = fr * (nn > 1 ? 0.36 : 0.5);
+    for (let i = 0; i < nn; i++) {
+      const nx = nn > 1 ? (i - (nn - 1) / 2) * nr * 2.1 : 0;
+      add(new THREE.CylinderGeometry(nr, nr * 0.9, 0.7, 18, 1, true).rotateX(Math.PI / 2), dark, root, nx, nn > 1 ? -fr * 0.15 : 0, -L * 0.53);
+      add(new THREE.CircleGeometry(nr * 0.9, 18).rotateY(Math.PI), black, root, nx, nn > 1 ? -fr * 0.15 : 0, -L * 0.52);
+    }
+    if (D.gunPod) add(new THREE.CylinderGeometry(0.14, 0.18, L * 0.18, 10).rotateX(Math.PI / 2), paint, root, 0, -fr * 0.95, L * 0.36); // carenagem do canhão sob o nariz
   } else {
     if (D.cowl === 'radial') { add(new THREE.TorusGeometry(D.noseR * 0.93, 0.06, 8, 28), dark, root, 0, 0, L * 0.43); add(new THREE.CylinderGeometry(D.noseR * 0.92, D.noseR * 0.98, 0.25, 28, 1, true).rotateX(Math.PI / 2), dark, root, 0, 0, L * 0.22); }
     else for (const s of [1, -1]) for (let i = 0; i < 6; i++) add(new THREE.BoxGeometry(0.12, 0.09, 0.2), dark, root, s * fr * 0.88, fr * 0.42, L * 0.36 - i * 0.24); // escapamentos
@@ -184,7 +213,12 @@ export function buildPlane(D) {
   add(new THREE.BoxGeometry(0.06, finH * 0.32, 0.04), accent, tail, 0, fr * 0.6 + finH * 0.82, -L * 0.43 - finH * Math.tan((jet ? 45 : 18) * deg) * 0.85); // faixa da deriva
   // hélice / entrada de ar (a física gira este grupo; o último filho some com o motor parado)
   const prop = new THREE.Group(); prop.position.set(0, 0, L * 0.45 + (jet ? 0.05 : 0.3)); root.add(prop);
-  if (jet) {
+  if (sideIn) prop.add(new THREE.Group()); // sem boca no nariz: o grupo existe só para o contrato (último filho)
+  else if (jet && D.shockCone) {
+    // cone de choque do MiG-21 (carrega o radar) na boca circular
+    add(new THREE.ConeGeometry(D.noseR * 0.62, D.noseR * 2.2, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x4a4f4a, roughness: .5, metalness: .3 }), prop, 0, 0, 0.3);
+    add(new THREE.CircleGeometry(D.noseR * 0.85, 20), black, prop, 0, 0, -0.35);
+  } else if (jet) {
     add(new THREE.CylinderGeometry(D.noseR * 0.25, D.noseR * 0.25, 0.4, 10).rotateX(Math.PI / 2), dark, prop, 0, D.key === 'f86' ? 0 : D.noseR * 0.45, -0.3); // separador/radar
     add(new THREE.CircleGeometry(D.noseR * 0.85, 20), black, prop, 0, 0, -0.35);
   } else {
@@ -220,9 +254,7 @@ export function buildPlane(D) {
         x = side * sx; y = -fr * 0.25 + (sx - fr * 0.55) * Math.tan(dih) - 0.32; z = D.wingZ - (D.sweep ? sx * Math.tan(D.sweep * deg) * 0.8 : 0) + 0.4;
         add(new THREE.BoxGeometry(0.06, 0.18, M.len * 0.6), dark, root, x, y + 0.14, z); // pilone
       }
-      const m = add(new THREE.CylinderGeometry(r, r, M.len, 12).rotateX(Math.PI / 2), white, root, x, y, z);
-      add(new THREE.ConeGeometry(r, r * 4, 12).rotateX(Math.PI / 2), M.seeker === 'sarh' ? white : glass, m, 0, 0, M.len / 2 + r * 2);
-      for (const ro of [Math.PI / 4, -Math.PI / 4]) { const f = add(new THREE.BoxGeometry(r * 8, .015, M.len * 0.11), white, m, 0, 0, -M.len * 0.42); f.rotation.z = ro; const c = add(new THREE.BoxGeometry(r * 5, .015, M.len * 0.06), white, m, 0, 0, M.len * (M.seeker === 'sarh' ? 0.05 : 0.36)); c.rotation.z = ro; }
+      const m = add(missileGeometry(M), [white, M.seeker === 'sarh' ? white : glass], root, x, y, z);
       missileMeshes.push(m);
     }
   }
@@ -230,6 +262,47 @@ export function buildPlane(D) {
   add(new THREE.CylinderGeometry(0.015, 0.015, 0.8, 4).rotateX(Math.PI / 2), dark, jet ? root : wingL, jet ? fr * 0.7 : fr * 0.55 + half * 0.82, jet ? 0.3 : -fr * 0.25 + half * 0.82 * Math.tan(dih) - 0.1, jet ? L * 0.47 : D.wingZ + D.chord * 0.25);
   const ws = 0.72, wz = D.wingZ + D.chord * 0.1 - half * ws * Math.tan((D.sweep || 0) * deg);
   planeDecals(D, root, wingL, wingR, { y: -fr * 0.25 + half * ws * Math.tan(dih) + D.chord * 0.075, x: fr * 0.55 + half * ws, z: wz - D.chord * 0.1, size: Math.min(D.chord * 0.7, 1.6), fuseAt: fuseG.userData.at });
+  // une as peças estáticas por material (menos draw calls); superfícies que se soltam ou somem ficam à parte
+  const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes]);
+  for (const grp of [root, wingL, wingR, tail]) mergeStatic(grp, keep);
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
   return { root, wingL, wingR, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under] };
+}
+// Funde filhos diretos de `grp` que são malhas simples (sem filhos, material único, sem espelhamento)
+// em uma malha por material. Reduz ~70 malhas de um jato para ~20 (e o mesmo na passada de sombra).
+const _MERGE_ATTR = ['position', 'normal', 'uv'];
+function mergeStatic(grp, keep) {
+  const buckets = new Map();
+  for (const o of grp.children) {
+    if (!o.isMesh || keep.has(o) || o.children.length || Array.isArray(o.material) || !o.geometry.index) continue;
+    o.updateMatrix(); if (o.matrix.determinant() < 0) continue;
+    const g = o.geometry.clone().applyMatrix4(o.matrix);
+    if (!_MERGE_ATTR.every(k => g.attributes[k])) continue;
+    for (const k of Object.keys(g.attributes)) if (!_MERGE_ATTR.includes(k)) g.deleteAttribute(k);
+    g.clearGroups();
+    if (!buckets.has(o.material)) buckets.set(o.material, []);
+    buckets.get(o.material).push([o, g]);
+  }
+  for (const [mat, list] of buckets) {
+    if (list.length < 2) continue;
+    const merged = mergeGeometries(list.map(x => x[1]));
+    if (!merged) continue;
+    for (const [o] of list) grp.remove(o);
+    const m = new THREE.Mesh(merged, mat); m.castShadow = m.receiveShadow = true; grp.add(m);
+  }
+}
+// míssil inteiro (corpo + aletas + nariz) numa geometria só, por tipo; grupo 0 = corpo, 1 = nariz
+const _mslGeo = new Map();
+export function missileGeometry(M) {
+  if (_mslGeo.has(M)) return _mslGeo.get(M);
+  const r = M.d / 2, parts = [new THREE.CylinderGeometry(r, r, M.len, 12).rotateX(Math.PI / 2)];
+  for (const ro of [Math.PI / 4, -Math.PI / 4]) {
+    parts.push(new THREE.BoxGeometry(r * 8, .015, M.len * 0.11).rotateZ(ro).translate(0, 0, -M.len * 0.42));
+    parts.push(new THREE.BoxGeometry(r * 5, .015, M.len * 0.06).rotateZ(ro).translate(0, 0, M.len * (M.seeker === 'sarh' ? 0.05 : 0.36)));
+  }
+  for (const q of parts) q.deleteAttribute('uv');
+  const body = mergeGeometries(parts.map(q => q.toNonIndexed()));
+  const nose = new THREE.ConeGeometry(r, r * 4, 12).rotateX(Math.PI / 2).translate(0, 0, M.len / 2 + r * 2).toNonIndexed(); nose.deleteAttribute('uv');
+  const g = mergeGeometries([body, nose], true);
+  _mslGeo.set(M, g); return g;
 }

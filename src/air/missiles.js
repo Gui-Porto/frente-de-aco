@@ -11,6 +11,7 @@ import { blastPlaneModules } from '../vehicles/planeDamage.js';
 import { sndCm } from '../fx/audio.js';
 import { shakeAt } from '../ui/hud.js';
 import { pnAccel, fwdOf } from './targeting.js';
+import { missileGeometry } from '../vehicles/planeModel.js';
 // =====================================================================
 // Mísseis ar-ar: motor-foguete com queima curta, arrasto, navegação
 // proporcional limitada em G, gimbal do buscador e espoleta de proximidade.
@@ -18,7 +19,6 @@ import { pnAccel, fwdOf } from './targeting.js';
 // =====================================================================
 export const missiles = [];
 // material com os mesmos parâmetros dos aviões: reaproveita o programa já compilado
-const geo = new THREE.CylinderGeometry(1, 1, 1, 8).rotateX(Math.PI / 2);
 const mat = new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .7 });
 const _a = new V3(), _f = new V3(), _q = new V3(), _rel = new V3(), _cp = new V3();
 
@@ -26,7 +26,7 @@ export class Missile {
   constructor(owner, target, M, pos, vel) {
     this.owner = owner; this.target = target; this.M = M;
     this.pos = pos.clone(); this.vel = vel.clone(); this.t = 0; this.tracking = !!target; this.dead = false; this.seen = new Set();
-    this.mesh = new THREE.Mesh(geo, mat); this.mesh.scale.set(M.d / 2, M.d / 2, M.len); scene.add(this.mesh);
+    this.mesh = new THREE.Mesh(missileGeometry(M), [mat, mat]); scene.add(this.mesh);
     missiles.push(this);
   }
   update(dt) {

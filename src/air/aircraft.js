@@ -70,7 +70,7 @@ export const ARENA = { helice: { limit: 4200, spawnZ: 2700, alt: 1600 }, jato: {
 // Linhas de armamento para a ficha
 export function armament(key) {
   const D = PLANES[key], rows = D.guns.map(g => ({ name: GUNS[g.w].name, n: g.n, ammo: g.ammo, rpm: GUNS[g.w].rpm, cal: GUNS[g.w].cal }));
-  for (const r of D.missiles || []) { const M = MISSILES[r.w]; rows.push({ name: M.name, n: r.n, missile: true, range: M.range }); }
+  for (const r of D.missiles || []) { const M = MISSILES[r.w]; rows.push({ name: M.name, n: r.n, missile: true, range: M.range, seeker: M.seeker, rear: !!M.rearAspect }); }
   return rows;
 }
 // peso de fogo (kg/s) para comparar poder de fogo

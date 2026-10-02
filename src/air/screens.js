@@ -1,3 +1,4 @@
+import { preloadModels } from '../vehicles/modelLibrary.js';
 import { renderer, scene, camera } from '../core/render.js';
 import { S } from '../core/state.js';
 import { settings, keyName, clearInput } from '../core/settings.js';
@@ -63,7 +64,7 @@ function fillPlate(k) {
     ['Peso de combate', `${(D.mass / 1000).toFixed(2).replace('.', ',')} t`], ['Carga alar', `${Math.round(D.mass / D.S)} kg/m²`], ['Motor', A.engine],
     ['Limite estrutural', `${D.glim} G`], ['Peso de fogo', `${burstMass(k).toFixed(1).replace('.', ',')} kg/s`]];
   $('#apSpecs').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
-  $('#apArms').innerHTML = armament(k).map(w => w.missile ? `<li><b>${w.n}×</b> ${w.name}<small>guiado IR · ${nf(w.range)} m · aspecto traseiro</small></li>` : `<li><b>${w.n}×</b> ${w.name}<small>${nf(w.ammo)} tiros por arma · ${nf(w.rpm)} disp/min</small></li>`).join('');
+  $('#apArms').innerHTML = armament(k).map(w => w.missile ? `<li><b>${w.n}×</b> ${w.name}<small>${w.seeker === 'sarh' ? 'semiativo: radar travado até o impacto' : w.rear ? 'infravermelho · só pela cauda' : 'infravermelho'} · ${nf(w.range)} m</small></li>` : `<li><b>${w.n}×</b> ${w.name}<small>${nf(w.ammo)} tiros por arma · ${nf(w.rpm)} disp/min</small></li>`).join('');
   $('#apStrong').innerHTML = A.strong.map(s => `<li>${s}</li>`).join('');
   $('#apWeak').innerHTML = A.weak.map(s => `<li>${s}</li>`).join('');
 }
@@ -103,6 +104,7 @@ async function takeoff() {
   await step('Briefing da esquadrilha', 0.15);
   closeHangar();
   await step(`Meteorologia · ${WEATHER[cfg.weather].label.toLowerCase()}, ${TIMES[cfg.time].label.toLowerCase()}`, 0.35);
+  await preloadModels(Object.values(PLANES));
   B.start(Object.assign({}, cfg));
   await step('Aeronaves na posição de decolagem', 0.6);
   // compila os programas de tudo que pode surgir na partida (aviões, míssil, nuvens, chuva)
