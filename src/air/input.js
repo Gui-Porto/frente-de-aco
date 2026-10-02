@@ -57,7 +57,7 @@ export function pilot(p, c, aimDir, dt) {
   p.airbrake = c.brake;
   // Tecla de manche no modo mouse = controle direto naquele instante (como no WT): antes só o profundor
   // era trocado e o instrutor seguia rolando o avião atrás do círculo do mouse parado → avião "bambo".
-  // A câmera (camera.js) leva a mira junto com o nariz enquanto isso, então soltar não dá tranco.
+  // A câmera continua livre no mouse; ao soltar, o instrutor volta a levar o nariz para o círculo.
   if (settings.gameplay.flightMode === 'teclado' || c.pad || manualAxes(c)) {
     // controle direto, com rampa suave nas superfícies
     const r = 1 - Math.exp(-dt * 6);
