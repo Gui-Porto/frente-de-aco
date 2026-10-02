@@ -108,7 +108,7 @@ async function takeoff() {
   B.start(Object.assign({}, cfg));
   await step('Aeronaves na posição de decolagem', 0.6);
   // compila os programas de tudo que pode surgir na partida (aviões, míssil, nuvens, chuva)
-  const dummy = new Missile(B.player, null, { d: 0.12, len: 2.8 }, B.player.pos, new V3()); dummy.dead = true;
+  const dummy = new Missile(B.player, null, { d: 0.12, len: 2.8 }, B.player.pos, new V3()); dummy.dead = true; dummy.trail.close(); dummy.flame.scale.setScalar(1e-4);
   try { renderer.compile(scene, camera); } catch (e) { /* opcional */ }
   scene.remove(dummy.mesh);
   await step('Armamento verificado', 0.85);

@@ -59,7 +59,7 @@ export class Maw {
     if (owner.alive) for (const m of missiles) {
       if (m.dead || m.owner.team === owner.team) continue;
       const g = losAngles(owner, m.pos, _g); if (g.r > W.range) continue;
-      if (W.kind === 'uv' && m.t > m.M.burn) continue;           // sem pluma, o UV não vê
+      if (W.kind === 'uv' && !(m.burning ?? m.t <= m.M.burn)) continue; // sem pluma, o UV não vê
       d.copy(owner.pos).sub(m.pos).divideScalar(g.r);
       const closing = d.dot(m.vel) - d.dot(owner.vel); if (closing < 30) continue;
       out.push({ m, az: g.az, el: g.el, r: g.r, tti: g.r / closing });

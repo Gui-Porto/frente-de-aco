@@ -12,6 +12,11 @@ import { sndCm } from '../fx/audio.js';
 import { shakeAt } from '../ui/hud.js';
 import { pnAccel, fwdOf } from './targeting.js';
 import { missileGeometry } from '../vehicles/planeModel.js';
+import { Trail, updateTrails, clearTrails } from '../fx/trails.js';
+// chama do motor: sprite aditivo único (compilado na decolagem pelo míssil-fantasma)
+const glowC = document.createElement('canvas'); glowC.width = glowC.height = 64;
+{ const g = glowC.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,240,1)'); gr.addColorStop(0.25, 'rgba(255,220,140,.95)'); gr.addColorStop(0.55, 'rgba(255,140,50,.45)'); gr.addColorStop(1, 'rgba(255,90,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }
+const FLARE = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(glowC), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false });
 // =====================================================================
 // Mísseis ar-ar: motor-foguete com queima curta, arrasto, navegação
 // proporcional limitada em G, gimbal do buscador e espoleta de proximidade.
@@ -27,6 +32,12 @@ export class Missile {
     this.owner = owner; this.target = target; this.M = M;
     this.pos = pos.clone(); this.vel = vel.clone(); this.t = 0; this.tracking = !!target; this.dead = false; this.seen = new Set();
     this.mesh = new THREE.Mesh(missileGeometry(M), [mat, mat]); scene.add(this.mesh);
+    // chama na cauda e rastro de fumaça contínuo
+    this.flame = new THREE.Sprite(FLARE); this.flame.position.set(0, 0, -M.len * 0.62); this.flame.scale.setScalar(1e-4); this.mesh.add(this.flame);
+    this.trail = new Trail({ life: 14, w0: 1.8, w1: 14, alpha: 0.92, step: 4, color: 0xd6d2ca });
+    // semiativos (Sparrow/R-3R) são EJETADOS e acendem ~0,35 s depois; IR sai acesa do trilho
+    this.ign = M.seeker === 'sarh' ? 0.35 : 0; this.burning = !this.ign; this.spin = Math.random() * 6;
+    if (!this.ign && owner) for (let i = 0; i < 6; i++) spawnP({ pos: this.pos.clone().add(rv(0.4)), vel: owner.vel.clone().multiplyScalar(0.6).add(rv(4)), life: rand(1.2, 2.2), size: 1.2, size1: 4, color: 0xdedbd4, op: 0.5, drag: 2 });
     missiles.push(this);
   }
   update(dt) {
@@ -66,7 +77,10 @@ export class Missile {
       }
       const rho = RHO * Math.exp(-Math.max(0, this.pos.y) / 8500);
       const A = Math.PI * (M.d / 2) ** 2, drag = 0.5 * rho * V * V * M.cd * A / M.mass;
-      _a.addScaledVector(_f, (this.t < M.burn ? M.thrust / M.mass : 0) - drag);
+      const burn = this.t >= this.ign && this.t < this.ign + M.burn;
+      if (burn && !this.burning) { this.burning = true; sndLaunch(this.pos); for (let i = 0; i < 8; i++) spawnP({ pos: this.pos.clone(), vel: rv(6), life: rand(.15, .3), size: 1.4, size1: .4, tex: TEX.fire, add: true, color: 0xffd090 }); }
+      if (!burn && this.burning && this.t > this.ign) { this.burning = false; this.trail.close(); }
+      _a.addScaledVector(_f, (burn ? M.thrust / M.mass : 0) - drag);
       this.vel.addScaledVector(_a, h);
       _q.copy(this.pos).addScaledVector(this.vel, h);
       // espoleta de proximidade: menor distância ao alvo dentro do passo
@@ -80,18 +94,20 @@ export class Missile {
       if (this.pos.y < H(this.pos.x, this.pos.z)) { this.detonate(this.pos, 99); return; }
     }
     if (this.t > M.life) { this.detonate(this.pos, 99); return; }
-    // visual: corpo alinhado à velocidade, chama e fumaça do motor
+    // visual: corpo alinhado à velocidade e girando devagar; chama tremendo; fita de fumaça só com motor aceso
     _f.copy(this.vel).normalize();
-    this.mesh.position.copy(this.pos); this.mesh.lookAt(_q.copy(this.pos).add(_f));
-    if (this.t < M.burn) {
-      spawnP({ pos: _q.copy(this.pos).addScaledVector(_f, -M.len * 0.6), life: .07, size: .9, size1: .3, tex: TEX.fire, add: true, color: 0xffb060 });
-      fxTrail(this.pos.clone(), 0xe4e1da, 0.8, 5.5);
-    } else if (Math.random() < 0.35) fxTrail(this.pos.clone(), 0xd8d5ce, 0.4, 2.5);
+    this.mesh.position.copy(this.pos); this.mesh.lookAt(_q.copy(this.pos).add(_f)); this.mesh.rotateZ(this.spin += dt * 3);
+    if (this.burning) {
+      const k = 1 + (Math.random() - 0.5) * 0.35; this.flame.scale.setScalar(M.d * 14 * k);
+      this.trail.push(_q.copy(this.pos).addScaledVector(_f, -M.len * 0.7), S.now);
+    } else this.flame.scale.setScalar(1e-4);
   }
   detonate(at, miss, hitPlane) {
-    this.dead = true; scene.remove(this.mesh);
+    this.dead = true; scene.remove(this.mesh); this.trail.close();
     const M = this.M, p = at.clone();
-    fxExplosion(p, 1.1); sndBoom(p, false); shakeAt(p, 0.6, 120);
+    // explosão: bola de fogo, nuvem escura que fica no céu e estilhaços incandescentes
+    fxExplosion(p, 1.1 + M.warhead / 9); sndBoom(p, false); shakeAt(p, 0.6, 120);
+    for (let i = 0; i < 7; i++) spawnP({ pos: p.clone().add(rv(2)), vel: rv(5).add(this.vel.clone().multiplyScalar(0.05)), life: rand(5, 8), size: 3, size1: 9, color: 0x3c3a37, op: 0.55, drag: 1.2, rise: 0.2 });
     for (let i = 0; i < 10; i++) spawnP({ pos: p.clone(), vel: rv(40), life: rand(.3, .7), size: .25, size1: .1, tex: TEX.fire, add: true, color: 0xffd080, grav: 9, drag: .4 });
     // estilhaços: dano cai com a distância; quem estiver a < 2× espoleta sofre
     const R = M.fuse * 2.2;
@@ -122,15 +138,18 @@ export function launchMissile(plane, target, rack = plane.rack) {
   const mesh = rack.meshes[rack.n];
   const pos = mesh ? mesh.getWorldPosition(new V3()) : plane.pos.clone();
   if (mesh) mesh.visible = false;
-  const vel = fwdOf(plane.q, new V3()).multiplyScalar(25).add(plane.vel);
-  sndLaunch(pos);
+  // IR sai do trilho já empurrando; semiativo é ejetado para baixo e acende depois (som na ignição)
+  const sarh = M.seeker === 'sarh';
+  const vel = sarh ? new V3(0, -7, 0).applyQuaternion(plane.q).add(plane.vel) : fwdOf(plane.q, new V3()).multiplyScalar(25).add(plane.vel);
+  if (!sarh) sndLaunch(pos);
   return new Missile(plane, target, M, pos, vel);
 }
 export function updateMissiles(dt) {
   updateFlares(dt);
+  updateTrails(S.now, dt);
   for (let i = missiles.length - 1; i >= 0; i--) { const m = missiles[i]; if (!m.dead) m.update(dt); if (m.dead) missiles.splice(i, 1); }
 }
-export function clearMissiles() { for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; flares.length = 0; }
+export function clearMissiles() { for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; flares.length = 0; clearTrails(); }
 
 // ---------- contramedidas ----------
 // Flares: iscas quentes que caem e queimam ~4 s (enganam buscadores IR).
