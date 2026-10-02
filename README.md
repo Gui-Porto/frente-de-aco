@@ -53,4 +53,3 @@ Tab placar, M mapa, Esc menu.
 - Arquitetura, decisões de física/renderização e como adicionar aeronaves: veja [`CLAUDE.md`](CLAUDE.md).
 - Fluxo **gitflow**: `main` só versões lançadas (tags `vX.Y.Z`), `develop` integração, trabalho novo em `feature/<nome>` ou `fix/<nome>` saindo de `develop` e voltando por PR. Commits convencionais (`feat:`, `fix:`, `refactor:`, `chore:`).
 - Testes manuais acelerados: `window.__game` expõe `S`, `B`, `simulate(dt)` etc. para rodar partidas sem renderizar (Playwright). Em navegador sem GPU use qualidade "baixa".
-- Créditos de áudio em [`CREDITOS.md`](CREDITOS.md).
