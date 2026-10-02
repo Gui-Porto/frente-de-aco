@@ -32,7 +32,7 @@ export function warnings(p) {
   if (stall) list.push(['ESTOL', C.amber, true]);
   const agl = p.pos.y - H(p.pos.x, p.pos.z), pull = agl < 220 && p.vel.y < -12;
   if (pull) list.push(['ALTITUDE · PUXE', C.enemy, true]);
-  if (Math.abs(p.n) > p.def.glim * 0.85) list.push(['SOBRECARGA G', C.enemy, false]);
+  if (!p.eng.jet && Math.abs(p.n) > p.def.glim * 0.85) list.push(['SOBRECARGA G', C.enemy, false]);
   if (p.ias > p.def.vne * 0.95) list.push(['VELOCIDADE-LIMITE', C.amber, true]);
   if (p.guns.some(q => q.jam)) list.push(['ARMA SUPERAQUECIDA', C.amber, false]);
   if (p.oobT > 0) list.push([`RETORNE À ÁREA · ${Math.ceil(15 - p.oobT)} s`, C.amber, true]);

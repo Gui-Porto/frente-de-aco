@@ -180,7 +180,8 @@ export class Plane {
     this.gStress = clamp(this.gStress + gx * dt, 0, 1.6);
     // limites estruturais
     if (this.alive) {
-      if (Math.abs(this.n) > this.def.glim) this.overG += dt; else this.overG = 0;
+      // asa quebrando por excesso de G só nos aviões a pistão; jato não quebra em curva (pedido do jogador)
+      if (!this.eng.jet && Math.abs(this.n) > this.def.glim) this.overG += dt; else this.overG = 0;
       if (this.overG > 0.12) this.breakWing(Math.random() < .5 ? 'L' : 'R', 'g');
       if (this.ias > this.def.vne * 1.07) { this.overG += dt * 2; if (this.overG > 0.4) this.breakWing('L', 'vne'); }
     }
