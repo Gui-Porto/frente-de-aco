@@ -4,7 +4,7 @@ import { MISSILES } from '../data/vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hasModel, gltfPlane } from './modelLibrary.js';
 import { buildPlaneFx } from './planeFx.js';
-import { wingCfg as wingPlan, tailCfg, finCfg, station, chordAt, SURF } from './planeGeom.js';
+import { wingCfg as wingPlan, tailCfg, finCfg, station, SURF } from './planeGeom.js';
 // =====================================================================
 // Modelo 3D procedural das aeronaves (só visual; física e caixas de
 // colisão vêm dos dados). Asas e empenagem são sólidos de perfil NACA
@@ -17,15 +17,19 @@ const yt = x => 5 * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843
 const deg = Math.PI / 180;
 
 // Sólido de asa. o: { side, x0, half, c0, c1, zq0, sweep (m de recuo do 1/4 de corda na ponta), t0, t1, dih (rad), y0, ellip }
-// Grupo 0 = extradorso (cor de cima), grupo 1 = intradorso e ponta.
+// o.sub = { s0, s1, a, b }: só o trecho da envergadura s0..s1 e da corda a..b (frações) — a asa sem o bordo de
+// fuga (a = 0, b = dobradiça) ou uma superfície de comando (a = dobradiça, b = 1). A superfície tem perfil
+// próprio (bordo arredondado na dobradiça) e espessura igual à da asa ali, então as duas se encaixam com a fresta.
+// o.cap0 fecha também a raiz. Grupo 0 = extradorso (cor de cima), grupo 1 = intradorso e pontas.
 export function wingGeometry(o) {
-  const N = 14, R = 2 * NP - 2, pos = [], uv = [], up = [], low = [];
+  const N = 14, R = 2 * NP - 2, pos = [], uv = [], up = [], low = [], sb = o.sub || { s0: 0, s1: 1, a: 0, b: 1 };
+  const tHinge = sb.a > 0 ? 2.15 * yt(sb.a) : 1; // superfície: meia-espessura máxima = a da asa na dobradiça (+ folga)
   for (let j = 0; j <= N; j++) {
-    const s = j / N;
-    const c = o.ellip ? Math.max(o.c0 * Math.sqrt(1 - Math.min(s, 0.985) ** 2), o.c1 || 0) : o.c0 + (o.c1 - o.c0) * s;
-    const zq = o.zq0 - o.sweep * s, zle = zq + 0.25 * c, x = o.side * (o.x0 + s * o.half);
+    const s = sb.s0 + (sb.s1 - sb.s0) * j / N;
+    const cw = o.ellip ? Math.max(o.c0 * Math.sqrt(1 - Math.min(s, 0.985) ** 2), o.c1 || 0) : o.c0 + (o.c1 - o.c0) * s;
+    const zq = o.zq0 - o.sweep * s, zle = zq + 0.25 * cw - sb.a * cw, c = (sb.b - sb.a) * cw, x = o.side * (o.x0 + s * o.half);
     // quebra de diedro opcional (o.brk = { at: fração da envergadura, dih: rad }), ex.: ponta da asa do F-4
-    const t = (o.t0 + (o.t1 - o.t0) * s) * c, y = o.y0 + (o.brk && s > o.brk.at ? o.brk.at * o.half * Math.tan(o.dih) + (s - o.brk.at) * o.half * Math.tan(o.brk.dih) : s * o.half * Math.tan(o.dih));
+    const t = (o.t0 + (o.t1 - o.t0) * s) * cw * tHinge, y = o.y0 + (o.brk && s > o.brk.at ? o.brk.at * o.half * Math.tan(o.dih) + (s - o.brk.at) * o.half * Math.tan(o.brk.dih) : s * o.half * Math.tan(o.dih));
     const ring = [];
     for (let k = 0; k < NP; k++) ring.push([XS[k], 1]);
     for (let k = NP - 2; k >= 1; k--) ring.push([XS[k], -1]);
@@ -44,11 +48,31 @@ export function wingGeometry(o) {
   let cx = 0, cy = 0, cz = 0; for (let k = 0; k < R; k++) { const i = at(N, k) * 3; cx += pos[i]; cy += pos[i + 1]; cz += pos[i + 2]; }
   const ci = pos.length / 3; pos.push(cx / R, cy / R, cz / R); uv.push(0, 0);
   for (let k = 0; k < R; k++) { const p = at(N, k), q = at(N, k + 1); low.push(...(o.side > 0 ? [ci, q, p] : [ci, p, q])); }
+  if (o.cap0) {
+    let rx = 0, ry = 0, rz = 0; for (let k = 0; k < R; k++) { const i = at(0, k) * 3; rx += pos[i]; ry += pos[i + 1]; rz += pos[i + 2]; }
+    const r0 = pos.length / 3; pos.push(rx / R, ry / R, rz / R); uv.push(0, 0);
+    for (let k = 0; k < R; k++) { const p = at(0, k), q = at(0, k + 1); low.push(...(o.side > 0 ? [r0, p, q] : [r0, q, p])); }
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex([...up, ...low]); g.addGroup(0, up.length, 0); g.addGroup(up.length, low.length, 1);
   g.computeVertexNormals();
   return g;
+}
+
+// junta sólidos de asa preservando os grupos 0 (extradorso) e 1 (intradorso): uma malha, dois draw calls
+function mergePair(gs) {
+  const P = [], U = [], I = [[], []]; let off = 0;
+  for (const g of gs) {
+    P.push(...g.attributes.position.array); U.push(...g.attributes.uv.array);
+    const idx = g.index.array;
+    for (const gr of g.groups) for (let i = gr.start; i < gr.start + gr.count; i++) I[gr.materialIndex].push(idx[i] + off);
+    off += g.attributes.position.count;
+  }
+  const m = new THREE.BufferGeometry();
+  m.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); m.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+  m.setIndex([...I[0], ...I[1]]); m.addGroup(0, I[0].length, 0); m.addGroup(I[0].length, I[1].length, 1);
+  m.computeVertexNormals(); return m;
 }
 
 // Fuselagem em loft: cada estação tem meia-largura, altura do dorso, profundidade do ventre e
@@ -224,26 +248,38 @@ export function buildPlane(D) {
   const wingCfg = wingPlan.bind(null, D);
   // superfícies de comando articuladas (fora da fusão de malhas): { pivot, axis, max }
   const surf = {};
+  // leva a geometria da deriva (desenhada no plano da asa) para o lugar: gira 90° e sobe até o dorso
+  const finXf = (g, o) => g.rotateZ(Math.PI / 2).translate(0, o.lift, 0);
   const hinge = (name, o, s0, s1, cf, parent, max, fin) => {
-    const c0 = chordAt(o, s0) * (1 - cf), c1 = chordAt(o, s1) * (1 - cf), h0 = station(o, s0, cf), h1 = station(o, s1, cf);
-    const g = wingGeometry({ side: o.side, x0: o.x0 + s0 * o.half, half: (s1 - s0) * o.half, c0, c1, zq0: h0[2] - 0.25 * c0, sweep: h0[2] - 0.25 * c0 - (h1[2] - 0.25 * c1), t0: o.t0 * 1.6, t1: o.t1 * 1.6, dih: o.dih, y0: h0[1], ellip: false });
-    const P0 = new THREE.Vector3(...h0), P1 = new THREE.Vector3(...h1);
-    if (fin) { g.rotateZ(Math.PI / 2); g.translate(0, o.lift, 0); for (const P of [P0, P1]) P.set(-P.y, P.x + o.lift, P.z); }
+    const g = wingGeometry(Object.assign({}, o, { sub: { s0, s1, a: cf, b: 1 }, cap0: true }));
+    const P0 = new THREE.Vector3(...station(o, s0, cf)), P1 = new THREE.Vector3(...station(o, s1, cf));
+    if (fin) { finXf(g, o); for (const P of [P0, P1]) P.set(-P.y, P.x + o.lift, P.z); }
     g.translate(-P0.x, -P0.y, -P0.z);
     const pivot = new THREE.Group(); pivot.position.copy(P0); parent.add(pivot);
     add(g, fin ? paint : pair, pivot);
     const axis = P1.sub(P0).normalize(); if ((fin ? axis.y : axis.x) < 0) axis.negate();
     surf[name] = { pivot, axis, max: max * deg, base: new THREE.Quaternion() };
   };
+  // superfície fixa sem o bordo de fuga onde há comando: a parte da frente inteira + os trechos de bordo de fuga
+  // fixos entre os comandos, tudo numa malha; cada comando vira uma peça articulada (hinge)
+  const cutSurface = (o, cf, moving, parent, fin) => {
+    const gs = [wingGeometry(Object.assign({}, o, { sub: { s0: 0, s1: 1, a: 0, b: cf } }))];
+    const sp = moving.map(m => [m[1], m[2]]).sort((p, q) => p[0] - q[0]);
+    let s0 = 0;
+    for (const [a, b] of [...sp, [1, 1]]) { if (a - s0 > 0.005) gs.push(wingGeometry(Object.assign({}, o, { sub: { s0, s1: a, a: cf, b: 1 }, cap0: true }))); s0 = Math.max(s0, b); }
+    const g = mergePair(gs); if (fin) finXf(g, o);
+    const mesh = add(g, fin ? paint : pair, parent);
+    for (const [name, a, b, max] of moving) hinge(name, o, a, b, cf, parent, max, fin);
+    return mesh;
+  };
   const wing = side => {
     const grp = new THREE.Group(); root.add(grp);
-    add(wingGeometry(wingCfg(side)), pair, grp);
+    const o = wingCfg(side), sd = side > 0 ? 'L' : 'R', A = D.ail || SURF.ail, F = D.flap || SURF.flap;
+    cutSurface(o, SURF.cf, [['ail' + sd, A[0], A[1], 20], ['flap' + sd, F[0], F[1], 40]], grp);
     const tipY = -fr * 0.25 + (D.wingBreak ? half * (D.wingBreak[0] * Math.tan(dih) + (1 - D.wingBreak[0]) * Math.tan(D.wingBreak[1] * deg)) : half * Math.tan(dih));
     if (D.stripes) for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.3, 0.02, D.chord * 0.86), i % 2 ? black : white, grp, side * (fr + 1.0 + i * 0.3), -fr * 0.25 - 0.17 + (1 + i * 0.3) * Math.tan(dih), D.wingZ - D.chord * 0.2);
     if (D.key === 'mig15') for (const k of [0.38, 0.7]) { const sx = fr * 0.55 + half * k, sw = half * k * Math.tan(D.sweep * deg); add(new THREE.BoxGeometry(0.03, 0.18, D.chord * 0.85), paint, grp, side * sx, -fr * 0.25 + half * k * Math.tan(dih) + 0.12, D.wingZ - sw - D.chord * 0.2); }
     if (D.key === 'spit9') add(new THREE.BoxGeometry(0.45, 0.22, 1.1), paint, grp, side * (fr + 1.0), -fr * 0.25 - 0.22, D.wingZ - 0.4); // radiadores sob a asa
-    const o = wingCfg(side), sd = side > 0 ? 'L' : 'R', A = D.ail || SURF.ail, F = D.flap || SURF.flap;
-    hinge('ail' + sd, o, A[0], A[1], SURF.cf, grp, 20); hinge('flap' + sd, o, F[0], F[1], SURF.cf, grp, 40);
     add(new THREE.SphereGeometry(0.07, 6, 4), accent, grp, side * (fr * 0.55 + half), tipY, D.wingZ - (D.sweep ? half * Math.tan(D.sweep * deg) : 0) - D.tipChord * 0.2); // luz de navegação
     return grp;
   };
@@ -258,15 +294,9 @@ export function buildPlane(D) {
       const P0 = new THREE.Vector3(...station(o, 0, 0.4)), pivot = new THREE.Group(); pivot.position.copy(P0); tail.add(pivot);
       add(wingGeometry(o).translate(-P0.x, -P0.y, -P0.z), pair, pivot);
       surf['elev' + sd] = { pivot, axis: new THREE.Vector3(1, 0, 0), max: 12 * deg, base: new THREE.Quaternion() };
-    } else {
-      add(wingGeometry(o), pair, tail);
-      hinge('elev' + sd, o, 0.04, 0.95, 0.68, tail, 25);
-    }
+    } else cutSurface(o, 0.68, [['elev' + sd, 0.04, 0.95, 25]], tail);
   }
-  const fo = finCfg(D);
-  const fin = add(wingGeometry(fo), paint, tail);
-  hinge('rud', fo, 0.1, 0.95, 0.7, tail, 25, true);
-  fin.rotation.z = Math.PI / 2; fin.position.y = fr * 0.6;
+  cutSurface(finCfg(D), 0.7, [['rud', 0.1, 0.95, 25]], tail, true);
   add(new THREE.BoxGeometry(0.06, finH * 0.32, 0.04), accent, tail, 0, fr * 0.6 + finH * 0.82, -L * 0.43 - finH * Math.tan((jet ? 45 : 18) * deg) * 0.85); // faixa da deriva
   // hélice / entrada de ar (a física gira este grupo; o último filho some com o motor parado)
   const prop = new THREE.Group(); prop.position.set(0, 0, L * 0.45 + (jet ? 0.05 : 0.3)); root.add(prop);

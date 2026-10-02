@@ -241,8 +241,10 @@ export class Plane {
     if (opts.lead) {
       if (!this._aimPrev) { this._aimPrev = dir.clone(); this._aimVel = new V3(); }
       _pd.copy(dir).sub(this._aimPrev).divideScalar(Math.max(dt, 1e-3)); this._aimPrev.copy(dir);
-      this._aimVel.lerp(_pd, 1 - Math.exp(-dt * 8));
-      _pd.copy(this._aimVel).multiplyScalar(opts.lead); if (_pd.length() > 0.14) _pd.setLength(0.14);
+      this._aimVel.lerp(_pd, 1 - Math.exp(-dt * 3.5));
+      // só antecipa movimento intencional: abaixo de ~3°/s (tremor da mão) não há avanço; antes o tremor de ±0,5° virava ±3° de comando
+      const sp = this._aimVel.length(), kL = clamp((sp - 0.05) / 0.12, 0, 1);
+      _pd.copy(this._aimVel).multiplyScalar(opts.lead * kL); if (_pd.length() > 0.14) _pd.setLength(0.14);
       dir = _pdl.copy(dir).add(_pd).normalize();
     }
     const dl = dir.dot(_pl), du = dir.dot(_pu), df = dir.dot(_pf);
@@ -261,7 +263,12 @@ export class Plane {
     // Em du = 0 as duas fórmulas coincidem (sem salto); longe, abaixo → rola de dorso e puxa, como antes.
     const NEAR = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu);
     if (this.nearAim) { if (off > NEAR * 1.5) this.nearAim = false; } else if (off < NEAR) this.nearAim = true;
-    const bank = Math.atan2(-dl, this.nearAim ? Math.abs(du) : du);
+    // perto da mira, o + 0.08 (~5°) deixa a inclinação proporcional ao desvio lateral: sem ele, dl e du quase zero
+    // davam atan2 de ruído (±90°) e o jato balançava as asas com qualquer tremor da mira
+    let bank = Math.atan2(-dl, this.nearAim ? Math.abs(du) + 0.08 : du);
+    // e a inclinação fica limitada ao tamanho do erro: 8° ao lado pedia ~80° de asa e uma puxada que passava do alvo
+    // e voltava (MiG-21/F-4 balançavam 40°↔84° depois de a mira parar)
+    if (this.nearAim) { const lim = Math.PI / 2 * clamp(off / 0.3, 0.3, 1); bank = clamp(bank, -lim, lim); }
     const w = nose ? clamp((off - 0.035) / 0.14, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
     const rollErr = lerp(level * 0.6, bank, w);
     // "rola, depois puxa": com muita rolagem pela frente o profundor espera (puxar/empurrar inclinado
