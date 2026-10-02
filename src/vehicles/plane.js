@@ -30,7 +30,7 @@ export const _pf = new V3(), _pt = new V3();
 // limites de flap (km/h) por estágio; cada avião pode trazer os seus em def.flapV
 const FLAP_POS = [0, 0.33, 0.66, 1], FLAP_V = [480, 360, 290], FLAP_NAME = ['Recolhidos', 'Combate', 'Decolagem', 'Pouso'];
 // amortecimento aerodinâmico padrão [arfagem, rolagem, guinada]; def.damp sobrescreve
-const DAMP = [24, 0.45, 0.18], _atm = {};
+const DAMP = [24, 0.45, 0.18], _atm = {}, _pd = new THREE.Vector3(), _pdl = new THREE.Vector3();
 // arrasto de onda: jatos subsônicos (sem def.wave) crescem sem parar além do Mach crítico;
 // supersônicos têm pico transônico e depois cedem um pouco
 const waveDrag = (D, M) => {
@@ -217,6 +217,15 @@ export class Plane {
     if (!this.pilot) { this.elev = this.ail = this.rud = 0; return; }
     this.axes();
     const D = this.def;
+    // antecipação (opts.lead s): mira onde o círculo ESTARÁ — sem isso o nariz andava sempre atrás de um
+    // mouse em movimento. Velocidade da mira filtrada e limitada (um puxão brusco não vira salto).
+    if (opts.lead) {
+      if (!this._aimPrev) { this._aimPrev = dir.clone(); this._aimVel = new V3(); }
+      _pd.copy(dir).sub(this._aimPrev).divideScalar(Math.max(dt, 1e-3)); this._aimPrev.copy(dir);
+      this._aimVel.lerp(_pd, 1 - Math.exp(-dt * 8));
+      _pd.copy(this._aimVel).multiplyScalar(opts.lead); if (_pd.length() > 0.14) _pd.setLength(0.14);
+      dir = _pdl.copy(dir).add(_pd).normalize();
+    }
     const dl = dir.dot(_pl), du = dir.dot(_pu), df = dir.dot(_pf);
     const off = Math.acos(clamp(df, -1, 1));
     // arfagem: erro do vetor velocidade (nariz + AoA) com termo integral pequeno contra erro estacionário.
@@ -227,18 +236,13 @@ export class Plane {
     this.iP = clamp(this.iP + pe * dt * (off < 0.3 ? 1 : 0), -0.3, 0.3) * (off < 0.3 ? 1 : 0.95);
     const trim = 0.9 * clamp(this.alpha, -0.5, 0.5) / D.kde;
     // rolagem: inclina para colocar o alvo no plano de sustentação; perto do nariz, nivela as asas.
-    // Alvo ABAIXO do nariz e não muito longe (ex.: nariz passou do ponto ao subir, ou mira um pouco para
-    // baixo): EMPURRA o manche em vez de rolar de dorso para puxar. Antes atan2(-dl, du) com du < 0 pedia
-    // ±180° e o sinal dependia do ruído lateral → o avião balançava. Só vale com o alvo majoritariamente
-    // abaixo (de lado continua rolando, como em curva) e com histerese para não trocar de lado a cada quadro.
-    // Só com as asas quase niveladas: inclinado numa curva, "abaixo" no referencial do avião é para o
-    // lado, e empurrar desfazia a curva.
-    const PUSH_CONE = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu);
-    // (em subida/mergulho íngreme não há curva nivelada a proteger: vale em qualquer rolagem)
-    const steep = Math.abs(_pf.y) > 0.6;
-    if (this.pushSide) { if (du > -0.3 * Math.abs(dl) || off > PUSH_CONE * 1.3 || (Math.abs(level) > 1 && !steep)) this.pushSide = false; }
-    else if (du < -0.6 * Math.abs(dl) && off < PUSH_CONE && (Math.abs(level) < 0.8 || steep)) this.pushSide = true;
-    const bank = this.pushSide ? Math.atan2(dl, -du) : Math.atan2(-dl, du);
+    // PERTO da mira (até ~17°) a inclinação usa só o desvio LATERAL: atan2(−dl, |du|); "acima/abaixo" fica
+    // com o profundor (pe). Antes, com o alvo poucos graus abaixo do nariz, atan2(−dl, du) pedia ±170° e o
+    // sinal trocava cada vez que dl cruzava zero → o avião balançava (em subida, em curva, em tudo).
+    // Em du = 0 as duas fórmulas coincidem (sem salto); longe, abaixo → rola de dorso e puxa, como antes.
+    const NEAR = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu);
+    if (this.nearAim) { if (off > NEAR * 1.5) this.nearAim = false; } else if (off < NEAR) this.nearAim = true;
+    const bank = Math.atan2(-dl, this.nearAim ? Math.abs(du) : du);
     const w = nose ? clamp((off - 0.035) / 0.14, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
     const rollErr = lerp(level * 0.6, bank, w);
     // "rola, depois puxa": com muita rolagem pela frente o profundor espera (puxar/empurrar inclinado
