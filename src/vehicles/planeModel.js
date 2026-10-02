@@ -4,6 +4,7 @@ import { MISSILES } from '../data/vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hasModel, gltfPlane } from './modelLibrary.js';
 import { buildPlaneFx } from './planeFx.js';
+import { wingCfg as wingPlan, tailCfg, finCfg, station, chordAt, SURF } from './planeGeom.js';
 // =====================================================================
 // Modelo 3D procedural das aeronaves (só visual; física e caixas de
 // colisão vêm dos dados). Asas e empenagem são sólidos de perfil NACA
@@ -220,7 +221,20 @@ export function buildPlane(D) {
   const ellip = D.key === 'spit9' || D.key === 'p47';
   const dih = (D.dih ?? (jet ? (D.key === 'mig15' ? -2 : 3) : 5.5)) * deg;
   const half = D.span / 2 - fr * 0.55;
-  const wingCfg = side => ({ side, x0: fr * 0.55, half, c0: D.chord, c1: ellip ? D.tipChord * 0.35 : D.tipChord, zq0: D.wingZ + D.chord * 0.1, sweep: half * Math.tan((D.sweep || 0) * deg) + (ellip ? 0 : (D.chord - D.tipChord) * 0.1), t0: jet ? 0.1 : 0.15, t1: jet ? 0.08 : 0.09, dih, y0: -fr * 0.25, ellip, brk: D.wingBreak ? { at: D.wingBreak[0], dih: D.wingBreak[1] * deg } : null });
+  const wingCfg = wingPlan.bind(null, D);
+  // superfícies de comando articuladas (fora da fusão de malhas): { pivot, axis, max }
+  const surf = {};
+  const hinge = (name, o, s0, s1, cf, parent, max, fin) => {
+    const c0 = chordAt(o, s0) * (1 - cf), c1 = chordAt(o, s1) * (1 - cf), h0 = station(o, s0, cf), h1 = station(o, s1, cf);
+    const g = wingGeometry({ side: o.side, x0: o.x0 + s0 * o.half, half: (s1 - s0) * o.half, c0, c1, zq0: h0[2] - 0.25 * c0, sweep: h0[2] - 0.25 * c0 - (h1[2] - 0.25 * c1), t0: o.t0 * 1.6, t1: o.t1 * 1.6, dih: o.dih, y0: h0[1], ellip: false });
+    const P0 = new THREE.Vector3(...h0), P1 = new THREE.Vector3(...h1);
+    if (fin) { g.rotateZ(Math.PI / 2); g.translate(0, o.lift, 0); for (const P of [P0, P1]) P.set(-P.y, P.x + o.lift, P.z); }
+    g.translate(-P0.x, -P0.y, -P0.z);
+    const pivot = new THREE.Group(); pivot.position.copy(P0); parent.add(pivot);
+    add(g, fin ? paint : pair, pivot);
+    const axis = P1.sub(P0).normalize(); if ((fin ? axis.y : axis.x) < 0) axis.negate();
+    surf[name] = { pivot, axis, max: max * deg, base: new THREE.Quaternion() };
+  };
   const wing = side => {
     const grp = new THREE.Group(); root.add(grp);
     add(wingGeometry(wingCfg(side)), pair, grp);
@@ -228,16 +242,30 @@ export function buildPlane(D) {
     if (D.stripes) for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.3, 0.02, D.chord * 0.86), i % 2 ? black : white, grp, side * (fr + 1.0 + i * 0.3), -fr * 0.25 - 0.17 + (1 + i * 0.3) * Math.tan(dih), D.wingZ - D.chord * 0.2);
     if (D.key === 'mig15') for (const k of [0.38, 0.7]) { const sx = fr * 0.55 + half * k, sw = half * k * Math.tan(D.sweep * deg); add(new THREE.BoxGeometry(0.03, 0.18, D.chord * 0.85), paint, grp, side * sx, -fr * 0.25 + half * k * Math.tan(dih) + 0.12, D.wingZ - sw - D.chord * 0.2); }
     if (D.key === 'spit9') add(new THREE.BoxGeometry(0.45, 0.22, 1.1), paint, grp, side * (fr + 1.0), -fr * 0.25 - 0.22, D.wingZ - 0.4); // radiadores sob a asa
+    const o = wingCfg(side), sd = side > 0 ? 'L' : 'R', A = D.ail || SURF.ail, F = D.flap || SURF.flap;
+    hinge('ail' + sd, o, A[0], A[1], SURF.cf, grp, 20); hinge('flap' + sd, o, F[0], F[1], SURF.cf, grp, 40);
     add(new THREE.SphereGeometry(0.07, 6, 4), accent, grp, side * (fr * 0.55 + half), tipY, D.wingZ - (D.sweep ? half * Math.tan(D.sweep * deg) : 0) - D.tipChord * 0.2); // luz de navegação
     return grp;
   };
   const wingL = wing(1), wingR = wing(-1);
   // empenagem: estabilizador e deriva também com perfil
   const tail = new THREE.Group(); root.add(tail);
-  const tsw = jet ? 38 : 4, th = D.span * 0.19, tc = L * 0.13, finH = L * 0.17;
-  const stabY = D.key === 'mig15' ? finH * 0.55 : 0.08;
-  for (const s of [1, -1]) add(wingGeometry({ side: s, x0: 0.05, half: th, c0: tc, c1: tc * 0.5, zq0: -L * 0.44, sweep: th * Math.tan(tsw * deg), t0: 0.1, t1: 0.08, dih: (D.tailDih || 0) * deg, y0: stabY, ellip: !jet }), pair, tail);
-  const fin = add(wingGeometry({ side: 1, x0: 0, half: finH, c0: tc * 1.25, c1: tc * 0.55, zq0: -L * 0.43, sweep: finH * Math.tan((jet ? 45 : 18) * deg), t0: 0.1, t1: 0.08, dih: 0, y0: 0, ellip: false }), paint, tail);
+  const finH = L * 0.17;
+  for (const s of [1, -1]) {
+    const o = tailCfg(D, s), sd = s > 0 ? 'L' : 'R';
+    if (D.stab === 'all') {
+      // estabilizador todo móvel: a metade inteira gira num eixo lateral a ~40% da corda da raiz
+      const P0 = new THREE.Vector3(...station(o, 0, 0.4)), pivot = new THREE.Group(); pivot.position.copy(P0); tail.add(pivot);
+      add(wingGeometry(o).translate(-P0.x, -P0.y, -P0.z), pair, pivot);
+      surf['elev' + sd] = { pivot, axis: new THREE.Vector3(1, 0, 0), max: 12 * deg, base: new THREE.Quaternion() };
+    } else {
+      add(wingGeometry(o), pair, tail);
+      hinge('elev' + sd, o, 0.04, 0.95, 0.68, tail, 25);
+    }
+  }
+  const fo = finCfg(D);
+  const fin = add(wingGeometry(fo), paint, tail);
+  hinge('rud', fo, 0.1, 0.95, 0.7, tail, 25, true);
   fin.rotation.z = Math.PI / 2; fin.position.y = fr * 0.6;
   add(new THREE.BoxGeometry(0.06, finH * 0.32, 0.04), accent, tail, 0, fr * 0.6 + finH * 0.82, -L * 0.43 - finH * Math.tan((jet ? 45 : 18) * deg) * 0.85); // faixa da deriva
   // hélice / entrada de ar (a física gira este grupo; o último filho some com o motor parado)
@@ -297,7 +325,7 @@ export function buildPlane(D) {
   const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes]);
   for (const grp of [root, wingL, wingR, tail]) mergeStatic(grp, keep);
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
-  return { root, wingL, wingR, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under], fx };
+  return { root, wingL, wingR, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under], fx, surf };
 }
 // Funde filhos diretos de `grp` que são malhas simples (sem filhos, material único, sem espelhamento)
 // em uma malha por material. Reduz ~70 malhas de um jato para ~20 (e o mesmo na passada de sombra).

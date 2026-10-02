@@ -96,7 +96,7 @@ export class EngineSet {
       this.flow = fl * amb * k / 3600;
       return this.thrust;
     }
-    const h = atm.alt || 0, altF = h < E.altCrit ? 1 : Math.exp(-(h - E.altCrit) / E.altScale);
+    const h = atm.alt || 0, crit = this.altCrit ?? E.altCrit, altF = h < crit ? 1 : Math.exp(-(h - crit) / E.altScale); // altCrit: turbo destruído baixa a altitude crítica
     const P = E.hp * HP_W * this.power * altF * k;
     this.flow = E.hp * PISTON_FUEL * this.power * this.count * (this.health > 0 ? 1 : 0);
     this.shaft = P;

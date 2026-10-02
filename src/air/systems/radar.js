@@ -48,6 +48,7 @@ export class Radar {
   get maxRange() { return this.mode === 'ACM' ? this.R.acm.range : this.R.range; }
   get modes() { return this.ranging ? ['RNG'] : this.R.acm ? ['SRCH', 'ACM', 'OFF'] : ['SRCH', 'OFF']; }
   setMode(m) {
+    if (this.dead && m !== 'OFF') return; // radar destruído pelo dano
     if (this.mode === 'STT') this.drop('unlock');
     this.mode = m; this.on = m !== 'OFF'; this.beam = -this.azLim; this.dir = 1;
     if (!this.on) { this.contacts.clear(); this.paint.clear(); }

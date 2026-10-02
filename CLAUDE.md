@@ -46,7 +46,9 @@ Módulos ES; o estado mutável compartilhado fica em `core/state.js` (`S`, `tank
 
 ## Aeronaves — como adicionar uma
 
-Tudo por dados, sem `if (key === …)`: entrada em `PLANES` (`data/vehicles.js`: aerodinâmica, `engine`/`engines`, `radar`/`rwr`/`maw`, `missiles: [{w, n}]`, `wave`, `inertia`/`damp`/`flapV` opcionais, `hud`, `model`) + ficha em `air/aircraft.js` (`era` define arena/adversários). Motor novo → `ENGINES`; sistema novo → `avionics.js`. HUD e áudio só mostram/tocam o que a aeronave tem. Modelo comprado: `def.model = { url }` com nós `wingL/wingR/tail/prop/hp_N` (`vehicles/modelLibrary.js`); sem ele, procedural.
+Tudo por dados, sem `if (key === …)`: entrada em `PLANES` (`data/vehicles.js`: aerodinâmica, `engine`/`engines`, `radar`/`rwr`/`maw`, `missiles: [{w, n}]`, `wave`, `inertia`/`damp`/`flapV` opcionais, `hud`, `model`) + ficha em `air/aircraft.js` (`era` define arena/adversários). Motor novo → `ENGINES`; sistema novo → `avionics.js`. HUD e áudio só mostram/tocam o que a aeronave tem. Modelo comprado: `def.model = { url }` com nós `wingL/wingR/tail/prop/hp_N` (+ opcionais `ailL/ailR/flapL/flapR/elevL/elevR/rud`) (`vehicles/modelLibrary.js`); sem ele, procedural.
+
+**Peças/dano por aeronave** (`vehicles/planeDamage.js`): piloto, motor(es), armas/munição (por grupo e lado, tiradas de `guns`), radar, aileron/flap/profundor/leme saem sozinhos — nas mesmas posições do modelo (`vehicles/planeGeom.js`). O que é específico do avião real vai em `def.parts`: tanques (`k:'fuel'`, combustível fica em cada tanque e o furo esvazia só o seu), radiador (`cool`), turbo, e sistemas `k:'act'` com `does: ['flaps'|'brake'|'guns'|'ctl']` (hidráulico/pneumático/elétrico; sem nenhum vivo, aquilo trava). Peça de asa: `w: [s, cf]` (sai em par). Outros campos: `stab: 'all'` (estabilizador todo móvel), `boost: { ch, manual }` (comandos com servo), `ail`/`flap` (trecho da envergadura). Superfície destruída trava na deflexão em que estava; flap travado baixado acima do limite é arrancado.
 
 ## Renderização — decisões importantes
 

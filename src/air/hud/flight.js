@@ -3,7 +3,7 @@ import { clamp } from '../../core/util.js';
 import { H } from '../../world/terrain.js';
 import { settings, keyName } from '../../core/settings.js';
 import { HEAT_LIMITS } from '../../vehicles/engineHeat.js';
-import { LABEL, modFrac, fuelLeak } from '../../vehicles/planeDamage.js';
+import { modFrac, fuelLeak } from '../../vehicles/planeDamage.js';
 import { RADAR_MODE } from '../battle.js';
 import { g, V, C, MONO, UI, ptxt, plate, dec } from './kit.js';
 import { sysName } from './themes.js';
@@ -147,7 +147,7 @@ function chips(p) {
   const list = [];
   if (p.flapStage || p.flaps > 0.02) list.push([`FLAPS ${FLAP_TXT[p.flapStage] || '↑'}`, C.ok]);
   if (p.gear) list.push(['TREM', C.amber]);
-  if (p.airbrake) list.push(['FREIO', C.amber]);
+  if (p.brakeOn) list.push(['FREIO', C.amber]);
   const rd = p.sys.radar;
   if (rd && !rd.ranging) list.push([`RADAR ${RADAR_MODE[rd.mode].toUpperCase()}`, rd.on ? T.accent : T.dim]);
   if (p.fire > 0) list.push([`INCÊNDIO · ${kb('a_ext')} ${p.ext ? 'extintor' : 'sem extintor'}`, C.enemy]);
@@ -155,7 +155,7 @@ function chips(p) {
   if (p.engineOn && p.hp.engine < p.maxHp.engine * 0.7) list.push([`MOTOR ${Math.round(100 * (0.35 + 0.65 * p.hp.engine / p.maxHp.engine))}%`, C.amber]);
   if (p.oil) list.push([p.eng.jet ? 'ÓLEO VAZANDO' : 'RADIADOR VAZANDO', C.amber]);
   if (p.wounded) list.push(['PILOTO FERIDO', C.amber]);
-  const dead = ['elev', 'rud', 'ailL', 'ailR', 'cables', 'hyd'].filter(n => p.mods[n] && p.mods[n].dead).map(n => LABEL[n].toUpperCase());
+  const dead = Object.values(p.mods).filter(m => m.dead && ['ctrl', 'flap', 'act', 'turbo', 'radar'].includes(m.kind)).map(m => m.label.toUpperCase());
   if (dead.length) list.push([dead.join(' · ') + ' INOP.', C.enemy]);
   let x = PW, y = -10;
   g.font = `600 11px ${UI}`; g.letterSpacing = '1px';
@@ -192,14 +192,14 @@ function silhouette(p, x, y, w, sh) {
   { const [a, b] = P(D.span * 0.19, -D.L * 0.43); shape(fcol(sf('tail')), sf('tail'), () => { g.beginPath(); g.rect(a, b, D.span * 0.38 * s, D.L * 0.1 * s); }, !p.tailOn); }
   { const [a, b] = P(D.fuseR, D.L * 0.47); shape(fcol(sf('fuse')), sf('fuse'), () => { g.beginPath(); g.roundRect(a, b, D.fuseR * 2 * s, D.L * 0.97 * s, D.fuseR * s); }, false); }
   for (const m of Object.values(M)) {
-    if ((m.name === 'ailL' && !p.wingOn.L) || (m.name === 'ailR' && !p.wingOn.R) || ((m.name === 'elev' || m.name === 'rud') && !p.tailOn)) continue;
-    const f = m.kind === 'engine' ? (p.engineOn ? p.hp.engine / p.maxHp.engine : 0) : modFrac(m);
+    if ((Math.abs(m.c[0]) > D.fuseR * 1.2 && !p.wingOn[m.c[0] > 0 ? 'L' : 'R']) || ((m.name === 'elev' || m.name === 'rud') && !p.tailOn)) continue;
+    const f = m.kind === 'engine' ? (p.engs[m.i].on ? p.engs[m.i].hp / p.maxHp.engine : 0) : modFrac(m);
     const [a, b] = P(m.c[0] + m.h[0], m.c[2] + m.h[2]), ww = Math.max(3, m.h[0] * 2 * s), hh = Math.max(3, m.h[2] * 2 * s);
     g.fillStyle = S.now - m.hitT < 0.25 ? '#fff' : f >= 0.7 ? T.faint : fcol(f); g.beginPath();
     if (m.kind === 'pilot') g.arc(a + ww / 2, b + hh / 2, Math.min(ww, hh) / 2 + 1, 0, 7); else g.roundRect(a, b, ww, hh, 1.5);
     g.fill();
     if (f <= 0) { g.strokeStyle = C.enemy; g.lineWidth = 1.3; g.beginPath(); g.moveTo(a, b); g.lineTo(a + ww, b + hh); g.moveTo(a + ww, b); g.lineTo(a, b + hh); g.stroke(); }
-    if (m.leak > 0 && p.fuel > 0) { g.fillStyle = C.sky; g.beginPath(); g.arc(a + ww + 3, b + hh / 2 + Math.sin(V.blink * 8) * 2, 2, 0, 7); g.fill(); }
+    if (m.leak > 0 && m.left > 0) { g.fillStyle = C.sky; g.beginPath(); g.arc(a + ww + 3, b + hh / 2 + Math.sin(V.blink * 8) * 2, 2, 0, 7); g.fill(); }
   }
   if (p.fire > 0) { const [a, b] = P(p.fireAt[0], p.fireAt[2]); g.fillStyle = `rgba(255,${120 + Math.random() * 80},40,${0.5 + Math.random() * 0.3})`; g.beginPath(); g.arc(a, b, 8 + Math.random() * 3, 0, 7); g.fill(); }
 }
