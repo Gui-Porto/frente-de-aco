@@ -9,9 +9,9 @@
 //  - empuxo ∝ N^3,5 entre marcha lenta e militar;
 //  - spoolUp/spoolDn são TEMPOS medidos (marcha lenta → 95% do empuxo e
 //    militar → 10%); as constantes internas são calibradas a partir deles.
-//  - pós-combustão: só com manete em 100% e N ≥ 97%; acende após abLight s
-//    e cresce em abRamp s; corta quase na hora.
-// Pistão: potência acompanha a manete com atraso curto (resp), cai acima da
+//  - pós-combustão (ab) ou WEP do jato sem PC (wep, kN): só com manete em 100%
+//    e N ≥ 97%; liga e desliga NA HORA (pedido do jogador, como no WT).
+// Pistão: potência acompanha a manete com atraso curto (resp; o WEP entra na hora), cai acima da
 // altitude crítica do compressor; hélice converte em empuxo por eta/V.
 // =====================================================================
 export const ENGINES = {
@@ -21,10 +21,10 @@ export const ENGINES = {
   bmw801: { snd: { f0: 40, f1: 80 }, kind: 'piston', name: 'BMW 801 D-2', hp: 1700, wep: 2050, eta: 0.82, resp: 0.4, altCrit: 5200, altScale: 6500, cooling: 'radial', torque: 1 },
   am38: { snd: { f0: 44, f1: 84 }, kind: 'piston', name: 'Mikulin AM-38', hp: 1600, wep: 1700, eta: 0.8, resp: 0.45, altCrit: 1500, altScale: 7000, cooling: 'liquid', torque: 1 },
   // ---- turbojato (kN por motor; tsfc em kg/(N·h)) ----
-  j47: { snd: { roar: [280, 1150], whine: [2100, 3600] }, kind: 'turbojet', name: 'GE J47-GE-27', mil: 26.3, idle: 0.06, nIdle: 0.45, spoolUp: 5.5, spoolDn: 3.0, tsfc: 0.107, ramK: 0.2, altExp: 0.8 },
-  vk1: { snd: { roar: [260, 1050], whine: [1700, 3100] }, kind: 'turbojet', name: 'Klimov VK-1', mil: 26.5, idle: 0.06, nIdle: 0.42, spoolUp: 4.8, spoolDn: 2.8, tsfc: 0.112, ramK: 0.2, altExp: 0.8 },
-  j79: { snd: { roar: [220, 1000], whine: [2400, 4200], ab: 0.11 }, kind: 'turbojet', name: 'GE J79-GE-17', mil: 52.8, ab: 79.6, idle: 0.05, nIdle: 0.5, spoolUp: 4.5, spoolDn: 2.4, abLight: 0.8, abRamp: 1.2, tsfc: 0.086, tsfcAB: 0.199, ramK: 0.45, altExp: 0.75 },
-  r13: { snd: { roar: [240, 1100], whine: [1900, 3700], ab: 0.12 }, kind: 'turbojet', name: 'Tumansky R-13-300', mil: 39.9, ab: 63.7, idle: 0.05, nIdle: 0.48, spoolUp: 4.0, spoolDn: 2.2, abLight: 0.6, abRamp: 1.0, tsfc: 0.094, tsfcAB: 0.224, ramK: 0.5, altExp: 0.75 },
+  j47: { snd: { roar: [280, 1150], whine: [2100, 3600] }, kind: 'turbojet', name: 'GE J47-GE-27', mil: 26.3, wep: 28.9, idle: 0.06, nIdle: 0.45, spoolUp: 5.5, spoolDn: 3.0, tsfc: 0.107, ramK: 0.2, altExp: 0.8 },
+  vk1: { snd: { roar: [260, 1050], whine: [1700, 3100] }, kind: 'turbojet', name: 'Klimov VK-1', mil: 26.5, wep: 29.2, idle: 0.06, nIdle: 0.42, spoolUp: 4.8, spoolDn: 2.8, tsfc: 0.112, ramK: 0.2, altExp: 0.8 },
+  j79: { snd: { roar: [220, 1000], whine: [2400, 4200], ab: 0.11 }, kind: 'turbojet', name: 'GE J79-GE-17', mil: 52.8, ab: 79.6, idle: 0.05, nIdle: 0.5, spoolUp: 4.5, spoolDn: 2.4, tsfc: 0.086, tsfcAB: 0.199, ramK: 0.45, altExp: 0.75 },
+  r13: { snd: { roar: [240, 1100], whine: [1900, 3700], ab: 0.12 }, kind: 'turbojet', name: 'Tumansky R-13-300', mil: 39.9, ab: 63.7, idle: 0.05, nIdle: 0.48, spoolUp: 4.0, spoolDn: 2.2, tsfc: 0.094, tsfcAB: 0.224, ramK: 0.5, altExp: 0.75 },
 };
 const HP_W = 745.7, PISTON_FUEL = 0.000105; // kg/s por hp (mantém a autonomia já balanceada)
 
@@ -62,25 +62,24 @@ export class EngineSet {
     this.E = ENGINES[id]; this.count = count;
     if (!this.E) throw new Error(`motor desconhecido: ${id}`);
     this.jet = this.E.kind === 'turbojet';
-    this.N = 1; this.ab = 0; this.abT = 0; this.power = 1; // N: rotação; ab: 0..1 da pós-combustão; power: fração entregue (pistão)
+    this.N = 1; this.ab = 0; this.power = 1; this.base = 1; // N: rotação; ab: 0..1 da pós-combustão; power: fração entregue (pistão)
     this.thrust = 0; this.flow = 0;                       // saídas do último passo (N, kg/s)
   }
   get hasAB() { return !!this.E.ab; }
+  get hasBoost() { return !this.jet || !!(this.E.ab || this.E.wep); }
   get abLit() { return this.ab > 0.02; }
   // fração de potência/empuxo para HUD, som e temperatura (0..1; >1 = WEP/pós-combustão)
-  get output() { return this.jet ? thrustFrac(this.E, this.N) * (1 + this.ab * ((this.E.ab || this.E.mil) / this.E.mil - 1)) : this.power; }
+  get output() { return this.jet ? thrustFrac(this.E, this.N) * (1 + this.ab * ((this.E.ab || this.E.wep || this.E.mil) / this.E.mil - 1)) : this.power; }
   // thr 0..1; boost = WEP/pós-combustão pedido; health 0..1 (dano reduz o rendimento); running = motor ligado
   step(dt, thr, boost, health, running) {
     const E = this.E;
     if (this.jet) {
       const Nc = running ? E.nIdle + (1 - E.nIdle) * thr : 0;
       this.N = running ? stepRpm(E, this.N, Nc, dt) : Math.max(0, this.N - dt * 0.15);
-      const want = running && boost && E.ab && thr > 0.99 && this.N > 0.97;
-      if (want) { this.abT += dt; if (this.abT >= E.abLight) this.ab = Math.min(1, this.ab + dt / E.abRamp); }
-      else { this.abT = 0; this.ab = Math.max(0, this.ab - dt / 0.35); }
+      this.ab = running && boost && (E.ab || E.wep) && thr > 0.99 && this.N > 0.97 ? 1 : 0;
     } else {
-      const target = running ? thr * (boost ? E.wep / E.hp : 1) : 0;
-      this.power += (target - this.power) * Math.min(1, dt / E.resp);
+      this.base += ((running ? thr : 0) - this.base) * Math.min(1, dt / E.resp);
+      this.power = this.base * (running && boost ? E.wep / E.hp : 1);
     }
     this.health = running ? health : 0;
   }
@@ -89,10 +88,10 @@ export class EngineSet {
     const E = this.E, k = this.count * this.health;
     if (this.jet) {
       const amb = Math.pow(atm.sigma, E.altExp) * (1 + E.ramK * mach * mach);
-      const mil = E.mil * 1000 * thrustFrac(E, this.N), abx = (E.ab ? (E.ab - E.mil) * 1000 : 0) * this.ab;
+      const bk = E.ab || E.wep, mil = E.mil * 1000 * thrustFrac(E, this.N), abx = (bk ? (bk - E.mil) * 1000 : 0) * this.ab;
       this.thrust = (mil + abx) * amb * k;
       // na pós-combustão o consumo específico vale para o empuxo TOTAL (por isso dispara)
-      const fl = mil * E.tsfc + (E.ab ? this.ab * ((mil + (E.ab - E.mil) * 1000) * E.tsfcAB - mil * E.tsfc) : 0);
+      const fl = mil * E.tsfc + (bk ? this.ab * ((mil + (bk - E.mil) * 1000) * (E.tsfcAB || E.tsfc * 1.2) - mil * E.tsfc) : 0);
       this.flow = fl * amb * k / 3600;
       return this.thrust;
     }

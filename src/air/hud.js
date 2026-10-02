@@ -1,11 +1,12 @@
 import { Quaternion } from 'three';
 import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
-import { isDown } from '../core/settings.js';
+import { isDown, settings, keyName } from '../core/settings.js';
 import { V3, clamp } from '../core/util.js';
 import { drawScore } from '../ui/hud.js';
 import { $ } from '../core/util.js';
-import { B } from './battle.js';
+import { B, wear } from './battle.js';
+import { AIRFIELDS } from '../world/terrain.js';
 import { LOCK, LOCK_LABEL, leadPoint } from './targeting.js';
 import { missiles } from './missiles.js';
 import { acam, CAM_MODES } from './camera.js';
@@ -55,11 +56,41 @@ export function updateAirHUD(dt) {
     leftPanels(p, T);
     warnings(p);
     hitMessages();
+    baseHud(p);
   } else if (S.state === 'spectate' && v) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, V.W / 2, V.H - 40, 15, C.ally, 'center', UI);
   }
   tacMap(v, T);
-  $('#gdark').style.opacity = live ? clamp(p.gStress - 0.3, 0, 1) * 0.92 : 0;
+  $('#gdark').style.opacity = live ? p.blackout * 0.97 : 0;
+  if (live && p.koT > 0) otxt(`PILOTO DESMAIADO · ${Math.ceil(p.koT)} s`, V.W / 2, V.H / 2 + 6, 22, C.white, 'center');
+}
+
+// ---------- base aérea: marcador da pista e barra de reparo/rearme ----------
+function baseHud(p) {
+  const a = AIRFIELDS.find(f => f.team === p.team), R = B.refit; if (!a) return;
+  _b.set(a.x, a.h + 6, a.z); const d = _b.distanceTo(p.pos);
+  const need = wear(p) > 0.04 || p.guns.every(q => q.ammo < q.max * 0.25) || p.fuel < p.fuelMax * 0.2;
+  if (d > 900) {
+    const pr = proj(_b, P1);
+    if (pr && pr.on) {
+      g.strokeStyle = C.ally; g.lineWidth = 1.6; glow(C.ally, 4);
+      g.beginPath(); g.moveTo(pr.x - 4, pr.y - 9); g.lineTo(pr.x - 7, pr.y + 9); g.moveTo(pr.x + 4, pr.y - 9); g.lineTo(pr.x + 7, pr.y + 9); g.stroke(); g.shadowBlur = 0;
+      otxt(`BASE  ${fmtD(d)}`, pr.x, pr.y + 24, 12, need ? C.amber : C.ally, 'center', MONO, 500);
+    } else if (need) edgeArrow({ pos: _b }, C.ally, d, true);
+  }
+  if (!R.onField) {
+    // aproximação: dica do trem (com o limite de velocidade) e do pouso
+    const agl = p.pos.y - a.h;
+    if (p.gear && d < 4000 && !p.onGround) otxt('TREM BAIXADO · pouse na pista para reparar e rearmar', V.W / 2, V.H * 0.72, 14, C.ally, 'center');
+    else if (!p.gear && d < 3000 && agl < 500) otxt(`Para pousar: abaixo de ${Math.round(p.gearV * 3.6)} km/h baixe o trem (${keyName(settings.binds.a_gear[0])}) e os flaps (${keyName(settings.binds.a_flaps[0])})`, V.W / 2, V.H * 0.72, 14, p.ias > p.gearV ? C.amber : C.ally, 'center');
+    return;
+  }
+  const y = V.H * 0.7, w = 320, x = V.W / 2 - w / 2;
+  if (R.done) { otxt('PRONTO · acelere para decolar e recolha o trem (G)', V.W / 2, y, 16, C.ok, 'center'); return; }
+  if (!R.parked) { otxt('Pare na pista para reparar e rearmar · freio: H (ou manete no zero)', V.W / 2, y, 15, C.ally, 'center'); return; }
+  const k = clamp(R.t / R.dur, 0, 1);
+  otxt(`REPARO E REARME · ${Math.ceil(R.dur - R.t)} s`, V.W / 2, y - 12, 15, C.white, 'center');
+  g.fillStyle = C.ink; g.fillRect(x, y, w, 8); g.fillStyle = C.ally; g.fillRect(x + 1, y + 1, (w - 2) * k, 6);
 }
 
 // ---------- barra superior: objetivo, tempo, câmera ----------
@@ -136,35 +167,38 @@ function edgeArrow(e, col, d, big) {
 const _q = new Quaternion();
 
 // ---------- retículo giroscópico + círculo do mouse + lock do míssil ----------
+// branco e fino como no WT: contorno escuro leve só para ler contra céu claro
+const RW = 'rgba(255,255,255,.85)', RWD = 'rgba(255,255,255,.5)';
+function rstroke(w, col = RW) { g.shadowBlur = 0; g.lineWidth = w + 1.2; g.strokeStyle = 'rgba(0,0,0,.35)'; g.stroke(); g.lineWidth = w; g.strokeStyle = col; g.stroke(); }
 function reticle(p) {
-  // eixo das armas (convergência ~400 m)
-  _a.set(0, 0, 400).applyMatrix4(p.root.matrixWorld);
+  // para onde as balas vão (eixo das armas, ajustado para o mouse dentro do cone — plane.fireDir), a 400 m
+  p.fireDir(_a).multiplyScalar(400).add(p.pos);
   const pr = proj(_a, P1);
   // distância da régua: radar telemétrico (F-86/MiG-15) mede quem está no cone; sem ele, o alvo marcado
   const rr = p.sys.radar && p.sys.radar.ranging ? p.sys.radar : null;
   const mk = rr ? rr.target : B.marked, d = rr ? rr.range : mk ? mk.pos.distanceTo(p.pos) : 0;
   const fpx = V.H / 2 / Math.tan(camera.fov * Math.PI / 360);
   if (pr) {
-    const x = pr.x, y = pr.y, R = 15, inR = mk && d < 1200;
+    const x = pr.x, y = pr.y, R = 11, inR = mk && d < 1200;
     // anel partido: quatro arcos com folga nos pontos cardeais, traços para fora e ponto central
     g.beginPath();
     for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; g.moveTo(x + Math.cos(a - 0.5) * R, y + Math.sin(a - 0.5) * R); g.arc(x, y, R, a - 0.5, a + 0.5); }
-    gstroke(1.5);
+    rstroke(1.1);
     g.beginPath();
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * (R + 3), y + s * (R + 3)); g.lineTo(x + c * (R + 10), y + s * (R + 10)); }
-    gstroke(1.8);
-    g.beginPath(); g.arc(x, y, 1.7, 0, 7); g.fillStyle = C.out; g.fill(); g.beginPath(); g.arc(x, y, 1.2, 0, 7); g.fillStyle = C.green; g.fill();
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * (R + 3), y + s * (R + 3)); g.lineTo(x + c * (R + 7), y + s * (R + 7)); }
+    rstroke(1.1);
+    g.beginPath(); g.arc(x, y, 1.1, 0, 7); g.fillStyle = RW; g.fill();
     // régua de alcance (como a barra do K-14): arco de 1200 m que encolhe até a distância do alvo marcado;
     // a marca branca é a convergência das armas (400 m) — o alvo está no alcance ideal quando o arco passa dela
-    const RR = 30, a0 = -Math.PI / 2;
-    g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2); gstroke(0.8, 'rgba(108,255,122,.22)');
+    const RR = 24, a0 = -Math.PI / 2;
+    g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2); g.lineWidth = 0.7; g.strokeStyle = 'rgba(255,255,255,.14)'; g.stroke();
     if (inR) {
       const k = clamp(d / 1200, 0, 1), close = d < 450;
-      g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2 * k); gstroke(close ? 3 : 2.2, close ? C.green : C.greenD);
-      const ac = a0 + Math.PI * 2 * k; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 4), y + Math.sin(ac) * (RR - 4)); g.lineTo(x + Math.cos(ac) * (RR + 4), y + Math.sin(ac) * (RR + 4)); gstroke(1.6, C.green);
-      otxt((rr ? 'RADAR ' : '') + fmtD(d), x + RR + 10, y + 5, 13, close ? C.green : C.greenD, 'left', MONO, 500);
+      g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2 * k); rstroke(close ? 1.8 : 1.2, close ? RW : RWD);
+      const ac = a0 + Math.PI * 2 * k; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 3), y + Math.sin(ac) * (RR - 3)); g.lineTo(x + Math.cos(ac) * (RR + 3), y + Math.sin(ac) * (RR + 3)); rstroke(1.1);
+      otxt((rr ? 'RADAR ' : '') + fmtD(d), x + RR + 8, y + 4, 11, close ? RW : RWD, 'left', MONO, 500);
     }
-    const ac = a0 + Math.PI * 2 / 3; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 3), y + Math.sin(ac) * (RR - 3)); g.lineTo(x + Math.cos(ac) * (RR + 3), y + Math.sin(ac) * (RR + 3)); gstroke(1.4, C.white);
+    const ac = a0 + Math.PI * 2 / 3; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 3), y + Math.sin(ac) * (RR - 3)); g.lineTo(x + Math.cos(ac) * (RR + 3), y + Math.sin(ac) * (RR + 3)); rstroke(1, RWD);
     // marcador de acerto: X que abre e some (branco; âmbar se foi forte)
     const ha = S.now - B.hitT;
     if (ha < 0.2) {
@@ -176,7 +210,7 @@ function reticle(p) {
     // lock do míssil: cone do buscador ao redor do eixo
     if (B.seeker && p.missiles > 0) {
       const M = B.seeker.M, st = B.seeker.state, rc = Math.tan((M.acq || M.fov * 2.5) * Math.PI / 180) * fpx;
-      const col = st === LOCK.LOCKED ? C.enemy : st === LOCK.TRACK ? C.amber : st === LOCK.LOST ? C.enemy : 'rgba(108,255,122,.35)';
+      const col = st === LOCK.LOCKED ? C.enemy : st === LOCK.TRACK ? C.amber : st === LOCK.LOST ? C.enemy : 'rgba(255,255,255,.3)';
       g.setLineDash(st === LOCK.SEARCH ? [3, 7] : []); g.beginPath(); g.arc(x, y, rc, 0, 7); gstroke(1.2, col); g.setLineDash([]);
       otxt(LOCK_LABEL[st], x, y + rc + 18, 14, col, 'center', UI, 600);
       const tg = B.seeker.target;

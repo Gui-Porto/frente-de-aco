@@ -147,14 +147,14 @@ export const PLANES = {
       { id: 'hyd', k: 'act', n: 'Hidráulico utilitário', does: ['flaps', 'brake'], z: -0.02, y: -0.45, s: [0.3, 0.18, 0.4] },
       { id: 'hydN', k: 'act', n: 'Comando hidráulico', does: ['ctl'], z: -0.3, y: 0.3, s: [0.2, 0.15, 0.4] }, { id: 'hydA', k: 'act', n: 'Comando alternativo', does: ['ctl'], z: -0.3, y: -0.3, s: [0.2, 0.15, 0.4] }],
     guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300 }],
-    missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30',
+    missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', maw: 'pd',
     bombs: [], rockets: null
   },
   mig15: {
     key: 'mig15', type: 'plane', name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
     mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.016, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
-    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1',
+    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1', maw: 'pd',
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
     fuse: [[-0.53, .42, .46, .44, .08], [-0.45, .56, .62, .58, .08], [-0.32, .78, .86, .82, .05], [-0.16, .96, 1.04, 1, .02], [0, 1.04, 1.1, 1.06, 0], [0.14, 1.04, 1.1, 1.06, 0], [0.27, .98, 1.02, 1, -.01], [0.37, 'n1.06', 'n1.06', 'n1.06', -.02], [0.46, 'n1', 'n1', 'n1', -.02]],
     canopy: { z: 0.22, len: 2.3, w: 0.42, h: 0.55, frames: [0.24, 0.6] },
@@ -196,7 +196,7 @@ export const PLANES = {
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },
     hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
     fuseR: 0.62, noseR: 0.45, wingZ: -1.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,
-    radar: 'rp22', rwr: 'spo10',
+    radar: 'rp22', rwr: 'spo10', maw: 'pd',
     fuse: [[-0.53, .82, .84, .82, 0], [-0.44, .86, .9, .86, 0], [-0.3, .92, 1, .92, 0], [-0.1, .96, 1.18, .96, 0], [0.08, .98, 1.22, .98, 0], [0.2, .98, 1.18, .98, 0], [0.3, .94, 1, .94, 0], [0.39, 'n1.18', 'n1.18', 'n1.18', 0], [0.46, 'n1.1', 'n1.1', 'n1.1', 0]],
     canopy: { z: 0.26, len: 2.7, w: 0.38, h: 0.5, frames: [0.26, 0.62] },
     // tanques na fuselagem e nas asas; estabilizador todo móvel; dois hidráulicos (principal e de reforço) movem os comandos

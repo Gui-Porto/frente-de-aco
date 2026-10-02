@@ -1,3 +1,4 @@
+import { AIRFIELDS } from '../../world/terrain.js';
 import { S, planes } from '../../core/state.js';
 import { clamp } from '../../core/util.js';
 import { RADAR_MODE, B } from '../battle.js';
@@ -25,7 +26,7 @@ export function leftPanels(p, T) {
   const y = V.H - RH * k - 16;
   const rd = p.sys.radar;
   if (rd && !rd.ranging && T.scope) { g.save(); g.translate(x, y); g.scale(k, k); radarScope(p, rd, T); g.restore(); x += (RW + 12) * k; }
-  if (p.sys.rwr) { g.save(); g.translate(x, y); g.scale(k, k); rwrScope(p, p.sys.rwr, T); g.restore(); }
+  if (p.sys.rwr || p.sys.maw) { g.save(); g.translate(x, y); g.scale(k, k); rwrScope(p, p.sys.rwr, p.sys.maw, T); g.restore(); }
 }
 
 // ---------- radar: B-scope ----------
@@ -92,21 +93,21 @@ function radarScope(p, rd, T) {
   ptxt(`${kb('a_rmode')} modo  ·  ${kb('a_rlock')} travar`, RW - 14, ty, 10.5, T.dim, 'right', UI, 600);
 }
 
-// ---------- RWR ----------
-function rwrScope(p, rw, T) {
+// ---------- RWR (+ MAW: o alerta de míssil aparece só aqui, não no centro da tela) ----------
+function rwrScope(p, rw, mw, T) {
   plate(0, 0, WW, RH, T);
-  ptxt(sysName(T, rw.W), 22, 22, 13, T.fg, 'left', UI, 700);
-  ptxt('RWR', WW - 14, 22, 11, T.dim, 'right', UI, 700);
-  const cx = WW / 2, cy = 32 + (RH - 66) / 2, R = 66, top = rw.top;
+  ptxt(sysName(T, (rw || mw).W), 22, 22, 13, T.fg, 'left', UI, 700);
+  ptxt(rw ? 'RWR' : 'MAW', WW - 14, 22, 11, T.dim, 'right', UI, 700);
+  const cx = WW / 2, cy = 32 + (RH - 66) / 2, R = 66, top = rw && rw.top;
   g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.arc(cx, cy, R + 4, 0, 7); g.fill();
   // avião no centro
   g.strokeStyle = T.dim; g.lineWidth = 1.2; g.beginPath(); g.moveTo(cx, cy - 7); g.lineTo(cx, cy + 6); g.moveTo(cx - 6, cy); g.lineTo(cx + 6, cy); g.moveTo(cx - 3, cy + 5); g.lineTo(cx + 3, cy + 5); g.stroke();
-  if (rw.W.res >= 90) quadrants(rw, T, cx, cy, R);
+  if (rw && rw.W.res >= 90) quadrants(rw, T, cx, cy, R);
   else {
     g.strokeStyle = T.faint; g.lineWidth = 1;
     for (const k of [0.4, 0.75, 1]) { g.beginPath(); g.arc(cx, cy, R * k, 0, 7); g.stroke(); }
     for (let a = 0; a < 360; a += 30) { const r0 = a % 90 ? R - 4 : R - 9, s = Math.sin(a * DEG), c = Math.cos(a * DEG); g.beginPath(); g.moveTo(cx + s * r0, cy - c * r0); g.lineTo(cx + s * R, cy - c * R); g.stroke(); }
-    for (const th of rw.list.slice(0, rw.W.maxShow)) {
+    for (const th of rw ? rw.list.slice(0, rw.W.maxShow) : []) {
       const rr = R * (0.22 + 0.72 * (1 - th.strength)), x = cx + Math.sin(th.az) * rr, y = cy - Math.cos(th.az) * rr;
       const col = th.lvl === 'SEARCH' ? T.fg : th.lvl === 'TRACK' ? C.amber : C.enemy;
       const show = th.lvl !== 'GUIDANCE' || Math.sin(V.blink * 16) > -0.3;
@@ -115,8 +116,15 @@ function rwrScope(p, rw, T) {
       if (th === top) { g.strokeStyle = col; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y + 2, 13, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
     }
   }
-  const ty = 32 + (RH - 66) + 17;
-  if (top) ptxt(`${LVL_TXT[top.lvl]}${top.type ? ' · ' + top.type : ''} · ${rw.W.res >= 90 ? QNAME[(top.az >= 0 ? 'D' : 'E') + (Math.abs(top.az) < Math.PI / 2 ? 'F' : 'T')] : clock(top.az)}`, cx, ty, 12, top.lvl === 'SEARCH' ? T.fg : top.lvl === 'TRACK' ? C.amber : C.enemy, 'center', UI, 700);
+  // mísseis do MAW: triângulo vermelho piscando na direção, mais perto do centro quanto mais perto
+  const blink = Math.sin(V.blink * 12) > -0.3;
+  if (mw && blink) for (const m of mw.list) {
+    const rr = R * clamp(m.r / mw.W.range, 0.2, 1), s = Math.sin(m.az), c = Math.cos(m.az), x = cx + s * rr, y = cy - c * rr;
+    g.fillStyle = C.enemy; g.beginPath(); g.moveTo(x - s * 9, y + c * 9); g.lineTo(x + s * 5 - c * 6, y - c * 5 - s * 6); g.lineTo(x + s * 5 + c * 6, y - c * 5 + s * 6); g.closePath(); g.fill();
+  }
+  const ty = 32 + (RH - 66) + 17, mm = mw && mw.list[0];
+  if (mm) { if (blink) ptxt(`MÍSSIL · ${clock(mm.az)} · ${Math.max(1, Math.round(mm.tti))} s`, cx, ty, 12, C.enemy, 'center', UI, 800); }
+  else if (top) ptxt(`${LVL_TXT[top.lvl]}${top.type ? ' · ' + top.type : ''} · ${rw.W.res >= 90 ? QNAME[(top.az >= 0 ? 'D' : 'E') + (Math.abs(top.az) < Math.PI / 2 ? 'F' : 'T')] : clock(top.az)}`, cx, ty, 12, top.lvl === 'SEARCH' ? T.fg : top.lvl === 'TRACK' ? C.amber : C.enemy, 'center', UI, 700);
   else ptxt('Sem emissões', cx, ty, 12, T.dim, 'center', UI, 600);
 }
 // SPO-10: quatro lâmpadas (quadrantes). Busca pisca; rastreio/trava fica acesa.
@@ -146,6 +154,9 @@ export function tacMap(v, T) {
   if (o && o.zone) { const [zx, zy] = to(o.zone.x, o.zone.z); g.strokeStyle = C.sky; g.setLineDash([3, 4]); g.beginPath(); g.arc(zx, zy, o.zone.r / rng * R, 0, 7); g.stroke(); g.setLineDash([]); }
   if (o && o.base) { const [bx, by] = to(o.base.x, o.base.z); g.fillStyle = C.ally; g.fillRect(bx - 4, by - 4, 8, 8); }
   g.save(); g.beginPath(); g.arc(x, y, R, 0, 7); g.clip();
+  // pistas: a sua em azul, a inimiga em vermelho
+  for (const a of AIRFIELDS) { const [ax, ay] = to(a.x, a.z - a.len / 2), [bx, by] = to(a.x, a.z + a.len / 2); g.strokeStyle = a.team === v.team ? C.ally : C.enemy; g.lineWidth = 3; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
+  g.lineWidth = 1;
   const rd = v.sys && v.sys.radar && !v.sys.radar.ranging ? v.sys.radar : null;
   for (const e of planes) {
     if (!e.alive || e === v) continue;

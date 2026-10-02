@@ -5,10 +5,11 @@ vi.mock('../src/ui/hud.js', () => ({ showDmg() {} }));
 vi.mock('../src/core/state.js', () => ({ S: { now: 0 } }));
 const { planeModules, applyMod, powered, ctrlAuthority, fuelInit, fuelStep, fuelLeak, modsOf } = await import('../src/vehicles/planeDamage.js');
 const { PLANES } = await import('../src/data/vehicles.js');
+const { tipBreak, tipArea } = await import('../src/vehicles/planeGeom.js');
 
 // avião mínimo para os módulos (sem física nem modelo)
 const mk = key => {
-  const D = PLANES[key], pl = { def: D, mods: planeModules(D), wingOn: { L: true, R: true }, sys: {}, guns: D.guns.map(g => ({ pts: g.span.flatMap(s => (g.n > 1 ? [[s], [-s]] : [[s]])) })), ail: 0, elev: 0, rud: 0, damage() {}, ignite() {} };
+  const D = PLANES[key], pl = { def: D, mods: planeModules(D), wingOn: { L: true, R: true }, sys: {}, guns: D.guns.map(g => ({ pts: g.span.flatMap(s => (g.n > 1 ? [[s], [-s]] : [[s]])) })), ail: 0, elev: 0, rud: 0, damage() {}, ignite() {}, ripSurface(m) { m.ripped = true; m.stuck = 0; } };
   fuelInit(pl, 1000); return pl;
 };
 const kill = (pl, n) => applyMod(pl, pl.mods[n], 999, null, null);
@@ -62,7 +63,20 @@ describe('efeitos', () => {
   });
   it('aileron destruído trava na deflexão em que estava', () => {
     const pl = mk('fw190'); pl.ail = 0.8;
+    applyMod(pl, pl.mods.ailL, pl.mods.ailL.hp + 0.01, null, null);
+    expect(pl.mods.ailL.stuck).toBeCloseTo(0.48); expect(pl.mods.ailL.ripped).toBeFalsy();
+  });
+  it('estrago muito acima do necessário (ou granada) arranca a superfície: sem deflexão nenhuma', () => {
+    const pl = mk('fw190'); pl.ail = 0.8;
     kill(pl, 'ailL');
-    expect(pl.mods.ailL.stuck).toBeCloseTo(0.48);
+    expect(pl.mods.ailL.ripped).toBe(true); expect(pl.mods.ailL.stuck).toBe(0);
+    const q = mk('f86'); applyMod(q, q.mods.rud, q.mods.rud.hp + 0.01, null, { tnt: 0.01 });
+    expect(q.mods.rud.ripped).toBe(true);
+  });
+});
+describe('ponta da asa destacável', () => {
+  it('quebra na dobra do F-4 e no início do aileron dos outros; a ponta leva uma fração plausível da área', () => {
+    expect(tipBreak(PLANES.f4e)).toBe(0.66);
+    for (const k of Object.keys(PLANES)) { const a = tipArea(PLANES[k]); expect(a).toBeGreaterThan(0.08); expect(a).toBeLessThan(0.5); }
   });
 });

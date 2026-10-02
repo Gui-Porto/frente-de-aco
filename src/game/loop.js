@@ -1,4 +1,4 @@
-import { updatePlaneFx } from '../vehicles/planeFx.js';
+import { updatePlaneFx, updateFlakes } from '../vehicles/planeFx.js';
 import { camera, frameLighting, renderFrame } from '../core/render.js';
 import { S, tanks, planes, projs } from '../core/state.js';
 import { endFrame } from '../core/settings.js';
@@ -19,7 +19,7 @@ import { B } from '../air/battle.js';
 import { updateAirCamera } from '../air/camera.js';
 import { updateAirHUD } from '../air/hud.js';
 import { updateHangar } from '../air/hangar.js';
-import { airAudio } from '../air/sound.js';
+import { airAudio, airAudioOff } from '../air/sound.js';
 import { initAir } from '../air/screens.js';
 import { missiles, launchMissile } from '../air/missiles.js';
 
@@ -39,7 +39,7 @@ export function simulate(dt) {
     if (!t.alive && t.burnT > 0) { t.burnT -= dt; if ((t.smokeT -= dt) < 0) { t.smokeT = .22; fxBurn(t.centerPos(new V3()).add(rv(1)), 1.2); } }
   }
   for (const p of planes) { p.physics(dt); p.updateWeapons(dt); p.applyTransform(); updatePlaneFx(p, dt); }
-  updateProjs(dt); updatePopped(); updateParts(dt);
+  updateProjs(dt); updatePopped(); updateParts(dt); updateFlakes(dt);
   if (S.mode !== 'air' && (S.state === 'play' || S.state === 'spawn' || S.state === 'spectate')) updateMatch(dt);
 }
 
@@ -57,11 +57,15 @@ function frame(ts) {
   grass.count = Q.grass; grass.update(dt);
   if ((flagT += dt) > 0.05) { waveFlags(S.now + ts / 1000); flagT = 0; }
   // motores
-  if (S.mode === 'air' || S.state === 'airmenu') { if (eng.tank) eng.tank.g.gain.value = 0; airAudio(dt || 0.016); }
+  if (S.mode === 'air' || S.state === 'airmenu') { if (eng.tank) eng.tank.g.gain.value = eng.tank.track.g.gain.value = 0; airAudio(dt || 0.016); }
   else if (eng.tank) {
+    airAudioOff(); // gravações/vozes do modo aéreo não ficam tocando na batalha de tanques
     const on = p && p.alive && S.state === 'play' && !S.paused && p.type !== 'plane';
     eng.tank.g.gain.value = on ? 0.05 + Math.abs(p.throttle) * 0.03 : 0;
-    if (on) { eng.tank.o.frequency.value = 22 + p.rpm / 60; eng.tank.o2.frequency.value = 11 + p.rpm / 120; }
+    if (on) { eng.tank.o.frequency.value = 22 + p.rpm / 60; eng.tank.o2.frequency.value = 11 + p.rpm / 120; eng.tank.lfo.frequency.value = (22 + p.rpm / 60) / 4; }
+    // esteiras: chocalho dos elos no ritmo da velocidade
+    const sp = on ? Math.abs(p.vFwd || 0) : 0;
+    eng.tank.track.g.gain.value = Math.min(1, sp / 6) * 0.07; eng.tank.track.lfo.frequency.value = 2 + sp * 2.2; eng.tank.track.f.frequency.value = 700 + sp * 40;
     const pl = p && p.alive && p.type === 'plane' && !S.paused ? p : null;
     let near = pl, nd = 0;
     if (!near) { nd = 1e9; for (const q of planes) { if (!q.alive) continue; const d = q.pos.distanceTo(camera.position); if (d < nd) { nd = d; near = q; } } }

@@ -34,15 +34,15 @@ export const ACTIONS = [
   ['a_airbrake', 'Avião', 'Freio aerodinâmico', ['KeyH']],
   ['a_zoom', 'Avião', 'Zoom / câmera de mira (segurar)', ['Mouse2']],
   // mesmos comandos nas batalhas terrestres e na Batalha Aérea (padrão do War Thunder com mouse aim)
-  ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Mouse1', 'Space']],
+  ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Space']],
   ['a_cm', 'Avião', 'Contramedidas (flares + chaff)', ['KeyX']],
   ['a_wsel', 'Avião', 'Selecionar míssil', ['KeyZ']],
   ['a_rmode', 'Avião', 'Radar: trocar modo', ['KeyN']],
-  ['a_rlock', 'Avião', 'Radar: travar / soltar alvo', ['KeyL']],
+  ['a_rlock', 'Avião', 'Radar: travar / soltar alvo', ['CapsLock']],
   ['a_gear', 'Avião', 'Trem de pouso', ['KeyG']],
   ['a_ext', 'Avião', 'Extintor de incêndio', ['KeyK']],
   ['a_cam', 'Avião', 'Trocar câmera (cockpit / externa)', ['KeyV']],
-  ['a_target', 'Avião', 'Trocar alvo marcado', ['KeyT']],
+  ['a_target', 'Avião', 'Marcar alvo na mira', ['Mouse1', 'KeyT']],
   ['freelook', 'Geral', 'Olhar livre (segurar)', ['KeyC']],
   ['score', 'Geral', 'Placar (segurar)', ['Tab']],
   ['map', 'Geral', 'Mapa ampliado (segurar)', ['KeyM']],
@@ -64,7 +64,7 @@ export function defaults() {
     mouse: { tank: 1.0, sight: 1.0, plane: 1.0, invertY: false },
     graphics: { quality: 'alta' },
     audio: { master: 0.8, sfx: 1.0, engine: 0.8 },
-    bindsV: 2,
+    bindsV: 3,
     gameplay: { tankAssist: true, leadMarker: true, flightMode: 'instrutor', camSmooth: true, hitcam: true },
   };
 }
@@ -86,6 +86,12 @@ if (saved && saved.binds && (saved.bindsV || 1) < 2) {
   const d = defaults().binds;
   for (const id of ['a_thr_up', 'a_thr_dn', 'a_pitch_up', 'a_pitch_dn', 'a_roll_l', 'a_roll_r', 'a_yaw_l', 'a_yaw_r', 'freelook']) settings.binds[id] = [...d[id]];
   settings.bindsV = 2;
+}
+// v3 (padrão WT): Caps trava o alvo no radar, botão do meio (scroll) marca o alvo; míssil fica no Espaço
+if (saved && saved.binds && (saved.bindsV || 1) < 3) {
+  const d = defaults().binds;
+  for (const id of ['a_rlock', 'a_target', 'a_missile']) settings.binds[id] = [...d[id]];
+  settings.bindsV = 3;
 }
 const listeners = [];
 export function onSettings(fn) { listeners.push(fn); }

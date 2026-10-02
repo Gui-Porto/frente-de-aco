@@ -35,6 +35,7 @@ addEventListener('mousedown', e => {
   if (!playing() || S.paused) return;
   if (e.target.closest && e.target.closest('button, .ov')) return;
   if (!input.locked) lockPointer();
+  if (e.button === 1) e.preventDefault(); // botão do meio marca alvo: sem rolagem automática do navegador
   codeDown('Mouse' + e.button);
 });
 addEventListener('mouseup', e => { codeUp('Mouse' + e.button); cam.drag = false; });

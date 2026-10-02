@@ -4,6 +4,7 @@ import { H } from '../../world/terrain.js';
 import { settings, keyName } from '../../core/settings.js';
 import { HEAT_LIMITS } from '../../vehicles/engineHeat.js';
 import { modFrac, fuelLeak } from '../../vehicles/planeDamage.js';
+import { wingCfg, tailCfg, finCfg, station, finStation, tipBreak, SURF } from '../../vehicles/planeGeom.js';
 import { RADAR_MODE } from '../battle.js';
 import { g, V, C, MONO, UI, ptxt, plate, dec } from './kit.js';
 import { sysName } from './themes.js';
@@ -27,7 +28,7 @@ export function flightPanel(p, theme) {
   g.save(); g.translate(x0, y0); g.scale(k, k);
   plate(0, 0, PW, PH, T);
   header(p);
-  silhouette(p, 14, 44, 118, 150);
+  silhouette(p, 10, 42, 128, 178);
   flight(p);
   heading(p, 150, 124, 316);
   engine(p, 150, 140);
@@ -99,8 +100,8 @@ function engine(p, x, y) {
   if (E.jet && E.hasAB) {
     const lit = E.ab > 0.02, lighting = p.wep && !lit;
     lbl('PÓS-COMB.', tx, top + 52); ptxt(lit ? `ACESA ${Math.round(E.ab * 100)}%` : lighting ? (E.N > 0.97 ? 'ACENDENDO' : 'AGUARDA ROTAÇÃO') : 'DESLIGADA', tx + 108, top + 52, 13, lit ? T.ab : lighting ? C.amber : T.dim, 'right', UI, 700);
-  } else if (!E.jet) { lbl('WEP', tx, top + 52); ptxt(p.wep ? 'LIGADO' : 'DESLIGADO', tx + 108, top + 52, 13, p.wep ? T.ab : T.dim, 'right', UI, 700); }
-  else { lbl('PÓS-COMB.', tx, top + 52); ptxt('NÃO EQUIPADO', tx + 108, top + 52, 12, T.faint, 'right', UI, 600); }
+  } else if (boost) { lbl('WEP', tx, top + 52); ptxt(p.wep ? 'LIGADO' : 'DESLIGADO', tx + 108, top + 52, 13, p.wep ? T.ab : T.dim, 'right', UI, 700); }
+  else { lbl('PÓS-COMB.', tx, top + 52); ptxt('—', tx + 108, top + 52, 13, T.faint, 'right', UI, 600); }
   // temperaturas
   const rx = x + 170, L = HEAT_LIMITS[p.cooling], hc = (v, lim) => (v > lim + 10 ? (Math.sin(V.blink * 10) > 0 ? C.enemy : T.fg) : v > lim ? C.amber : T.fg);
   if (!p.engineOn) { lbl('MOTOR', rx, top + 8); ptxt('PARADO', rx + 146, top + 8, 15, C.enemy, 'right', UI, 700); }
@@ -170,34 +171,57 @@ function chips(p) {
   g.letterSpacing = '0px';
 }
 
-// silhueta vista de cima com os componentes (como a do WT): cor = integridade
+// silhueta vista de cima (como a do WT), desenhada com a MESMA planta do modelo 3D (planeGeom.js):
+// asa em raiz + ponta, aileron/flap/profundor/leme onde estão, contorno da fuselagem pelo loft.
+// Cor = integridade; peça perdida = contorno vermelho tracejado; tanque mostra o nível de combustível.
 const fcol = f => (f <= 0 ? '#1d1d1d' : f < 0.35 ? C.enemy : f < 0.7 ? C.amber : 'rgba(238,241,236,.75)');
 function silhouette(p, x, y, w, sh) {
   const D = p.def, M = p.mods;
-  const s = Math.min(sh / D.L, w / D.span), ox = x + w / 2, oy = y + sh / 2;
+  const s = Math.min(sh / (D.L * 1.04), w / D.span), ox = x + w / 2, oy = y + sh / 2;
   const P = (lx, lz) => [ox - lx * s, oy - lz * s];
-  const sf = k => p.hp[k] / p.maxHp[k];
-  const OUT = 'rgba(0,0,0,.7)', LINE = T.dim;
-  g.lineJoin = 'round';
-  const shape = (fill, f, path, broken) => {
-    path(); g.lineWidth = 3; g.strokeStyle = OUT; g.stroke();
-    if (broken) { g.lineWidth = 1.2; g.strokeStyle = C.enemy; g.setLineDash([3, 3]); g.stroke(); g.setLineDash([]); return; }
-    g.fillStyle = fill; g.globalAlpha = f >= 0.7 ? 0.16 : 0.42; g.fill(); g.globalAlpha = 1; g.lineWidth = 1; g.strokeStyle = f >= 0.7 ? LINE : fill; g.stroke();
+  const path = pts => { g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(...P(q[0], q[2])) : g.moveTo(...P(q[0], q[2])))); g.closePath(); };
+  const strip = (o, s0, s1, a, b, fin) => { const S = fin ? (u, c) => finStation(o, u, c) : (u, c) => station(o, u, c), out = []; for (let i = 0; i <= 8; i++) out.push(S(s0 + (s1 - s0) * i / 8, a)); for (let i = 8; i >= 0; i--) out.push(S(s0 + (s1 - s0) * i / 8, b)); return out; };
+  // f = integridade 0..1; lost = peça que caiu
+  const draw = (pts, f, lost, flash) => {
+    path(pts);
+    if (lost) { g.lineWidth = 1.2; g.strokeStyle = C.enemy; g.setLineDash([3, 3]); g.stroke(); g.setLineDash([]); return; }
+    g.fillStyle = flash ? '#fff' : f >= 0.7 ? 'rgba(238,241,236,.13)' : fcol(f); g.globalAlpha = flash ? 0.8 : f >= 0.7 ? 1 : 0.55; g.fill(); g.globalAlpha = 1;
+    g.lineWidth = 2.6; g.strokeStyle = 'rgba(0,0,0,.6)'; g.stroke(); g.lineWidth = 1; g.strokeStyle = f >= 0.7 ? T.dim : fcol(f); g.stroke();
   };
-  const swp = D.span / 2 * Math.tan((D.sweep || 0) * Math.PI / 180);
-  for (const [side, k, on] of [[1, 'wingL', p.wingOn.L], [-1, 'wingR', p.wingOn.R]]) {
-    const pts = [P(side * D.fuseR, D.wingZ + D.chord * 0.35), P(side * D.span / 2, D.wingZ + D.tipChord * 0.3 - swp), P(side * D.span / 2, D.wingZ - D.tipChord * 0.7 - swp), P(side * D.fuseR, D.wingZ - D.chord * 0.65)];
-    shape(fcol(sf(k)), sf(k), () => { g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(...q) : g.moveTo(...q))); g.closePath(); }, !on);
+  const sf = k => clamp(p.hp[k] / p.maxHp[k], 0, 1), hot = m => m && S.now - m.hitT < 0.25;
+  const sB = tipBreak(D), A = D.ail || SURF.ail, F = D.flap || SURF.flap;
+  g.lineJoin = 'round';
+  // asas: raiz e ponta (estrutura), e por cima as superfícies de comando com a cor do módulo
+  for (const [side, sd] of [[1, 'L'], [-1, 'R']]) {
+    const o = wingCfg(D, side), k = 'wing' + sd, wOn = p.wingOn[sd], tOn = wOn && p.tipOn[sd];
+    draw(strip(o, 0, sB, 0, 1), sf(k), !wOn);
+    draw(strip(o, sB, 1, 0, 1), sf(k), !tOn);
+    for (const [n, r] of [['ail' + sd, A], ['flap' + sd, F]]) { const m = M[n], inTip = (r[0] + r[1]) / 2 >= sB; if (!wOn || (inTip && !tOn)) continue; draw(strip(o, r[0], r[1], SURF.cf, 1), m.ripped ? 0 : modFrac(m), m.ripped, hot(m)); }
   }
-  { const [a, b] = P(D.span * 0.19, -D.L * 0.43); shape(fcol(sf('tail')), sf('tail'), () => { g.beginPath(); g.rect(a, b, D.span * 0.38 * s, D.L * 0.1 * s); }, !p.tailOn); }
-  { const [a, b] = P(D.fuseR, D.L * 0.47); shape(fcol(sf('fuse')), sf('fuse'), () => { g.beginPath(); g.roundRect(a, b, D.fuseR * 2 * s, D.L * 0.97 * s, D.fuseR * s); }, false); }
+  // empenagem: estabilizador (todo móvel ou com profundor) e deriva com o leme
+  for (const side of [1, -1]) {
+    const o = tailCfg(D, side), m = M.elev;
+    draw(strip(o, 0, 1, 0, 1), sf('tail'), !p.tailOn);
+    const gone = m.ripped && !(p.surf && p.surf[side > 0 ? 'elevL' : 'elevR']);
+    if (p.tailOn) draw(strip(o, 0.04, 0.95, D.stab === 'all' ? 0.05 : 0.68, 1), gone ? 0 : modFrac(m), gone, hot(m));
+  }
+  // fuselagem pelo loft do modelo (sem loft, um retângulo arredondado)
+  const fz = []; for (let i = 0; i <= 24; i++) fz.push(-0.53 + i * (0.99 / 24));
+  const fa = p.fuseAt;
+  const fuse = fa ? [...fz.map(z => [fa(z).hw, 0, z * D.L]), ...fz.slice().reverse().map(z => [-fa(z).hw, 0, z * D.L])] : [[D.fuseR, 0, D.L * .47], [D.fuseR, 0, -D.L * .5], [-D.fuseR, 0, -D.L * .5], [-D.fuseR, 0, D.L * .47]];
+  draw(fuse, sf('fuse'), false);
+  { const o = finCfg(D), r = M.rud, fz0 = finStation(o, 0, 0)[2], fz1 = finStation(o, 0, 1)[2]; draw([[0.07, 0, fz0], [0.07, 0, fz1], [-0.07, 0, fz1], [-0.07, 0, fz0]], sf('tail'), !p.tailOn);
+    if (p.tailOn) { const z0 = finStation(o, 0.1, 0.7)[2], z1 = finStation(o, 0.1, 1)[2]; draw([[0.09, 0, z0], [0.09, 0, z1], [-0.09, 0, z1], [-0.09, 0, z0]], r.ripped ? 0 : modFrac(r), r.ripped, hot(r)); } }
+  // componentes internos (as superfícies já foram desenhadas acima)
   for (const m of Object.values(M)) {
-    if ((Math.abs(m.c[0]) > D.fuseR * 1.2 && !p.wingOn[m.c[0] > 0 ? 'L' : 'R']) || ((m.name === 'elev' || m.name === 'rud') && !p.tailOn)) continue;
+    if (m.lost || m.kind === 'ctrl' || m.kind === 'flap') continue;
     const f = m.kind === 'engine' ? (p.engs[m.i].on ? p.engs[m.i].hp / p.maxHp.engine : 0) : modFrac(m);
     const [a, b] = P(m.c[0] + m.h[0], m.c[2] + m.h[2]), ww = Math.max(3, m.h[0] * 2 * s), hh = Math.max(3, m.h[2] * 2 * s);
-    g.fillStyle = S.now - m.hitT < 0.25 ? '#fff' : f >= 0.7 ? T.faint : fcol(f); g.beginPath();
+    g.fillStyle = hot(m) ? '#fff' : f >= 0.7 ? 'rgba(238,241,236,.28)' : fcol(f); g.beginPath();
     if (m.kind === 'pilot') g.arc(a + ww / 2, b + hh / 2, Math.min(ww, hh) / 2 + 1, 0, 7); else g.roundRect(a, b, ww, hh, 1.5);
     g.fill();
+    // tanque: nível do combustível de baixo para cima (azul), vazio = só o contorno
+    if (m.kind === 'fuel' && m.cap > 0 && !hot(m)) { const lv = clamp(m.left / m.cap, 0, 1); g.fillStyle = 'rgba(120,190,235,.55)'; g.fillRect(a, b + hh * (1 - lv), ww, hh * lv); }
     if (f <= 0) { g.strokeStyle = C.enemy; g.lineWidth = 1.3; g.beginPath(); g.moveTo(a, b); g.lineTo(a + ww, b + hh); g.moveTo(a + ww, b); g.lineTo(a, b + hh); g.stroke(); }
     if (m.leak > 0 && m.left > 0) { g.fillStyle = C.sky; g.beginPath(); g.arc(a + ww + 3, b + hh / 2 + Math.sin(V.blink * 8) * 2, 2, 0, 7); g.fill(); }
   }

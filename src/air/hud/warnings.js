@@ -2,11 +2,9 @@ import { H } from '../../world/terrain.js';
 import { B } from '../battle.js';
 import { g, V, C, UI, txt, clock } from './kit.js';
 import { S } from '../../core/state.js';
-import { losAngles } from '../systems/radar.js';
-const clockTo = (p, pos) => clock(losAngles(p, pos).az);
 // =====================================================================
 // Alertas centrais por prioridade. Ameaças vêm SÓ dos sistemas da aeronave:
-// MAW (lançamento/aproximação), RWR (rastreio, trava, guiamento). Sem
+// RWR (rastreio, trava, guiamento); o MAW só toca o alerta (aparece no painel). Sem
 // sistema, não há alerta — o piloto precisa ver a fumaça. Também define o
 // tom de alerta (B.warnTone) e desenha o arco de direção da ameaça.
 // =====================================================================
@@ -17,16 +15,9 @@ const stallV = p => Math.sqrt(2 * p.def.mass * 9.81 / (1.225 * p.def.S * p.def.c
 export function warnings(p) {
   const list = [], rw = p.sys.rwr, mw = p.sys.maw;
   let tone = null, arc = null;
-  if (mw && mw.list.length) {
-    const m = mw.list[0];
-    list.push([`LANÇAMENTO DE MÍSSIL · ${clock(m.az)} · ${Math.max(1, Math.round(m.tti))} s`, C.enemy, true]);
-    tone = 'maw'; arc = { az: m.az, col: C.enemy, k: 1 };
-  }
-  const vis = B.launches.find(l => l.how === 'visual' && S.now - l.at < 4);
-  if (vis && !(mw && mw.list.length)) {
-    list.push([`LANÇAMENTO DE MÍSSIL · ${clockTo(p, vis.owner.pos)}${vis.mine ? ' · CONTRA VOCÊ' : ''}`, C.enemy, true]);
-    tone = tone || 'launch';
-  }
+  // lançamento de míssil: só som aqui; o MAW mostra no próprio painel (scopes.js), sem texto no centro
+  if (mw && mw.list.length) tone = 'maw';
+  else if (B.launches.some(l => l.how === 'visual' && S.now - l.at < 4)) tone = 'launch';
   const th = rw && rw.top;
   if (th && th.lvl !== 'SEARCH') {
     const ty = th.type ? ` (${th.type})` : '';

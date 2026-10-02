@@ -38,15 +38,17 @@ describe('turbojato', () => {
     const a = run(run(new EngineSet('j47'), 10, 0), 3, 1).output, b = run(run(new EngineSet('r13'), 10, 0), 3, 1).output;
     expect(b).toBeGreaterThan(a);
   });
-  it('pós-combustão: só com manete cheia, com atraso de ignição, e corta rápido', () => {
+  it('pós-combustão: só com manete cheia, liga e corta na hora', () => {
     const es = run(new EngineSet('j79', 2), 10, 1);
     const mil = es.thrust;
-    run(es, 0.5, 1, true); expect(es.ab).toBe(0); // ainda acendendo
-    run(es, 2, 1, true); expect(es.ab).toBe(1);
+    run(es, 1 / 120, 1, true); expect(es.ab).toBe(1);
     expect(es.thrust / mil).toBeGreaterThan(1.4);
     expect(es.flow).toBeGreaterThan(3 * 2 * 52.8 * 0.086 / 3.6 * 0.9); // consumo dispara
-    run(es, 0.5, 1, false); expect(es.ab).toBe(0);
-    const noAB = run(new EngineSet('j47'), 10, 1, true); expect(noAB.ab).toBe(0);
+    run(es, 1 / 120, 1, false); expect(es.ab).toBe(0);
+  });
+  it('jato sem PC tem WEP: empuxo extra na hora, sem chama', () => {
+    const es = run(new EngineSet('j47'), 10, 1), mil = es.thrust;
+    run(es, 1 / 120, 1, true); expect(es.thrust / mil).toBeCloseTo(28.9 / 26.3, 2); expect(es.hasAB).toBe(false); expect(es.hasBoost).toBe(true);
   });
   it('empuxo cai com a altitude', () => {
     const lo = run(new EngineSet('j47'), 10, 1, false, 0).thrust, hi = run(new EngineSet('j47'), 10, 1, false, 10000).thrust;

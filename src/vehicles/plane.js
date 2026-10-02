@@ -10,11 +10,13 @@ import { isa } from '../air/systems/atmosphere.js';
 import { Radar } from '../air/systems/radar.js';
 import { Rwr, Maw } from '../air/systems/rwr.js';
 import { fxBurn, fxTrail, fxSmallFlash, fxExplosion, fxBigBlast } from '../fx/particles.js';
-import { sndMG, sndShot, sndBoom } from '../fx/audio.js';
+import { sndMG, sndShot, sndBoom, sndTear, sndHit } from '../fx/audio.js';
+import { fxFlakes, fxHole } from './planeFx.js';
 import { fireProj, destroyVehicle, spawnDebris, blast } from '../combat/ballistics.js';
 import { makeLabel, showDmg, flashVign, shakeAt } from '../ui/hud.js';
 import { nextId } from './tank.js';
 import { buildPlane } from './planeModel.js';
+import { tipBreak, tipArea, wingCfg, station } from './planeGeom.js';
 import { stepHeat } from './engineHeat.js';
 import { planeModules, fuelOf, ctrlAuthority, fuelLeak, fuelInit, fuelStep, applyMod, powered, modsOf } from './planeDamage.js';
 export { buildPlane };
@@ -40,7 +42,7 @@ const waveDrag = (D, M) => {
   return M < w.mpk ? w.peak * ((M - w.mcr) / (w.mpk - w.mcr)) ** 2 : w.peak * Math.max(0.6, 1 - 0.35 * (M - w.mpk));
 };
 const flapLim = (D, st) => st ? (D.flapV || FLAP_V)[st - 1] / 3.6 : Infinity;
-const _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
+const AIM_CONE = 5 * Math.PI / 180, _pe = new THREE.Euler(), G0 = 9.81, _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
 export class Plane {
   constructor(key, team, who, pos, yaw, speed, opts = {}) {
     this.id = nextId(); this.def = PLANES[key]; const D = this.def;
@@ -51,11 +53,23 @@ export class Plane {
     this.pr = 0; this.rr = 0; this.yr = 0; // arfagem (nariz para cima +), rolagem (direita +), guinada (esquerda +)
     this.elev = 0; this.ail = 0; this.rud = 0; this.throttle = 1; this.wep = false;
     this.flaps = 0; this.flapStage = 0; this.airbrake = false; this.iP = 0; this.gear = 0; this.shotsN = 0; this.hitsN = 0;
+    this.gStress = 0; this.koT = 0; this.koAge = 0; this.overG = 0; this.n = 1; this.alpha = 0; this.ias = speed; this.dropSign = 1; this.spottedUntil = 0; this.oobT = 0;
+    this.firing = false; this.ordOn = opts.ord !== false; this.onGround = false;
+    this.inv = new THREE.Matrix4();
+    this.outfit();
+    this.label = makeLabel(this);
+    this.applyTransform();
+    planes.push(this);
+  }
+  // tudo que o reparo na pista devolve ao estado de fábrica: estrutura, módulos, combustível, armas, sistemas
+  outfit() {
+    const D = this.def;
     this.hp = Object.assign({}, D.hpParts); this.maxHp = D.hpParts;
-    this.wingOn = { L: true, R: true }; this.tailOn = true; this.engineOn = true; this.pilot = true;
+    this.wingOn = { L: true, R: true }; this.tipOn = { L: true, R: true }; this.tailOn = true;
+    // ponta da asa: onde se solta (x no corpo) e quanto da sustentação de uma asa ela carrega
+    this.tipX = station(wingCfg(D, 1), tipBreak(D), 0)[0]; this.tipFrac = tipArea(D); this.hitLx = null; this.engineOn = true; this.pilot = true;
     this.alive = true; this.gone = false; this.fire = 0; this.temp = 80; this.heat = { water: 85, oil: 70 }; this.eng = new EngineSet(D.engine, D.engines); this.cooling = ENGINES[D.engine].cooling || 'jet'; this.oil = 0; this.lastHitBy = null; this.lastHitT = -99;
-    this.gStress = 0; this.overG = 0; this.n = 1; this.alpha = 0; this.ias = speed; this.dropSign = 1; this.spottedUntil = 0; this.oobT = 0;
-    this.firing = false; this.guns = [];
+    this.guns = [];
     for (const g of D.guns) {
       const W = GUNS[g.w], pts = [];
       for (const s of g.span) { pts.push([s, -0.1, g.z]); if (g.n > 1) pts.push([-s, -0.1, g.z]); }
@@ -63,7 +77,7 @@ export class Plane {
       this.guns.push({ W, pts: pts.slice(0, g.n), ammo: g.ammo * g.n, max: g.ammo * g.n, acc: 0, k: 0, heat: 0, jam: false });
     }
     this.bombs = []; this.rockets = 0;
-    if (opts.ord !== false) { for (const b of D.bombs) for (let i = 0; i < b.n; i++) this.bombs.push(b); this.rockets = D.rockets ? D.rockets.n : 0; }
+    if (this.ordOn) { for (const b of D.bombs) for (let i = 0; i < b.n; i++) this.bombs.push(b); this.rockets = D.rockets ? D.rockets.n : 0; }
     else for (const m of [...this.bombMeshes, ...this.rocketMeshes]) m.visible = false;
     // estantes de mísseis (uma por tipo) e o selecionado; malhas na mesma ordem do modelo
     let mi = 0;
@@ -81,7 +95,6 @@ export class Plane {
     this.flapP = { L: 0, R: 0 }; this.flapGone = { L: false, R: false }; this.brakeOn = false;
     this.flares = this.chaff = D.jet ? 20 : 0; this.ext = 1; this.fireAt = [0, 0, D.jet ? -D.L * 0.15 : D.L * 0.3];
     this.flareUntil = 0; this.chaffUntil = 0;
-    this.inv = new THREE.Matrix4();
     const fr = D.fuseR, L = D.L;
     this.boxes = [
       { name: 'fuse', mn: [-fr, -fr, -L * .55], mx: [fr, fr + .35, L * .45] },
@@ -89,9 +102,14 @@ export class Plane {
       { name: 'wingR', mn: [-D.span / 2, -.2, D.wingZ - D.chord * .65 - sweepOf(D)], mx: [-fr, .3, D.wingZ + D.chord * .35] },
       { name: 'tail', mn: [-D.span * .18, -.1, -L * .55], mx: [D.span * .18, .2, -L * .42] },
       { name: 'fin', mn: [-.1, 0, -L * .56], mx: [.1, 1.8, -L * .42] }];
-    this.label = makeLabel(this);
+  }
+  // reparo + rearme (parado na própria pista): modelo novo (as peças arrancadas voltam) e estado de fábrica
+  refit() {
+    const keep = { gear: this.gear, throttle: this.throttle, flapStage: this.flapStage };
+    scene.remove(this.root); Object.assign(this, buildPlane(this.def)); scene.add(this.root);
+    this.outfit(); Object.assign(this, keep);
+    if (this.onGround) this.gear = 1; // pousou de barriga: a equipe de solo baixa o trem
     this.applyTransform();
-    planes.push(this);
   }
   // fração de potência/empuxo entregue (HUD, som, temperatura): >1 com WEP/pós-combustão
   get spool() { return this.eng.output; }
@@ -100,17 +118,21 @@ export class Plane {
   // estante selecionada (pula para a próxima com míssil quando a atual esvazia)
   get rack() { const R = this.racks; if (!R.length) return null; if (R[this.sel].n <= 0) { const i = R.findIndex(r => r.n > 0); if (i >= 0) this.sel = i; } return R[this.sel]; }
   cycleRack() { const R = this.racks; for (let k = 1; k <= R.length; k++) { const i = (this.sel + k) % R.length; if (R[i].n > 0) { this.sel = i; break; } } return this.rack; }
-  get canBoost() { return !this.eng.jet || this.eng.hasAB; }
+  get canBoost() { return this.eng.hasBoost; }
   axes() { _pm.makeRotationFromQuaternion(this.q); _pl.setFromMatrixColumn(_pm, 0); _pu.setFromMatrixColumn(_pm, 1); _pf.setFromMatrixColumn(_pm, 2); }
   centerPos(out) { return out.copy(this.pos); }
   eyePos(out) { return out.copy(this.pos); }
   applyTransform() {
     this.root.position.copy(this.pos); this.root.quaternion.copy(this.q);
+    if (this.gearMesh) this.gearMesh.visible = this.gear > 0.5;
     this.animSurfaces();
     this.root.updateMatrixWorld(true); this.inv.copy(this.root.matrixWorld).invert();
   }
+  // desmaiado: sem comando nenhum (manche solto, sem disparar); 0..1 para escurecer a tela
+  get blackout() { return this.koT > 0 ? Math.min(1, this.koAge / 0.3, this.koT / 1.2) : 0; }
   physics(dt) {
     if (this.gone) return;
+    if (this.koT > 0) { this.elev = this.ail = this.rud = 0; this.firing = false; }
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
     const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.racks.reduce((s, r) => s + r.n * r.M.mass, 0) - (this.fuelMax - this.fuel);
     const A = ctrlAuthority(this);
@@ -124,11 +146,12 @@ export class Plane {
       if (flapsOK && !m.dead && !this.flapGone[sd]) this.flapP[sd] += clamp(FLAP_POS[this.flapStage] - this.flapP[sd], -dt * 0.5, dt * 0.5);
       // flap travado baixado acima do limite: o vento arranca o painel
       if (!this.flapGone[sd] && this.flapP[sd] > 0.1 && this.ias > flapLim(D, Math.max(1, Math.round(this.flapP[sd] * 3))) * 1.15) {
-        this.flapGone[sd] = true; this.flapP[sd] = 0; m.dead = true; m.hp = -m.max;
+        this.flapGone[sd] = true; this.flapP[sd] = 0; m.dead = true; m.hp = -m.max; this.ripSurface(m);
         if (this.isPlayer) showDmg(`${m.label} arrancado pelo vento`);
       }
     }
     this.flaps = (this.flapP.L + this.flapP.R) / 2;
+    if (this.gear && !this.onGround && this.ias > this.gearV * 1.12) { this.gear = 0; if (this.isPlayer) showDmg('Trem recolhido: velocidade acima do limite', true); }
     // motor danificado rende menos; dinâmica de rotação/potência fica em EngineSet
     const ek = this.engs.map(e => (e.on ? 0.35 + 0.65 * clamp(e.hp / this.maxHp.engine, 0, 1) : 0)), ekSum = ek.reduce((a, b) => a + b, 0);
     const engK = ekSum / ek.length, thrX = ekSum > 0 ? this.engs.reduce((a, e, i) => a + e.x * ek[i], 0) / ekSum : 0;
@@ -154,7 +177,7 @@ export class Plane {
       if (aa <= as) CL = D.cla * alpha;
       else { CL = Math.sign(alpha) * D.clmax * Math.max(0.42, 1 - (aa - as) * 2.2); CDs = 1.1 * Math.pow(Math.sin(aa), 2); }
       if (aa > Math.PI / 2) CL = -CL * 0.3;
-      const hpL = this.wingOn.L ? 0.6 + 0.4 * this.hp.wingL / this.maxHp.wingL : 0, hpR = this.wingOn.R ? 0.6 + 0.4 * this.hp.wingR / this.maxHp.wingR : 0;
+      const hpL = this.wingOn.L ? (0.6 + 0.4 * this.hp.wingL / this.maxHp.wingL) * (this.tipOn.L ? 1 : 1 - this.tipFrac) : 0, hpR = this.wingOn.R ? (0.6 + 0.4 * this.hp.wingR / this.maxHp.wingR) * (this.tipOn.R ? 1 : 1 - this.tipFrac) : 0;
       const kW = (hpL + hpR) / 2;
       const mach = V / _atm.a; this.mach = mach;
       CL += this.flaps * 0.38 * (aa <= as ? 1 : 0.5);
@@ -168,10 +191,16 @@ export class Plane {
       this.eng.step(h, this.throttle, this.wep, engK, this.engineOn);
       _pF.addScaledVector(_pf, this.eng.force(V, _atm, mach));
       this.vel.addScaledVector(_pF, h / m);
+      // efeito solo (e assistência arcade de arredondamento): com trem baixado perto do chão o colchão de ar
+      // segura a descida em ~2,5 m/s — mirar a pista e chegar não vira mais "bater e explodir"
+      if (this.gear > 0.5 && !this.onGround && this.vel.y < -2.5) {
+        const agl = this.pos.y - H(this.pos.x, this.pos.z) - (this.gearMesh ? this.gearMesh.userData.lift : 2), zone = b * 0.9;
+        if (agl < zone) this.vel.y += (-2.5 - this.vel.y) * Math.min(1, h * 7 * (1 - Math.max(agl, 0) / zone));
+      }
       this.pos.addScaledVector(this.vel, h);
       this.n = (qd * S * CL * kW) / (m * G);
       // momentos (coeficientes de estabilidade e controle; eficácia ∝ pressão dinâmica)
-      const ctrl = (this.pilot ? 1 : 0) * clamp(1 - (this.ias - (D.vctrl || 215)) / 75, 0.28, 1) * (this.gStress > 1 ? 0.3 : 1);
+      const ctrl = (this.pilot ? 1 : 0) * clamp(1 - (this.ias - (D.vctrl || 215)) / 75, 0.28, 1);
       const tE = this.tailOn ? 0.45 + 0.55 * clamp(this.hp.tail / this.maxHp.tail, 0, 1) : 0.06, Vd = Math.max(V, 20);
       const aE = clamp(alpha, -0.5, 0.5);
       let Mp = qd * S * c * (D.kde * (this.elev * ctrl * A.elev + st('elev')) * tE -0.9 * aE * (this.tailOn ? 1 : 0.1)) - qd * S * c * c / (2 * Vd) * dmp[0] * this.pr * (this.tailOn ? 1 : 0.15);
@@ -186,17 +215,25 @@ export class Plane {
       _pw.set(-this.pr, this.yr, this.rr).applyQuaternion(this.q);
       _pq.set(_pw.x * h * 0.5, _pw.y * h * 0.5, _pw.z * h * 0.5, 0).multiply(this.q);
       this.q.x += _pq.x; this.q.y += _pq.y; this.q.z += _pq.z; this.q.w += _pq.w; this.q.normalize();
+      if (this.gearMesh && (this.gear > 0.5 || this.onGround || this.pos.y < H(this.pos.x, this.pos.z) + this.def.fuseR) && this.groundStep(h, this.gear <= 0.5)) return;
     }
     if (Math.random() < dt * 0.3) this.dropSign = Math.random() < .5 ? 1 : -1;
-    // fisiologia do piloto: blecaute com G sustentado
-    const gT = this.wounded ? 5 : 6.5; // piloto ferido apaga antes
-    const gx = this.n > gT ? (this.n - gT) * 0.35 : this.n < -2.5 ? (-2.5 - this.n) * 0.5 : -0.5;
+    // fisiologia do piloto: nada abaixo de G muito alto; acima de 17 G (ou −3,5 G) SUSTENTADO a carga acumula
+    // e o piloto DESMAIA: alguns segundos sem controle (o avião segue solto), depois volta a si
+    const gT = this.wounded ? 15 : 17; // piloto ferido apaga antes
+    const gx = this.n > gT ? (this.n - gT) * 0.3 : this.n < -3.5 ? (-3.5 - this.n) * 0.3 : -0.4; // 19,5 G: ~1,3 s; 18 G: ~3 s
     // combustível: consumo do motor + vazamentos; seco = motor apaga
     const leak = fuelLeak(this);
     fuelStep(this, this.engineOn ? this.eng.flow : 0, dt);
     if (this.fuel <= 0 && this.engineOn && this.alive) { this.engineStop(); if (this.isPlayer) showDmg('Sem combustível'); }
-    if (leak > 0 && this.fuel > 0 && Math.random() < dt * 18) for (const m of modsOf(this, 'fuel')) if (m.leak > 0 && m.left > 0) fxTrail(_pt.set(...m.c).applyMatrix4(this.root.matrixWorld).clone(), 0xe8e6e0, 0.6, 1.6);
-    this.gStress = clamp(this.gStress + gx * dt, 0, 1.6);
+    if (leak > 0 && this.fuel > 0 && Math.random() < dt * 35) for (const m of modsOf(this, 'fuel')) if (m.leak > 0 && m.left > 0) fxTrail(_pt.set(...m.c).applyMatrix4(this.root.matrixWorld).clone(), 0xf2f0ea, 0.45 + 0.1 * Math.min(m.leak, 4), 3); // névoa de combustível, mais grossa quanto maior o furo
+    if (this.koT > 0) {
+      this.koT -= dt; this.koAge += dt;
+      if (this.koT <= 0 && this.isPlayer) showDmg('Piloto recobrou a consciência', true);
+    } else {
+      this.gStress = clamp(this.gStress + gx * dt, 0, 1);
+      if (this.gStress >= 1 && this.alive && this.pilot) { this.koT = 3.5 + Math.random() * 1.5; this.koAge = 0; this.gStress = 0; if (this.isPlayer) showDmg('Piloto desmaiou · G excessivo'); }
+    }
     // limites estruturais
     if (this.alive) {
       // asa quebrando por excesso de G só nos aviões a pistão; jato não quebra em curva (pedido do jogador)
@@ -215,13 +252,17 @@ export class Plane {
       if (this.fire > 4 && Math.random() < dt * 0.08) { const w = this.fireAt[0] > 1 ? 'wingL' : this.fireAt[0] < -1 ? 'wingR' : 'fuse'; this.damage(w, 6, this.lastHitBy, true); } // o fogo consome a estrutura
       if (this.fire > 22 && this.alive) destroyVehicle(this, this.lastHitBy, 'fire');
     } else if (this.hp.engine < this.maxHp.engine * 0.5 || this.oil > 0) {
-      if (Math.random() < dt * 14) fxTrail(this.pos.clone(), this.oil > 0 ? 0x5e5952 : 0xb8b4ac, 1, 3);
+      if (Math.random() < dt * 14) fxTrail(this.pos.clone(), 0xb8b4ac, 1, 3);
     }
+    // óleo vazando do radiador/motor: rastro marrom fino e contínuo (marrom médio, nunca quase-preto)
+    if (this.oil > 0 && Math.random() < dt * 30) { const c = (modsOf(this, 'cool').find(m => m.hp < m.max) || this.mods.eng0 || {}).c; fxTrail((c ? _pt.set(...c).applyMatrix4(this.root.matrixWorld) : _pt.copy(this.pos)).clone(), 0x7a6650, 0.4, 3.5); }
     this.prop.rotation.z += (this.engineOn ? 60 : Math.min(this.ias / 4, 20)) * dt;
     this.prop.children[this.prop.children.length - 1].visible = this.engineOn;
     // colisão com o solo
     this.axes();
-    const pts = [[0, 0, this.def.L * .45], [this.def.span / 2 * (this.wingOn.L ? 1 : .2), 0, 0], [-this.def.span / 2 * (this.wingOn.R ? 1 : .2), 0, 0], [0, 0, -this.def.L * .5], [0, -this.def.fuseR, 0]];
+    if (this.onGround) return; // no chão quem cuida é o groundStep
+    const reach = sd => (!this.wingOn[sd] ? this.def.span * 0.1 : this.tipOn[sd] ? this.def.span / 2 : this.tipX);
+    const pts = [[0, 0, this.def.L * .45], [reach('L'), 0, 0], [-reach('R'), 0, 0], [0, 0, -this.def.L * .5], [0, -this.def.fuseR, 0]];
     for (const [x, y, z] of pts) {
       const wx = this.pos.x + _pl.x * x + _pu.x * y + _pf.x * z, wy = this.pos.y + _pl.y * x + _pu.y * y + _pf.y * z, wz = this.pos.z + _pl.z * x + _pu.z * y + _pf.z * z;
       if (wy < H(wx, wz) + 0.2) { this.crash(); return; }
@@ -229,6 +270,41 @@ export class Plane {
     for (const b of obstNear(this.pos.x - 6, this.pos.z - 6, this.pos.x + 6, this.pos.z + 6)) if (this.pos.x > b.mn[0] && this.pos.x < b.mx[0] && this.pos.z > b.mn[2] && this.pos.z < b.mx[2] && this.pos.y < b.mx[1]) { this.crash(); return; }
     if (Math.max(Math.abs(this.pos.x), Math.abs(this.pos.z)) > (ST.airLimit || AIRLIMIT)) this.oobT += dt; else this.oobT = 0;
     if (this.oobT > 15 && this.alive) destroyVehicle(this, null, 'oob');
+  }
+  // Trem baixado tocando o chão: pouso (ou quebra, se veio rápido/inclinado/de nariz), rolagem com atrito e
+  // freio, direção pelo leme/bequilha e rotação até o limite que não arrasta a cauda. A sustentação tira o
+  // avião do chão sozinha na decolagem. Retorna true se o toque destruiu o avião.
+  groundStep(h, belly) {
+    const G = this.gearMesh.userData, hg = H(this.pos.x, this.pos.z), D = this.def, lift = belly ? D.fuseR * 0.95 : G.lift;
+    if (this.pos.y > hg + lift + 0.05 || (this.onGround && this.vel.y > 0.4) || (!this.onGround && this.vel.y > 0)) { this.onGround = false; return false; } // no ar / decolou (subindo não "re-pousa")
+    this.axes();
+    const pitch = Math.asin(clamp(_pf.y, -1, 1)), roll = _pl.y;
+    if (!this.onGround) {
+      // tolerante como no WT: só explode se vier MUITO errado; no meio do caminho é pouso duro (estraga a estrutura)
+      const vs = -this.vel.y, why = vs > (belly ? 7 : 13) ? 'descendo rápido demais' : Math.abs(roll) > (belly ? 0.35 : 0.6) ? 'asa no chão (inclinado demais)' : pitch < -0.35 ? 'de nariz no chão' : this.ias > (belly ? 330 / 3.6 : this.gearV * 1.2) ? `rápido demais (${Math.round(this.ias * 3.6)} km/h)` : null;
+      if (why) { if (this.isPlayer) showDmg(`Pouso falhou: ${why}`); this.crash(); return true; }
+      this.onGround = true; this.touchT = ST.now; this.touchV = vs;
+      const hard = vs > 5 || this.ias > this.gearV;
+      if (hard) { this.hp.fuse -= this.maxHp.fuse * 0.12 * (1 + Math.max(0, vs - 5) / 4); if (this.hp.fuse <= 0) { this.crash(); return true; } }
+      if (belly) { this.engs.forEach((e, i) => { if (e.on && !D.jet) this.engineOut(i); }); } // hélice bate no chão
+      if (this.isPlayer && (hard || belly || ST.now - (this.landMsgT || -9) > 3)) { this.landMsgT = ST.now; showDmg(belly ? 'Pouso de barriga' : hard ? 'Pouso duro · estrutura danificada' : 'Pouso', !hard && !belly); }
+    }
+    // atitude: rumo livre, asas niveladas, arfagem entre a de repouso (cauda/bequilha no chão) e o limite de rotação
+    const tail = !belly && G.pitch > 0, rest = belly ? 0 : G.pitch, maxRot = Math.min(0.26, Math.asin(clamp((G.lift - 0.45) / (D.L * 0.5), 0, 1)));
+    let pit = clamp(pitch, 0, belly ? 0 : tail ? rest : maxRot);
+    pit += (rest - pit) * (1 - Math.exp(-h * 3 * clamp(1 - this.ias / 55, 0, 1))); // devagar, o peso assenta o avião
+    let yaw = Math.atan2(_pf.x, _pf.z);
+    const V = Math.hypot(this.vel.x, this.vel.z);
+    yaw += this.rud * 0.55 * clamp(V / 6, 0, 1) * clamp(1.2 - V / 70, 0.2, 1) * h; // bequilha/freio diferencial
+    this.q.setFromEuler(_pe.set(-pit, yaw, 0, 'YXZ'));
+    this.pr *= 0.5; this.rr = 0; this.yr = 0;
+    this.pos.y = hg + lift; if (this.vel.y < 0) this.vel.y = 0;
+    // rodas: sem derrapagem lateral; atrito de rolagem ou freio (H, ou manete no zero parado/lento)
+    const fx = Math.sin(yaw), fz = Math.cos(yaw), vf = this.vel.x * fx + this.vel.z * fz;
+    const brake = this.airbrake || this.throttle < 0.02, mu = belly ? 0.6 : brake ? 0.55 : 0.025;
+    const vf2 = Math.sign(vf) * Math.max(0, Math.abs(vf) - mu * G0 * h);
+    this.vel.x = fx * vf2; this.vel.z = fz * vf2;
+    return false;
   }
   // Instrutor (estilo "mouse aim" do WT): leva o VETOR VELOCIDADE à direção pedida.
   // Limites de AoA (sem estol) e de G; proteção opcional perto do solo.
@@ -295,7 +371,18 @@ export class Plane {
       const agl = this.pos.y - H(this.pos.x, this.pos.z), sink = -this.vel.y;
       if (agl < 40 + sink * 2.2 && _pf.y < 0.1) elev = Math.max(elev, 0.6);
     }
+    // no chão: mira no horizonte ou abaixo = fica rolando (sem puxar); mira acima = roda e decola
+    if (this.onGround) elev = dir.y < 0.03 ? clamp(elev, -0.2, 0) : Math.min(elev, 0.8);
     this.elev = clamp(elev, -1, 1);
+  }
+  // direção de tiro: o eixo das armas, ou — com a mira do mouse (aimCmd) — o próprio círculo do mouse quando ele
+  // está a até AIM_CONE do nariz (balas e retículo 100% no mouse); mais longe, o ponto do cone mais perto dele
+  fireDir(out) {
+    this.axes(); out.copy(_pf);
+    const a = this.aimCmd; if (!a) return out;
+    const ang = Math.acos(clamp(_pf.dot(a), -1, 1));
+    if (ang <= AIM_CONE) return out.copy(a);
+    return out.lerp(a, AIM_CONE / ang).normalize();
   }
   gunsPos(g, i, out) { const p = g.pts[i]; return out.set(p[0], p[1], p[2]).applyMatrix4(this.root.matrixWorld); }
   updateWeapons(dt) {
@@ -313,11 +400,11 @@ export class Plane {
         const i = g.k % g.pts.length, lp = g.pts[i];
         const pos = this.gunsPos(g, i, new V3());
         // convergência a 350 m
-        const aim = new V3(0, 0, 350).applyMatrix4(this.root.matrixWorld);
+        const aim = this.fireDir(_pfx).multiplyScalar(350).add(this.pos); // convergência a 350 m na direção de tiro
         const dir = aim.sub(pos).normalize().add(rv(0.0022)).normalize();
         fireProj(this, pos, dir.multiplyScalar(g.W.v).add(this.vel), g.W, 'bullet', { tracer: g.k % g.W.tracer === 0 });
         if (g.k % 3 === 0) fxSmallFlash(pos, _pf.set(0, 0, 1).applyQuaternion(this.q));
-        sndMG(pos, g.W.cal);
+        sndMG(pos, g.W.cal, this.isPlayer);
       }
     }
   }
@@ -338,6 +425,14 @@ export class Plane {
     fireProj(this, pos, dir.multiplyScalar(am.v * 0.45).add(this.vel), am, 'rocket');
     sndShot(pos, 30);
     return true;
+  }
+  // trem de pouso (G): só baixa abaixo do limite de operação; acima dele, avisa em vez de falhar calado
+  // (antes recolhia no mesmo quadro acima de 380 km/h e a tecla parecia não funcionar)
+  get gearV() { return (this.def.gearV || (this.def.jet ? 460 : 380)) / 3.6; }
+  toggleGear() {
+    if (this.onGround) { if (this.isPlayer) showDmg('Trem travado: avião no chão', true); return; }
+    if (!this.gear && this.ias > this.gearV) { if (this.isPlayer) showDmg(`Trem: reduza abaixo de ${Math.round(this.gearV * 3.6)} km/h (agora ${Math.round(this.ias * 3.6)})`, true); return; }
+    this.gear = this.gear ? 0 : 1; if (this.isPlayer) showDmg(this.gear ? 'Trem baixado' : 'Trem recolhido', true);
   }
   // F desce um estágio; do pouso volta para recolhido
   cycleFlaps() {
@@ -361,7 +456,6 @@ export class Plane {
     const ang = { ailL: -(cmd('ailL') ?? this.ail), ailR: cmd('ailR') ?? this.ail, flapL: -this.flapP.L, flapR: -this.flapP.R, elevL: cmd('elev') ?? this.elev, elevR: cmd('elev') ?? this.elev, rud: -(cmd('rud') ?? this.rud) };
     for (const n in sv) {
       const s = sv[n], m = M[n.startsWith('elev') ? 'elev' : n];
-      s.pivot.visible = !(m.hp <= -m.max) && !(n.startsWith('flap') && this.flapGone[n[4]]);
       _pq.setFromAxisAngle(s.axis, ang[n] * s.max); s.pivot.quaternion.copy(s.base).multiply(_pq);
     }
   }
@@ -386,16 +480,65 @@ export class Plane {
     }
     if (part === 'fuel') { const T = modsOf(this, 'fuel'), t = T[Math.floor(Math.random() * T.length)]; if (t) applyMod(this, t, dmg, by, isBlast ? { tnt: 1 } : null); return; }
     this.hp[part] -= dmg;
+    // asa muito castigada perde a PONTA (sem derrubar o avião), como no WT; mais provável se o tiro foi lá fora
+    if ((part === 'wingL' || part === 'wingR') && this.hp[part] > 0 && this.hp[part] < this.maxHp[part] * 0.5) {
+      const sd = part === 'wingL' ? 'L' : 'R', out = this.hitLx != null && Math.abs(this.hitLx) > this.tipX * 0.8;
+      if (this.tipOn[sd] && Math.random() < (out ? 0.45 : 0.1) * Math.min(1, 0.3 + dmg / 3)) this.breakTip(sd, by);
+    }
+    this.hitLx = null;
     if ((part === 'wingL' || part === 'wingR') && this.hp[part] <= 0) this.breakWing(part === 'wingL' ? 'L' : 'R', 'wing');
-    if (part === 'tail' && this.hp.tail <= 0 && this.tailOn) { this.tailOn = false; this.tail.visible = false; this.boxes[3].off = this.boxes[4].off = true; if (this.alive) destroyVehicle(this, by || this.lastHitBy, 'tail'); }
+    if (part === 'tail' && this.hp.tail <= 0 && this.tailOn) { this.tailOn = false; for (const n of ['elev', 'rud']) Object.assign(this.mods[n], { lost: true, dead: true, stuck: 0 }); this.dropSurfIn(this.tail); this.detach(this.tail, 90); this.boxes[3].off = this.boxes[4].off = true; if (this.alive) destroyVehicle(this, by || this.lastHitBy, 'tail'); }
     if (part === 'fuse' && this.hp.fuse <= 0 && this.alive) destroyVehicle(this, by || this.lastHitBy, 'structure');
     if (this.isPlayer && !isBlast && Math.random() < .4) { flashVign(); }
+  }
+  // acerto: o piloto ouve cada impacto na chapa; lascas saem do ponto de entrada (granada arranca mais)
+  hitFx(lp, he, ld) {
+    if (this.isPlayer) sndHit(he);
+    if (lp) fxHole(this, lp, ld, he);
+    if (lp && (he || Math.random() < 0.4)) fxFlakes(this, _pt.set(lp[0], lp[1], lp[2]).applyMatrix4(this.root.matrixWorld), he ? 2 + Math.floor(Math.random() * 3) : 1);
+  }
+  // solta um pedaço do modelo como destroço físico (caixa pelo tamanho real da peça); o ar freia e ele cai rodando
+  detach(obj, mass) {
+    scene.attach(obj); obj.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(obj);
+    sndTear(bb.getCenter(new V3()));
+    const c = obj.worldToLocal(bb.getCenter(new V3())), h = bb.getSize(new V3()).multiplyScalar(0.5);
+    const d = spawnDebris(obj, this.vel.clone().add(rv(5)), rv(5), [Math.max(h.x, 0.05), Math.max(h.y, 0.05), Math.max(h.z, 0.05)], [c.x, c.y, c.z], mass);
+    d.body.setLinearDamping(mass < 100 ? 1.4 : 0.7); // arrasto: peça leve freia rápido e fica para trás
+    return d;
+  }
+  // superfícies articuladas que estão dentro de `grp` deixam de ser animadas (vão embora com ele)
+  dropSurfIn(grp) { for (const n in this.surf || {}) { let o = this.surf[n].pivot; while (o && o !== grp) o = o.parent; if (o) delete this.surf[n]; } }
+  // aileron/flap/profundor/leme arrancado
+  ripSurface(m) {
+    if (m.ripped || !this.surf) return; m.ripped = true; m.stuck = 0;
+    const names = m.name === 'elev' ? ['elevL', 'elevR'].filter(n => this.surf[n]) : [m.name].filter(n => this.surf[n]);
+    if (!names.length) return;
+    const n = names[Math.floor(Math.random() * names.length)], piv = this.surf[n].pivot; delete this.surf[n];
+    fxSmallFlash(piv.getWorldPosition(new V3()), _pf.set(0, 1, 0));
+    this.detach(piv, 15);
+  }
+  // ponta da asa: perde sustentação daquele lado (e o aileron, se estava nela) mas o avião continua voando
+  breakTip(side, by) {
+    const t = side === 'L' ? this.tipL : this.tipR, sg = side === 'L' ? 1 : -1;
+    if (!t || !this.tipOn[side] || !this.wingOn[side]) return;
+    this.tipOn[side] = false;
+    for (const m of Object.values(this.mods)) if (Math.sign(m.c[0]) === sg && Math.abs(m.c[0]) > this.tipX - 0.05) { m.lost = m.dead = true; m.hp = Math.min(m.hp, 0); m.stuck = 0; }
+    this.dropSurfIn(t);
+    const at = t.localToWorld(new V3(sg * (this.tipX + 0.4), 0, this.def.wingZ));
+    this.detach(t, 60);
+    const b = this.boxes[side === 'L' ? 1 : 2]; if (sg > 0) b.mx[0] = this.tipX; else b.mn[0] = -this.tipX;
+    fxExplosion(at, .3);
+    if (this.isPlayer) showDmg(`Ponta da asa ${side === 'L' ? 'esquerda' : 'direita'} arrancada`);
+    if (by && by.isPlayer && S.air) S.air.crit('Ponta da asa arrancada');
   }
   breakWing(side, why) {
     if (!this.wingOn[side]) return;
     this.wingOn[side] = false;
-    const w = side === 'L' ? this.wingL : this.wingR;
-    scene.attach(w); spawnDebris(w, this.vel.clone().add(rv(6)), rv(4), [this.def.span / 4, 0.12, this.def.chord / 2], [(side === 'L' ? 1 : -1) * this.def.span / 4, 0.08, this.def.wingZ], 180);
+    const w = side === 'L' ? this.wingL : this.wingR, sg = side === 'L' ? 1 : -1;
+    for (const m of Object.values(this.mods)) if (Math.sign(m.c[0]) === sg && Math.abs(m.c[0]) > this.def.fuseR * 1.2) { m.lost = m.dead = true; m.stuck = 0; }
+    this.dropSurfIn(w);
+    this.detach(w, 180);
     this.boxes[side === 'L' ? 1 : 2].off = true;
     fxExplosion(this.pos.clone(), .4);
     if (this.alive) destroyVehicle(this, this.lastHitT > S.now - 10 ? this.lastHitBy : null, why === 'g' ? 'overg' : why === 'vne' ? 'vne' : 'wing');

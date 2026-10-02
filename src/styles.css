@@ -108,7 +108,7 @@ h1 span{display:block;color:var(--amber)}
 @keyframes blink{50%{opacity:.4}}
 #hint{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);font-size:14px;color:var(--khaki);background:rgba(16,20,14,.7);padding:5px 12px;transition:opacity 1s;white-space:nowrap}
 #vign{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 50%,rgba(200,30,10,.55));opacity:0;transition:opacity .5s}
-#gdark{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(0,0,0,.4) 0,#000 70%);opacity:0}
+#gdark{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(0,0,0,.88) 0,#000 60%);opacity:0;pointer-events:none}
 #score{position:absolute;left:50%;top:70px;transform:translateX(-50%);display:flex;gap:16px;background:rgba(16,20,14,.94);border:1px solid var(--line);padding:14px}
 #score table{border-collapse:collapse;font-size:15px;min-width:360px}
 #score th{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);text-align:left;padding:4px 8px;font-weight:600}

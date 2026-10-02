@@ -57,6 +57,7 @@ export function buildPlaneFx(D, root, nozzles, stacks) {
   const fx = { flames: [], stacks: [], vapor: null };
   for (const n of nozzles) fx.flames.push({ out: mk(OUTER, FLAME, root, n.x, n.y, n.z), inn: mk(INNER, DIAMOND, root, n.x, n.y, n.z), glow: mk(DISC, GLOW, root, n.x, n.y, n.z + 0.05), r: n.r });
   for (const s of stacks) { const m = mk(STACK, FLAME, root, s.x, s.y, s.z); m.rotation.y = s.dir || 0; fx.stacks.push(m); }
+  mk(HOLEGEO, HOLE, root, 0, 0, 0); // marca de bala: material na cena desde o início (compila no carregamento)
   if (D.jet) fx.vapor = mk(new THREE.CylinderGeometry(D.fuseR * 1.15, D.fuseR * 2.6, 1, 24, 1, true).translate(0, -0.5, 0).rotateX(Math.PI / 2), VAPOR, root, 0, 0, D.wingZ + D.chord * 0.4);
   return fx;
 }
@@ -67,7 +68,7 @@ export function updatePlaneFx(p, dt) {
   const E = p.eng, on = p.alive && p.engineOn && !p.gone, t = performance.now() / 1000;
   const flick = () => 1 + (Math.random() - 0.5) * 0.16;
   if (E.jet) {
-    const ab = on ? E.ab : 0, hot = on ? clamp((E.N - 0.9) / 0.1, 0, 1) : 0;
+    const ab = on && E.hasAB ? E.ab : 0, hot = on ? clamp((E.N - 0.9) / 0.1, 0, 1) : 0;
     for (const f of fx.flames) {
       // PC: chama longa; sem PC: só o brilho curto do bocal em potência militar
       const len = ab > 0.01 ? f.r * (7 + 9 * ab) : f.r * 1.1 * hot, rad = f.r * (ab > 0.01 ? 0.85 + 0.1 * ab : 0.7);
@@ -100,4 +101,61 @@ export function updatePlaneFx(p, dt) {
     if (k > 0.02) { const s = 0.75 + 0.25 * k; fx.vapor.scale.set(s * rand(0.97, 1.03), s * rand(0.97, 1.03), p.def.L * 0.22 * k); }
     else fx.vapor.scale.setScalar(HIDE);
   }
+}
+
+// ---------- lascas de chapa arrancadas pelos acertos ----------
+// Malhas pequenas com o MESMO material de pintura do avião (nenhum shader novo na partida); caixa fina
+// em vez de plano para aparecer dos dois lados sem DoubleSide (que compilaria outro programa).
+const FLAKE = new THREE.BoxGeometry(1, 0.02, 0.7), flakes = [];
+export function fxFlakes(pl, pos, n = 2) {
+  const mat = pl.mats && pl.mats[0]; if (!mat || pos.distanceToSquared(camera.position) > 1500 * 1500) return;
+  for (let i = 0; i < n; i++) {
+    if (flakes.length > 60) { const o = flakes.shift(); o.m.removeFromParent(); }
+    const m = new THREE.Mesh(FLAKE, mat), s = rand(0.12, 0.38);
+    m.scale.set(s, s, s * rand(0.6, 1.2)); m.position.copy(pos); m.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6));
+    pl.root.parent && pl.root.parent.add(m);
+    flakes.push({ m, v: pl.vel.clone().multiplyScalar(0.85).add(new THREE.Vector3(rand(-1, 1), rand(-0.3, 1), rand(-1, 1)).multiplyScalar(9)), w: new THREE.Vector3(rand(-14, 14), rand(-14, 14), rand(-14, 14)), t: rand(2.5, 4) });
+  }
+}
+export function updateFlakes(dt) {
+  for (let i = flakes.length - 1; i >= 0; i--) {
+    const f = flakes[i];
+    if ((f.t -= dt) <= 0) { f.m.removeFromParent(); flakes.splice(i, 1); continue; }
+    f.v.multiplyScalar(Math.exp(-dt * 2.2)); f.v.y -= 9.8 * dt;             // chapa leve: o ar freia rápido
+    f.m.position.addScaledVector(f.v, dt); f.m.rotation.x += f.w.x * dt; f.m.rotation.y += f.w.y * dt; f.m.rotation.z += f.w.z * dt;
+  }
+}
+export function clearFlakes() { for (const f of flakes) f.m.removeFromParent(); flakes.length = 0; }
+
+// ---------- marcas de bala na chapa (furo + queimado), presas à peça atingida ----------
+// O tiro é refeito como raio contra o modelo para achar a superfície e a normal; a marca vira filha da
+// malha atingida (acompanha superfície e peças que se soltam). Some no reparo (refit reconstrói o modelo).
+const holeTex = canvasTex(64, 64, (g, w) => {
+  const c = w / 2, gr = g.createRadialGradient(c, c, 0, c, c, c);
+  gr.addColorStop(0, 'rgba(8,7,6,1)'); gr.addColorStop(0.16, 'rgba(14,12,10,.95)'); gr.addColorStop(0.3, 'rgba(40,34,28,.7)');
+  gr.addColorStop(0.6, 'rgba(70,62,52,.25)'); gr.addColorStop(1, 'rgba(70,62,52,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, w, w);
+  g.strokeStyle = 'rgba(20,17,14,.6)'; g.lineWidth = 1.5; // bordas rasgadas da chapa
+  for (let i = 0; i < 7; i++) { const a = Math.random() * 6.28, r = c * (0.25 + Math.random() * 0.3); g.beginPath(); g.moveTo(c + Math.cos(a) * c * 0.12, c + Math.sin(a) * c * 0.12); g.lineTo(c + Math.cos(a) * r, c + Math.sin(a) * r); g.stroke(); }
+});
+const HOLE = new THREE.MeshBasicMaterial({ map: holeTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+const HOLEGEO = new THREE.PlaneGeometry(1, 1);
+const _rc = new THREE.Raycaster(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _n = new THREE.Vector3();
+const solid = h => { const m = Array.isArray(h.object.material) ? h.object.material[0] : h.object.material; return h.face && !h.object.userData.fx && !m.transparent; };
+export function fxHole(pl, lp, ld, he) {
+  if (!ld || pl.pos.distanceToSquared(camera.position) > 900 * 900) return;
+  const W = pl.root.matrixWorld;
+  _d.set(ld[0], ld[1], ld[2]).transformDirection(W);
+  _o.set(lp[0], lp[1], lp[2]).applyMatrix4(W).addScaledVector(_d, -3);
+  _rc.set(_o, _d); _rc.far = 8;
+  const hit = _rc.intersectObject(pl.root, true).find(solid); if (!hit) return;
+  _n.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+  if (_n.dot(_d) > 0) _n.negate();
+  const m = new THREE.Mesh(HOLEGEO, HOLE);
+  m.position.copy(hit.point).addScaledVector(_n, 0.01); m.lookAt(_o.copy(m.position).add(_n));
+  m.rotateZ(rand(0, 6.28)); m.scale.setScalar(he ? rand(0.45, 0.8) : rand(0.12, 0.2));
+  m.userData.fx = true; m.renderOrder = 2;
+  hit.object.attach(m);
+  const H = pl.root.userData.holes || (pl.root.userData.holes = []);
+  H.push(m); if (H.length > 50) H.shift().removeFromParent();
 }

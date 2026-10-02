@@ -5,6 +5,7 @@ import { GUNS } from '../data/vehicles.js';
 import { wingCfg, tailCfg, finCfg, station, surfBox, SURF } from './planeGeom.js';
 import { fxExplosion } from '../fx/particles.js';
 import { showDmg } from '../ui/hud.js';
+
 // =====================================================================
 // Dano por módulos (estilo WT): cada avião tem componentes internos com
 // caixa própria no espaço do corpo. A bala entra pela casca (asa, cauda,
@@ -85,11 +86,14 @@ export const modFrac = m => (m.kind === 'engine' ? 1 : clamp(m.hp / m.max, 0, 1)
 
 // Projétil atravessando o avião a partir do ponto de entrada (coordenadas locais)
 export function hitPlaneModules(pl, lp, ld, am, dmg, pen, by, shell) {
+  pl.hitLx = lp[0]; // onde (na envergadura) acertou: decide se a ponta da asa se solta
   pl.damage(shell, dmg * 0.55, by, false); // furos na estrutura
+  // lascas de chapa: granada explosiva arranca mais; bala comum de vez em quando
+  if (pl.hitFx) pl.hitFx(lp, (am.tnt || am.he || 0) > 0, ld); // lascas de chapa e o som do acerto (plane.js)
   if (pl.gone) return;
   const P = 1 + (am.cal || 12) * 0.06, o = [lp[0], lp[1], lp[2]], d = [ld[0] * P, ld[1] * P, ld[2] * P];
   const list = [];
-  for (const m of Object.values(pl.mods)) { const r = segBox(o, d, m.mn, m.mx); if (r || inside(m, lp)) list.push([r ? r.t : 0, m]); }
+  for (const m of Object.values(pl.mods)) { if (m.lost) continue; const r = segBox(o, d, m.mn, m.mx); if (r || inside(m, lp)) list.push([r ? r.t : 0, m]); }
   list.sort((a, b) => a[0] - b[0]);
   let e = dmg;
   for (const [, m] of list) {
@@ -109,6 +113,7 @@ export function hitPlaneModules(pl, lp, ld, am, dmg, pen, by, shell) {
 }
 // Explosão próxima (míssil, bomba, granada antiaérea) em coordenadas locais
 export function blastPlaneModules(pl, lx, ly, lz, R, dmg, by) {
+  if (pl.hitFx && dmg > 1) pl.hitFx(null, true);
   for (const m of Object.values(pl.mods)) { const dd = boxDist(m, lx, ly, lz); if (dd < R) applyMod(pl, m, dmg * (1 - dd / R), by, { tnt: 1 }); }
 }
 const inside = (m, p) => p[0] > m.mn[0] && p[0] < m.mx[0] && p[1] > m.mn[1] && p[1] < m.mx[1] && p[2] > m.mn[2] && p[2] < m.mx[2];
@@ -116,7 +121,7 @@ function boxDist(m, x, y, z) { const dx = Math.max(m.mn[0] - x, 0, x - m.mx[0]),
 
 export function applyMod(pl, m, dmg, by, am) {
   if (pl.gone || !isFinite(dmg) || dmg <= 0) return;
-  if (Math.abs(m.c[0]) > pl.def.fuseR * 1.2 && !pl.wingOn[m.c[0] > 0 ? 'L' : 'R']) return; // peça de uma asa que já caiu
+  if (m.lost) return; // peça que já caiu junto com a ponta da asa ou a asa
   m.hitT = S.now;
   const inc = am && ((am.he || 0) > 0 || (am.tnt || 0) > 0) ? 2.2 : 1; // explosiva/incendiária pega fogo mais fácil
   const me = pl.isPlayer, shooter = by && by.isPlayer;
@@ -166,7 +171,9 @@ export function applyMod(pl, m, dmg, by, am) {
     case 'ctrl': case 'flap': if (died) {
       // trava onde estava (cabo/haste cortado deixa a superfície meio solta: guarda parte da deflexão)
       m.stuck = 0.6 * ({ ailL: pl.ail, ailR: pl.ail, elev: pl.elev, rud: pl.rud }[m.name] || 0);
-      crit(`${m.label} ${m.kind === 'flap' ? 'travado' : 'inoperante'}`);
+      // explosiva ou muito estrago: a superfície é arrancada e cai (sem ela, sem deflexão nenhuma)
+      if (m.name !== 'cables' && (inc > 1 || m.hp < -m.max * 0.4)) { pl.ripSurface(m); crit(`${m.label} arrancado`); }
+      else crit(`${m.label} ${m.kind === 'flap' ? 'travado' : 'inoperante'}`);
     } break;
   }
 }

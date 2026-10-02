@@ -12,9 +12,12 @@ import { Seeker, LOCK } from './targeting.js';
 import { launchMissile, updateMissiles, clearMissiles, dropCM, missiles } from './missiles.js';
 import { readInput, pilot } from './input.js';
 import { applyEnv, updateEnv } from './environment.js';
+import { AIRFIELDS, onAirfield } from '../world/terrain.js';
+import { updateAirfields } from '../world/airfield.js';
 import { acam, resetAirCam } from './camera.js';
 import { showResult, toast } from './screens.js';
 import { cam } from '../game/camera.js';
+const _tv = new V3();
 // =====================================================================
 // BattleManager: estados da batalha, equipes, objetivo, estatísticas,
 // colisões entre aeronaves, armas do jogador e fim de partida.
@@ -67,7 +70,7 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
-    this.weapon = 1; this.marked = null; this.launches = []; this.critLog = []; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
+    this.weapon = 1; this.marked = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
@@ -109,7 +112,7 @@ export const B = {
       const c = readInput();
       if (c.cam) acam.mode = (acam.mode + 1) % 4;
       if (!this.marked || !this.marked.alive) this.marked = this.bestTarget();
-      if (c.target) { this.cycleTarget(); if (this.seeker) this.seeker.reset(); toast(`Alvo: ${this.marked ? this.marked.def.short : '—'}`, 1200); }
+      if (c.target) { if (this.cycleTarget()) { if (this.seeker) this.seeker.reset(); toast(`Alvo: ${this.marked.def.short}`, 1200); } else toast('Nenhum inimigo na mira', 1000); }
       this.avionicsInput(p, c);
       pilot(p, c, cam.aimDir, dt);
       p.firing = c.fire;
@@ -119,7 +122,9 @@ export const B = {
       if (this.seeker && p.missiles > 0) this.seeker.update(dt, p, planes, this.marked, S.now); else if (this.seeker) { this.seeker.state = LOCK.OFF; this.seeker.target = null; }
       if (c.missile && p.missiles > 0) this.fireMissile(p);
       else if (c.missile) toast(p.racks.length ? 'Mísseis esgotados' : 'Esta aeronave não leva mísseis', 1600);
+      this.refitStep(p, dt);
     } else if (p) { p.firing = false; }
+    updateAirfields(dt);
     updateMissiles(dt);
     this.updateAvionics(dt);
     this.updateLaunches();
@@ -142,6 +147,19 @@ export const B = {
     }
     const r = this.obj.update(this, dt);
     if (r) this.finish(r);
+  },
+  // ---------- base: parado na própria pista = reparo e rearme (como no WT) ----------
+  // refit: { t, dur, done, parked, onField } — o HUD mostra a barra de progresso
+  refit: { t: 0, dur: 0, done: false, parked: false, onField: false },
+  refitStep(p, dt) {
+    const a = AIRFIELDS.find(f => f.team === p.team), R = this.refit;
+    R.onField = !!(p.onGround && a && onAirfield(a, p.pos.x, p.pos.z));
+    R.parked = R.onField && p.ias < 2.5;
+    if (!R.parked) { R.t = 0; R.done = false; return; }
+    if (R.done) return;
+    if (!R.t) R.dur = 6 + 18 * wear(p); // rearme ~6 s; reparo cresce com o estrago
+    R.t += dt;
+    if (R.t >= R.dur) { p.refit(); R.done = true; this.syncSeeker(); toast('Reparado, reabastecido e rearmado', 2200); }
   },
   // ---------- armas e aviônicos do jogador ----------
   // buscador IR existe só quando a estante selecionada é infravermelha (o semiativo usa o radar)
@@ -222,9 +240,12 @@ export const B = {
     }
     return best;
   },
+  // como no WT: mira no avião e aperta o scroll → marca o inimigo mais perto da mira (até 15°); ninguém ali, nada muda
   cycleTarget() {
-    const en = planes.filter(e => e.alive && e.team !== 1).sort((a, b) => a.pos.distanceTo(this.player.pos) - b.pos.distanceTo(this.player.pos));
-    if (en.length) this.marked = en[(en.indexOf(this.marked) + 1) % en.length];
+    const P = this.player.pos; let best = null, bc = Math.cos(15 * Math.PI / 180);
+    for (const e of planes) { if (!e.alive || e.team === 1) continue; const c = _tv.copy(e.pos).sub(P).normalize().dot(cam.aimDir); if (c > bc) { bc = c; best = e; } }
+    if (best) this.marked = best;
+    return best;
   },
   // ---------- colisão entre aeronaves (as balas e mísseis já colidem por conta própria) ----------
   collisions() {
@@ -255,3 +276,13 @@ export const B = {
 };
 // velocidade inicial: perto do cruzeiro de cada avião
 function PLANE_V(key) { const A = AIR[key]; return (A ? A.cruise : 450) / 3.6 * 0.85; }
+
+// quanto o avião está estragado (0..1): estrutura, módulos destruídos e peças perdidas
+export function wear(p) {
+  const ks = Object.keys(p.maxHp); let d = 0;
+  for (const k of ks) d += 1 - clamp(p.hp[k] / p.maxHp[k], 0, 1);
+  d /= ks.length;
+  for (const m of Object.values(p.mods)) if (m.dead) d += 0.04;
+  if (!p.tipOn.L || !p.tipOn.R) d += 0.25;
+  return clamp(d, 0, 1);
+}

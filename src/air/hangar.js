@@ -80,17 +80,10 @@ export function showcase(key) {
   if (!hv.built) build();
   if (show) hs.remove(show.root);
   const D = PLANES[key]; show = buildPlane(D); cur = key;
-  const gearM = new THREE.MeshStandardMaterial({ color: 0x1c1c1b, roughness: 0.5, metalness: 0.5 });
-  const lift = D.fuseR + 1.35, wh = r => new THREE.CylinderGeometry(r, r, 0.22, 18).rotateZ(Math.PI / 2);
-  for (const s of [1, -1]) {
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, lift, 8), gearM); st.position.set(s * D.span * 0.16, -lift / 2, D.wingZ + 0.4); show.root.add(st);
-    const w = new THREE.Mesh(wh(0.4), gearM); w.position.set(s * D.span * 0.16, -lift + 0.4, D.wingZ + 0.4); w.castShadow = true; show.root.add(w);
-  }
-  const nz = D.jet ? D.L * 0.33 : -D.L * 0.46, nl = D.jet ? lift : lift * 0.45;
-  const ns = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, nl, 8), gearM); ns.position.set(0, -nl / 2, nz); show.root.add(ns);
-  const nw = new THREE.Mesh(wh(D.jet ? 0.3 : 0.18), gearM); nw.position.set(0, -nl + (D.jet ? 0.3 : 0.18), nz); show.root.add(nw);
-  show.root.position.set(0, lift - 0.02, 0);
-  if (!D.jet) show.root.rotation.x = -Math.atan2(lift - nl, D.L * 0.46 + D.wingZ + 0.4) * 0.9; // pousado na bequilha
+  // trem de pouso do próprio modelo (o mesmo que desce em voo)
+  const G = show.gearMesh; G.visible = true;
+  show.root.position.set(0, G.userData.lift - 0.02, 0);
+  show.root.rotation.x = -G.userData.pitch; // pousado na bequilha
   show.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   hs.add(show.root);
   keyL.target.position.set(0, 1, 0); hv.td = VIEWS.tres[2] * sizeK(key);

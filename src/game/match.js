@@ -1,3 +1,4 @@
+import { clearFlakes } from '../vehicles/planeFx.js';
 import { S, tanks, planes, TICKETS } from '../core/state.js';
 import { V3, rand, rv, clamp } from '../core/util.js';
 import { POINTS, SPAWN, AIRSPAWN } from '../world/terrain.js';
@@ -47,7 +48,7 @@ function botPick(team) {
 export function clearWorld() {
   while (tanks.length) tanks[0].remove();
   while (planes.length) planes[0].remove();
-  clearProjs(); clearDebris(); clearParts(); respawns = [];
+  clearProjs(); clearDebris(); clearParts(); clearFlakes(); respawns = [];
   for (const p of POINTS) { p.owner = 0; p.prog = 0; }
   resetTrees(); hideCraters();
   S.tickets = { 1: TICKETS, '-1': TICKETS }; S.player = null; S.spectate = null; S.roster = []; S.xray = null;

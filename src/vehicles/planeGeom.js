@@ -43,3 +43,11 @@ export function surfBox(o, s0, s1, cf, fin) {
   const mn = [0, 1, 2].map(i => Math.min(...pts.map(p => p[i]))), mx = [0, 1, 2].map(i => Math.max(...pts.map(p => p[i])));
   return { c: mn.map((v, i) => (v + mx[i]) / 2), h: mn.map((v, i) => Math.max((mx[i] - v) / 2, 0.07)) };
 }
+// onde a ponta da asa se solta (fração da semienvergadura): na dobra da asa (F-4) ou no início do aileron
+export const tipBreak = D => (D.wingBreak ? D.wingBreak[0] : (D.ail || SURF.ail)[0]);
+// fração da área de UMA asa que fica na ponta (sustentação perdida quando ela cai)
+export function tipArea(D) {
+  const o = wingCfg(D, 1), sB = tipBreak(D); let a = 0, t = 0;
+  for (let i = 0; i < 40; i++) { const s = (i + 0.5) / 40, c = chordAt(o, s); t += c; if (s > sB) a += c; }
+  return a / t;
+}
