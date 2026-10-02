@@ -184,7 +184,9 @@ function reticle(p) {
     }
   }
   // círculo do mouse (para onde o instrutor leva o nariz); some quando o nariz já está nele
-  _b.copy(p.pos).addScaledVector(cam.aimDir, 1000);
+  // mesma distância do eixo das armas (400 m): com a câmera atrás/acima, distâncias diferentes davam paralaxe
+  // e o retículo parava fora do círculo mesmo com o nariz no lugar (pior na mira com FOV fechado)
+  _b.copy(p.pos).addScaledVector(cam.aimDir, 400);
   const ap = proj(_b, P2);
   if (ap && acam.mode !== 3) {
     const near = pr ? Math.hypot(ap.x - pr.x, ap.y - pr.y) : 99;

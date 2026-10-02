@@ -253,15 +253,19 @@ export class Plane {
     // opts.nose (Batalha Aérea, como no WT): quem vai ao círculo do mouse é o NARIZ/linha das armas;
     // o integral segura o nariz no alvo apesar do ângulo de ataque. opts.gain deixa a resposta mais viva.
     const nose = !!opts.nose, K = opts.gain || 1;
-    const pe = Math.atan2(du, Math.max(df, 0.05)) + this.alpha * (nose ? 0.25 : 0.9);
-    this.iP = clamp(this.iP + pe * dt * (off < 0.3 ? 1 : 0), -0.3, 0.3) * (off < 0.3 ? 1 : 0.95);
+    const eN = Math.atan2(du, Math.max(df, 0.05)), pe = eN + this.alpha * (nose ? 0.25 : 0.9);
+    // no modo nariz o integral soma só o erro do NARIZ: somando pe, parava com o nariz 0,25·α fora do círculo
+    this.iP = clamp(this.iP + (nose ? eN : pe) * dt * (off < 0.3 ? 1 : 0), -0.3, 0.3) * (off < 0.3 ? 1 : 0.95);
     const trim = 0.9 * clamp(this.alpha, -0.5, 0.5) / D.kde;
     // rolagem: inclina para colocar o alvo no plano de sustentação; perto do nariz, nivela as asas.
     // PERTO da mira (até ~17°) a inclinação usa só o desvio LATERAL: atan2(−dl, |du|); "acima/abaixo" fica
     // com o profundor (pe). Antes, com o alvo poucos graus abaixo do nariz, atan2(−dl, du) pedia ±170° e o
     // sinal trocava cada vez que dl cruzava zero → o avião balançava (em subida, em curva, em tudo).
     // Em du = 0 as duas fórmulas coincidem (sem salto); longe, abaixo → rola de dorso e puxa, como antes.
-    const NEAR = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu);
+    // perto da mira o "nivelar" mira a inclinação de curva coordenada da mira em movimento (tan φ = V·ω/g);
+    // nivelando para 0°, em curva ele brigava com a inclinação para o círculo e o nariz parava ~5° ao lado
+    const om = this._aimVel ? _pd.crossVectors(this._aimPrev, this._aimVel).dot(UP) : 0;
+    const NEAR = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu) - clamp(Math.atan(this.vel.length() * om / 9.81), -1.4, 1.4);
     if (this.nearAim) { if (off > NEAR * 1.5) this.nearAim = false; } else if (off < NEAR) this.nearAim = true;
     // perto da mira, o + 0.08 (~5°) deixa a inclinação proporcional ao desvio lateral: sem ele, dl e du quase zero
     // davam atan2 de ruído (±90°) e o jato balançava as asas com qualquer tremor da mira
