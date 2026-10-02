@@ -5,7 +5,7 @@ import { settings, isDown } from '../core/settings.js';
 import { V3, UP, clamp, lerp, rand, REDUCED } from '../core/util.js';
 import { H } from '../world/terrain.js';
 import { cam } from '../game/camera.js';
-import { cmd } from './input.js';
+import { cmd, manualAxes } from './input.js';
 // =====================================================================
 // CameraSystem da Batalha Aérea (mira "mouse aim" como no WT).
 // A mira é uma orientação LIVRE (quaternion): o mouse gira em torno dos
@@ -52,6 +52,10 @@ export function updateAirCamera(dt) {
   if (own && settings.gameplay.flightMode === 'teclado' && !free) {
     // controle direto: a mira acompanha o nariz (câmera presa atrás do avião)
     aimQ.slerp(v.q, 1 - Math.exp(-dt * 8));
+  } else if (own && !free && manualAxes(cmd)) {
+    // tecla de manche no modo mouse: a mira vai junto com o nariz (sem atraso, senão o instrutor
+    // puxaria de volta ao soltar); a suavização da vista fica com viewQ
+    aimQ.copy(v.q);
   }
   // o horizonte nivela devagar (mais rápido quando de cabeça para baixo)
   upQ(aimQ, _u); autoLevel(aimQ, 1 - Math.exp(-dt * (_u.y < 0 ? 2.2 : 1.4)));

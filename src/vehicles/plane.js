@@ -225,12 +225,25 @@ export class Plane {
     const pe = Math.atan2(du, Math.max(df, 0.05)) + this.alpha * (nose ? 0.25 : 0.9);
     this.iP = clamp(this.iP + pe * dt * (off < 0.3 ? 1 : 0), -0.3, 0.3) * (off < 0.3 ? 1 : 0.95);
     const trim = 0.9 * clamp(this.alpha, -0.5, 0.5) / D.kde;
-    let elev = off > 1.4 && du < 0 ? 1 : K * (3.2 * pe - 0.9 * this.pr) + trim + (nose ? 1.2 * this.iP : 0);
-    // rolagem: inclina para colocar o alvo no plano de sustentação; perto do nariz, nivela as asas
-    const bank = Math.atan2(-dl, du);
-    const wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu);
+    // rolagem: inclina para colocar o alvo no plano de sustentação; perto do nariz, nivela as asas.
+    // Alvo ABAIXO do nariz e não muito longe (ex.: nariz passou do ponto ao subir, ou mira um pouco para
+    // baixo): EMPURRA o manche em vez de rolar de dorso para puxar. Antes atan2(-dl, du) com du < 0 pedia
+    // ±180° e o sinal dependia do ruído lateral → o avião balançava. Só vale com o alvo majoritariamente
+    // abaixo (de lado continua rolando, como em curva) e com histerese para não trocar de lado a cada quadro.
+    // Só com as asas quase niveladas: inclinado numa curva, "abaixo" no referencial do avião é para o
+    // lado, e empurrar desfazia a curva.
+    const PUSH_CONE = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu);
+    // (em subida/mergulho íngreme não há curva nivelada a proteger: vale em qualquer rolagem)
+    const steep = Math.abs(_pf.y) > 0.6;
+    if (this.pushSide) { if (du > -0.3 * Math.abs(dl) || off > PUSH_CONE * 1.3 || (Math.abs(level) > 1 && !steep)) this.pushSide = false; }
+    else if (du < -0.6 * Math.abs(dl) && off < PUSH_CONE && (Math.abs(level) < 0.8 || steep)) this.pushSide = true;
+    const bank = this.pushSide ? Math.atan2(dl, -du) : Math.atan2(-dl, du);
     const w = nose ? clamp((off - 0.035) / 0.14, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
     const rollErr = lerp(level * 0.6, bank, w);
+    // "rola, depois puxa": com muita rolagem pela frente o profundor espera (puxar/empurrar inclinado
+    // jogava o nariz para o lado, criava erro lateral e o avião ficava rolando para lá e para cá)
+    const rp = lerp(1, clamp(Math.cos(rollErr), 0.15, 1), w);
+    let elev = off > 1.4 && du < 0 ? 1 : K * (3.2 * pe * rp - 0.9 * this.pr) + trim + (nose ? 1.2 * this.iP : 0);
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
     this.ail = clamp(K * (2.6 * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
@@ -241,6 +254,7 @@ export class Plane {
     elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
     elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
     elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
+    elev = Math.max(elev, (-(opts.gneg || 2.5) - this.n) * 0.6 - 0.25);                 // limite de G negativo
     // proteção perto do solo (assistência arcade): não deixa mergulhar abaixo de ~60 m sem querer
     if (opts.groundAssist) {
       const agl = this.pos.y - H(this.pos.x, this.pos.z), sink = -this.vel.y;

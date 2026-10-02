@@ -1,5 +1,4 @@
 import { isDown, pressed, settings } from '../core/settings.js';
-import { clamp } from '../core/util.js';
 // =====================================================================
 // InputSystem + AircraftController da Batalha Aérea.
 // Teclado, mouse e gamepad viram um COMANDO normalizado; o comando é que
@@ -56,13 +55,16 @@ export function pilot(p, c, aimDir, dt) {
   if (c.gear) p.gear = p.gear ? 0 : 1;
   if (p.gear && p.ias > 380 / 3.6) p.gear = 0; // recolhe sozinho acima da velocidade de operação
   p.airbrake = c.brake;
-  if (settings.gameplay.flightMode === 'teclado' || c.pad) {
+  // Tecla de manche no modo mouse = controle direto naquele instante (como no WT): antes só o profundor
+  // era trocado e o instrutor seguia rolando o avião atrás do círculo do mouse parado → avião "bambo".
+  // A câmera (camera.js) leva a mira junto com o nariz enquanto isso, então soltar não dá tranco.
+  if (settings.gameplay.flightMode === 'teclado' || c.pad || manualAxes(c)) {
     // controle direto, com rampa suave nas superfícies
     const r = 1 - Math.exp(-dt * 6);
     p.elev += (c.pitch - p.elev) * r; p.ail += (c.roll - p.ail) * r; p.rud += (c.yaw - p.rud) * r;
   } else {
     // instrutor: nariz (linha das armas) no círculo do mouse, resposta mais viva que a da IA
     p.steerTo(aimDir, dt, { glim: Math.min(p.def.glim - 1.5, 10), groundAssist: true, nose: true, gain: 1.3 });
-    if (c.roll) p.ail = c.roll; if (c.yaw) p.rud = c.yaw; if (c.pitch) p.elev = clamp(c.pitch, -1, 1);
   }
 }
+export const manualAxes = c => !!(c.pitch || c.roll || c.yaw);
