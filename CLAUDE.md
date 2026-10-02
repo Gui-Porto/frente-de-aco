@@ -29,7 +29,9 @@ Módulos ES; o estado mutável compartilhado fica em `core/state.js` (`S`, `tank
 | `combat/ballistics.js` | projéteis com arrasto, blindagem inclinada/normalização/ricochete, pós-penetração, explosivos (HE/bombas), destroços como corpos Rapier |
 | `ai/brains.js` | IA de tanque, antiaéreo e avião (usa a mesma física do jogador) |
 | `ui/` | HUD (silhueta de estado, retículos, assistências), raio-X, minimapa, menus (hangar, spawn com SP, pausa, configurações, fim) |
-| `air/` | Batalha Aérea (modo separado, `S.mode === 'air'`, estado de menu `airmenu`): `battle.js` (BattleManager), `missions.js` (objetivos plugáveis), `ai.js` (FighterBrain), `targeting.js` (lock/PN/avanço, puro e testado), `missiles.js`, `input.js` (comando normalizado teclado/mouse/gamepad), `camera.js`, `hud.js` (canvas), `hangar.js` (cena própria via `setScene`), `environment.js` (horário/clima/nuvens/chuva), `screens.js`, `sound.js` |
+| `air/` | Batalha Aérea (modo separado, `S.mode === 'air'`, estado de menu `airmenu`): `battle.js` (BattleManager, arena por era, controles de radar/míssil), `missions.js`, `ai.js` (FighterBrain: usa o próprio radar e só reage a míssil que percebe), `targeting.js` (buscador IR/PN/avanço, puro), `missiles.js` (IR e semiativo), `input.js`, `camera.js`, `hud.js` (orquestra `hud/`), `hangar.js`, `environment.js`, `screens.js`, `sound.js` (áudio por perfil de motor/RWR) |
+| `air/systems/` | Sistemas da aeronave, puros e testados: `engine.js` (ENGINES + EngineSet: spool não linear, pós-combustão, TSFC), `atmosphere.js` (ISA), `avionics.js` (catálogo RADARS/RWRS/MAWS), `radar.js` (varredura/STT/ACM/telemétrico), `rwr.js` (RWR + MAW) |
+| `air/hud/` | `kit.js` (canvas/primitivas), `themes.js` (ww2/nato/sov), `flight.js` (painel inf. dir.), `scopes.js` (radar B-scope + RWR inf. esq., mapa tático), `warnings.js` (alertas só por sistema) |
 | `game/` | `loop.js` (física em passo fixo 1/120 s), `match.js` (tickets, captura, SP, respawn), `controls.js`, `camera.js` |
 
 ## Física — decisões importantes
@@ -41,6 +43,10 @@ Módulos ES; o estado mutável compartilhado fica em `core/state.js` (`S`, `tank
 ## Testes manuais
 
 `window.__game` expõe `S`, `simulate(dt)`, `spawnVehicle`, etc. para rodar partidas aceleradas sem renderizar (Playwright). Em navegador sem GPU use qualidade "baixa" (`localStorage fda.settings.v1 = {graphics:{quality:'baixa'}}`).
+
+## Aeronaves — como adicionar uma
+
+Tudo por dados, sem `if (key === …)`: entrada em `PLANES` (`data/vehicles.js`: aerodinâmica, `engine`/`engines`, `radar`/`rwr`/`maw`, `missiles: [{w, n}]`, `wave`, `inertia`/`damp`/`flapV` opcionais, `hud`, `model`) + ficha em `air/aircraft.js` (`era` define arena/adversários). Motor novo → `ENGINES`; sistema novo → `avionics.js`. HUD e áudio só mostram/tocam o que a aeronave tem. Modelo comprado: `def.model = { url }` com nós `wingL/wingR/tail/prop/hp_N` (`vehicles/modelLibrary.js`); sem ele, procedural.
 
 ## Renderização — decisões importantes
 
