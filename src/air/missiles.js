@@ -142,7 +142,9 @@ export function launchMissile(plane, target, rack = plane.rack) {
   const sarh = M.seeker === 'sarh';
   const vel = sarh ? new V3(0, -7, 0).applyQuaternion(plane.q).add(plane.vel) : fwdOf(plane.q, new V3()).multiplyScalar(25).add(plane.vel);
   if (!sarh) sndLaunch(pos);
-  return new Missile(plane, target, M, pos, vel);
+  const m = new Missile(plane, target, M, pos, vel);
+  if (S.air && S.air.onLaunch) S.air.onLaunch(m);
+  return m;
 }
 export function updateMissiles(dt) {
   updateFlares(dt);

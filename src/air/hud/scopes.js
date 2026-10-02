@@ -34,7 +34,9 @@ function radarScope(p, rd, T) {
   plate(0, 0, RW, RH, T);
   ptxt(sysName(T, rd.R), 22, 22, 13, T.fg, 'left', UI, 700);
   const mode = rd.mode === 'STT' ? (rd.locked ? 'TRAVADO' : 'TRAVANDO') : RADAR_MODE[rd.mode].toUpperCase();
-  ptxt(mode, RW - 14, 22, 12, rd.mode === 'STT' ? (rd.locked ? C.enemy : C.amber) : rd.on ? T.accent : T.dim, 'right', UI, 700);
+  const launch = B.launches.find(l => S.now - l.at < 6);
+  if (launch) { if (Math.sin(V.blink * 10) > -0.3) { g.fillStyle = C.enemy; g.fillRect(RW - 132, 9, 118, 18); ptxt('LANÇAMENTO', RW - 73, 22, 12.5, '#fff', 'center', UI, 800); } }
+  else ptxt(mode, RW - 14, 22, 12, rd.mode === 'STT' ? (rd.locked ? C.enemy : C.amber) : rd.on ? T.accent : T.dim, 'right', UI, 700);
   const sx = 14, sy = 32, sw = RW - 28, sh = RH - 66;
   g.fillStyle = SC.bg; g.fillRect(sx, sy, sw, sh);
   // escala: a menor que cabe o contato mais distante (ACM sempre 10 km)
@@ -63,6 +65,11 @@ function radarScope(p, rd, T) {
     g.fillStyle = ally ? `rgba(109,180,227,${0.25 + 0.7 * a})` : `rgba(${SC.glow},${0.2 + 0.8 * a})`;
     if (ally) { g.beginPath(); g.arc(x, y, 3.5, 0, 7); g.fill(); } else g.fillRect(x - 4, y - 2, 8, 4);
     if (e === B.marked && rd.target !== e) { g.strokeStyle = `rgba(${SC.glow},.8)`; g.lineWidth = 1; g.strokeRect(x - 7, y - 6, 14, 12); }
+    // quem lançou: losango vermelho piscando com "M" (o míssil saiu deste contato)
+    if (B.launches.some(l => l.owner === e && S.now - l.at < 8) && Math.sin(V.blink * 12) > -0.4) {
+      g.strokeStyle = C.enemy; g.lineWidth = 1.6; g.beginPath(); g.moveTo(x, y - 10); g.lineTo(x + 10, y); g.lineTo(x, y + 10); g.lineTo(x - 10, y); g.closePath(); g.stroke();
+      ptxt('M', x + 13, y - 6, 11, C.enemy, 'left', MONO, 700);
+    }
   }
   // alvo em rastreio: quadrado, distância, altitude e aproximação
   const tc = rd.target && rd.contacts.get(rd.target);

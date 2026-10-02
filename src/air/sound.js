@@ -114,6 +114,7 @@ function tones(p, dt) {
   else if (w === 'guidance' && rs && rs.guidance) { const [a, b, hz] = rs.guidance; wn.o.type = 'sine'; wn.o.frequency.value = pulse(hz, 0.5) ? b : a; wn.g.gain.value = 0.05; }
   else if ((w === 'lock' || w === 'guidance') && rs) { const [f, hz] = rs.lock; wn.o.type = rs.lockType; wn.o.frequency.value = f; wn.g.gain.value = !hz || pulse(hz, 0.55) ? 0.035 : 0; }
   else if (w === 'track' && rs) { wn.o.type = rs.lockType; wn.o.frequency.value = rs.lock[0] * 0.8; wn.g.gain.value = pulse(1.5, 0.25) ? 0.025 : 0; }
+  else if (w === 'launch') { wn.o.frequency.value = pulse(6, 0.5) ? 1500 : 1100; wn.g.gain.value = 0.04; } // lançamento visto: alterna agudo rápido
   else if (w === 'pullup') { wn.o.frequency.value = 700; wn.g.gain.value = pulse(5, 0.5) ? 0.03 : 0; }
   else if (w === 'stall') { wn.o.frequency.value = 330; wn.g.gain.value = pulse(3, 0.6) ? 0.025 : 0; }
   else wn.g.gain.value = 0;

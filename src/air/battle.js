@@ -67,7 +67,7 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
-    this.weapon = 1; this.marked = null; this.critLog = []; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
+    this.weapon = 1; this.marked = null; this.launches = []; this.critLog = []; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
@@ -122,6 +122,7 @@ export const B = {
     } else if (p) { p.firing = false; }
     updateMissiles(dt);
     this.updateAvionics(dt);
+    this.updateLaunches();
     this.collisions();
     updateEnv(dt);
     // destroços queimando caem e somem
@@ -174,6 +175,30 @@ export const B = {
       if (d > r.M.range) return toast(`Fora de alcance (${(d / 1000).toFixed(1).replace('.', ',')} km)`, 1400);
     } else tg = this.seeker && this.seeker.locked ? this.seeker.target : null;
     if (launchMissile(p, tg, r)) { this.stats.missiles++; if (!tg) toast('Míssil sem trava: voo balístico', 1600); this.syncSeeker(); }
+  },
+  // ---------- lançamentos inimigos percebidos pelo jogador ----------
+  // Só entra o que o piloto/aeronave consegue saber: VISUAL (fumaça do lançamento a até 4 km, dentro de
+  // ±75° do nariz, ou a até 1,5 km em qualquer direção), RWR que distingue guiamento (iluminação de
+  // semiativo) ou MAW. Alimenta o status "LANÇAMENTO" do radar, o alerta central e o som.
+  launches: [],
+  onLaunch(m) {
+    const p = this.player; if (!p || !p.alive || m.owner.team === p.team) return;
+    const d = m.pos.distanceTo(p.pos), f = new V3(0, 0, 1).applyQuaternion(p.q), to = m.pos.clone().sub(p.pos).divideScalar(Math.max(d, 1));
+    if (d < 1500 || (d < 4000 && to.dot(f) > Math.cos(75 * Math.PI / 180))) this.noteLaunch(m, 'visual');
+  },
+  noteLaunch(m, how) {
+    if (this.launches.some(l => l.m === m)) return;
+    this.launches.push({ m, owner: m.owner, how, at: S.now, mine: m.target === this.player });
+  },
+  updateLaunches() {
+    const p = this.player; if (!p) return;
+    const rw = p.sys.rwr, mw = p.sys.maw;
+    for (const m of missiles) {
+      if (m.dead || m.owner.team === p.team) continue;
+      if (rw && rw.list.some(t => t.lvl === 'GUIDANCE' && t.e === m.owner) && m.target === p) this.noteLaunch(m, 'rwr');
+      if (mw && mw.list.some(x => x.m === m)) this.noteLaunch(m, 'maw');
+    }
+    this.launches = this.launches.filter(l => S.now - l.at < 8);
   },
   // radar/RWR/MAW de todas as aeronaves (cada sistema tem a própria taxa interna)
   updateAvionics(dt) {

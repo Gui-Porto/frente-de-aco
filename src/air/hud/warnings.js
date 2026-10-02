@@ -1,6 +1,9 @@
 import { H } from '../../world/terrain.js';
 import { B } from '../battle.js';
 import { g, V, C, UI, txt, clock } from './kit.js';
+import { S } from '../../core/state.js';
+import { losAngles } from '../systems/radar.js';
+const clockTo = (p, pos) => clock(losAngles(p, pos).az);
 // =====================================================================
 // Alertas centrais por prioridade. Ameaças vêm SÓ dos sistemas da aeronave:
 // MAW (lançamento/aproximação), RWR (rastreio, trava, guiamento). Sem
@@ -19,6 +22,11 @@ export function warnings(p) {
     list.push([`LANÇAMENTO DE MÍSSIL · ${clock(m.az)} · ${Math.max(1, Math.round(m.tti))} s`, C.enemy, true]);
     tone = 'maw'; arc = { az: m.az, col: C.enemy, k: 1 };
   }
+  const vis = B.launches.find(l => l.how === 'visual' && S.now - l.at < 4);
+  if (vis && !(mw && mw.list.length)) {
+    list.push([`LANÇAMENTO DE MÍSSIL · ${clockTo(p, vis.owner.pos)}${vis.mine ? ' · CONTRA VOCÊ' : ''}`, C.enemy, true]);
+    tone = tone || 'launch';
+  }
   const th = rw && rw.top;
   if (th && th.lvl !== 'SEARCH') {
     const ty = th.type ? ` (${th.type})` : '';
@@ -28,6 +36,7 @@ export function warnings(p) {
     tone = tone || { GUIDANCE: 'guidance', LOCK: 'lock', TRACK: 'track' }[th.lvl];
     if (!arc) arc = { az: th.az, col: th.lvl === 'TRACK' ? C.amber : C.enemy, k: th.strength, wide: rw.W.res >= 90 };
   }
+  if (tone === 'launch' && th && th.lvl === 'GUIDANCE') tone = 'guidance'; // guiamento contra você vale mais que o lançamento visto
   const as = p.def.clmax / p.def.cla, stall = Math.abs(p.alpha) > as * 0.9 || p.ias < stallV(p);
   if (stall) list.push(['ESTOL', C.amber, true]);
   const agl = p.pos.y - H(p.pos.x, p.pos.z), pull = agl < 220 && p.vel.y < -12;
