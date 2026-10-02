@@ -224,7 +224,7 @@ export const PLANES = {
   }
 };
 
-// Armas de aeronaves/AA (bala única com cinto simplificado)
+// Armas de aeronaves/AA (stats do projétil base; as cintas — ROUNDS/BELTS abaixo — variam por projétil)
 export const GUNS = {
   M2: { name: '12,7 mm M2', cal: 12.7, rpm: 750, v: 870, m: 0.046, pen: 24, he: 0, dmg: 1.2, tracer: 4 },
   ShKAS: { name: '7,62 mm ShKAS', cal: 7.62, rpm: 1800, v: 825, m: 0.0096, pen: 10, he: 0, dmg: 0.45, tracer: 4 },
@@ -238,6 +238,30 @@ export const GUNS = {
   M61: { name: '20 mm M61A1 Vulcan', cal: 20, rpm: 6000, v: 1030, m: 0.1, pen: 22, he: 0.011, dmg: 3.2, tracer: 5 },
   GSh23: { name: '23 mm GSh-23L', cal: 23, rpm: 3400, v: 715, m: 0.175, pen: 24, he: 0.015, dmg: 3.6, tracer: 4 }
 };
+
+// Projéteis das cintas: multiplicadores sobre a arma (pen/he/dmg) + chance incendiária (inc) e traçante (t).
+// Metralhadora não tem explosivo (he da arma = 0), então HEFI só aparece nas cintas de canhão.
+export const ROUNDS = {
+  AP: { n: 'Perfurante', s: 'AP', pen: 1, he: 0, dmg: 1, inc: 0 },
+  APT: { n: 'Perfurante traçante', s: 'AP-T', pen: 0.95, he: 0, dmg: 0.95, inc: 0, t: 1 },
+  API: { n: 'Perfurante-incendiária', s: 'API', pen: 0.95, he: 0, dmg: 1.05, inc: 0.3 },
+  APIT: { n: 'Perfurante-incendiária traçante', s: 'API-T', pen: 0.85, he: 0, dmg: 0.95, inc: 0.2, t: 1 },
+  I: { n: 'Incendiária', s: 'I', pen: 0.4, he: 0, dmg: 0.9, inc: 0.6 },
+  APHE: { n: 'Perfurante-explosiva', s: 'APHE', pen: 0.85, he: 0.35, dmg: 1, inc: 0.05 },
+  HEFI: { n: 'Explosiva-incendiária', s: 'HEF-I', pen: 0.25, he: 1, dmg: 1, inc: 0.25 },
+  HEFIT: { n: 'Explosiva-incendiária traçante', s: 'HEF-I-T', pen: 0.25, he: 0.85, dmg: 0.95, inc: 0.2, t: 1 },
+};
+// Cintas por classe de arma (a ordem é a sequência na cinta); GUNS[x].belts sobrescreve
+export const BELTS = {
+  mg: { 'Padrão': ['AP', 'API', 'APIT'], 'Ar-ar': ['API', 'I', 'API', 'APIT'], 'Furtiva': ['API', 'I', 'API'], 'Traçante': ['APIT'] },
+  cannon: { 'Padrão': ['HEFI', 'APT', 'HEFI', 'HEFIT'], 'Ar-ar': ['HEFI', 'HEFI', 'HEFIT'], 'Furtiva': ['HEFI', 'APHE', 'HEFI'], 'Perfurante': ['APT', 'APHE', 'APT'] },
+};
+export const beltsOf = W => W.belts || BELTS[W.cal >= 15 ? 'cannon' : 'mg'];
+// cinta pronta: um objeto de munição por projétil (a arma com os multiplicadores do tipo)
+export function beltRounds(W, name) {
+  const B = beltsOf(W), seq = B[name] || B['Padrão'];
+  return seq.map(k => { const R = ROUNDS[k]; return Object.assign({}, W, { pen: W.pen * R.pen, he: (W.he || 0) * R.he, dmg: W.dmg * R.dmg, inc: R.inc, tracer: !!R.t, round: k, roundName: R.n }); });
+}
 
 // Mísseis ar-ar (guiamento por navegação proporcional; buscador infravermelho de aspecto traseiro)
 export const MISSILES = {

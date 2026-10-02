@@ -3,7 +3,7 @@ import { renderer, scene, camera } from '../core/render.js';
 import { S } from '../core/state.js';
 import { settings, keyName, clearInput } from '../core/settings.js';
 import { $, clamp } from '../core/util.js';
-import { PLANES } from '../data/vehicles.js';
+import { PLANES, ROUNDS, beltsOf } from '../data/vehicles.js';
 import { audioInit, sndUi } from '../fx/audio.js';
 import { lockPointer, exitPointer } from '../game/controls.js';
 import { AIR, AIR_ROSTER, NATION_TAG, armament, burstMass } from './aircraft.js';
@@ -64,7 +64,19 @@ function fillPlate(k) {
     ['Peso de combate', `${(D.mass / 1000).toFixed(2).replace('.', ',')} t`], ['Carga alar', `${Math.round(D.mass / D.S)} kg/m²`], ['Motor', A.engine],
     ['Limite estrutural', `${D.glim} G`], ['Peso de fogo', `${burstMass(k).toFixed(1).replace('.', ',')} kg/s`]];
   $('#apSpecs').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
-  $('#apArms').innerHTML = armament(k).map(w => w.missile ? `<li><b>${w.n}×</b> ${w.name}<small>${w.seeker === 'sarh' ? 'semiativo: radar travado até o impacto' : w.rear ? 'infravermelho · só pela cauda' : 'infravermelho'} · ${nf(w.range)} m</small></li>` : `<li><b>${w.n}×</b> ${w.name}<small>${nf(w.ammo)} tiros por arma · ${nf(w.rpm)} disp/min</small></li>`).join('');
+  // cinta de cada arma (como no WT): a escolha vale para a próxima partida (cfg.belts[avião][arma])
+  const sel = (cfg.belts && cfg.belts[k]) || [];
+  $('#apArms').innerHTML = armament(k).map(w => w.missile ? `<li><b>${w.n}×</b> ${w.name}<small>${w.seeker === 'sarh' ? 'semiativo: radar travado até o impacto' : w.rear ? 'infravermelho · só pela cauda' : 'infravermelho'} · ${nf(w.range)} m</small></li>`
+    : (() => {
+      const B = beltsOf(w.W), cur = B[sel[w.gi]] ? sel[w.gi] : 'Padrão';
+      return `<li><b>${w.n}×</b> ${w.name}<small>${nf(w.ammo)} tiros por arma · ${nf(w.rpm)} disp/min · ${nf(w.v)} m/s · perfura ${w.W.pen} mm</small>`
+        + `<div class="segs belt" data-g="${w.gi}">${Object.keys(B).map(n => `<button type="button" data-v="${n}" aria-pressed="${n === cur}">${n}</button>`).join('')}</div>`
+        + `<small class="bseq">${B[cur].map(r => `<span title="${ROUNDS[r].n}">${ROUNDS[r].s}</span>`).join(' · ')}</small></li>`;
+    })()).join('');
+  $('#apArms').querySelectorAll('.belt button').forEach(b => (b.onclick = () => {
+    cfg.belts = cfg.belts || {}; const a = cfg.belts[k] = cfg.belts[k] || [];
+    a[+b.parentElement.dataset.g] = b.dataset.v; save(); sndUi(); fillPlate(k);
+  }));
   $('#apStrong').innerHTML = A.strong.map(s => `<li>${s}</li>`).join('');
   $('#apWeak').innerHTML = A.weak.map(s => `<li>${s}</li>`).join('');
 }

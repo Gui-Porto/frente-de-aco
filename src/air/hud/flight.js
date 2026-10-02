@@ -117,7 +117,8 @@ function weapons(p, x, y) {
   let yy = y + 30;
   for (const gg of p.guns) {
     const col = gg.broken || gg.jam ? C.enemy : gg.ammo < gg.max * 0.15 ? C.amber : T.fg;
-    ptxt(gg.W.name, x, yy, 13.5, gg.broken ? C.enemy : T.fg, 'left', UI, 500);
+    ptxt(gg.W.name.replace(/^[\d,]+ mm /, ''), x, yy, 13.5, gg.broken ? C.enemy : T.fg, 'left', UI, 500);
+    if (gg.beltName) ptxt(gg.beltName, x + 146, yy, 11, T.dim, 'right', UI, 600); // cinta carregada
     g.fillStyle = T.faint; g.fillRect(x + 150, yy - 5, 90, 3);
     if (gg.heat > 0.02) { g.fillStyle = gg.jam ? C.enemy : gg.heat > 0.7 ? C.amber : T.dim; g.fillRect(x + 150, yy - 5, 90 * gg.heat, 3); }
     num(gg.broken ? '—' : gg.jam ? 'QUENTE' : String(gg.ammo), PW - 14, yy, 14, col);

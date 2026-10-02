@@ -122,10 +122,11 @@ export function applyMod(pl, m, dmg, by, am) {
   if (pl.gone || !isFinite(dmg) || dmg <= 0) return;
   if (m.lost) return; // peça que já caiu junto com a ponta da asa ou a asa
   m.hitT = S.now;
-  const inc = am && ((am.he || 0) > 0 || (am.tnt || 0) > 0) ? 2.2 : 1; // explosiva/incendiária pega fogo mais fácil
+  // explosiva pega fogo mais fácil; incendiária (cinta: am.inc) muito mais — e só a explosiva arranca superfícies
+  const hev = !!am && ((am.he || 0) > 0 || (am.tnt || 0) > 0), inc = (hev ? 2.2 : 1) + (am && am.inc ? am.inc * 6 : 0);
   const shooter = by && by.isPlayer;
   const crit = t => { if (shooter && S.air) S.air.crit(t); }; // o dano em você aparece só na silhueta de integridade, sem texto
-  if (m.kind === 'engine') { pl.damage('engine', dmg, by, true, true, m.i); return; }
+  if (m.kind === 'engine') { pl.damage('engine', dmg, by, true, true, m.i); if (inc > 2.5 && Math.random() < 0.012 * dmg * inc && pl.fire <= 0) { pl.ignite(m.c); crit('Incêndio no motor'); } return; }
   if (m.kind === 'pilot') {
     m.hp -= dmg;
     if (by && by.team !== pl.team) { pl.lastHitBy = by; pl.lastHitT = S.now; }
@@ -171,7 +172,7 @@ export function applyMod(pl, m, dmg, by, am) {
       // trava onde estava (cabo/haste cortado deixa a superfície meio solta: guarda parte da deflexão)
       m.stuck = 0.6 * ({ ailL: pl.ail, ailR: pl.ail, elev: pl.elev, rud: pl.rud }[m.name] || 0);
       // explosiva ou muito estrago: a superfície é arrancada e cai (sem ela, sem deflexão nenhuma)
-      if (m.name !== 'cables' && (inc > 1 || m.hp < -m.max * 0.4)) { pl.ripSurface(m); crit(`${m.label} arrancado`); }
+      if (m.name !== 'cables' && (hev || m.hp < -m.max * 0.4)) { pl.ripSurface(m); crit(`${m.label} arrancado`); }
       else crit(`${m.label} ${m.kind === 'flap' ? 'travado' : 'inoperante'}`);
     } break;
   }

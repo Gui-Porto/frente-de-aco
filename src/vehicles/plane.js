@@ -4,7 +4,7 @@ import { S, S as ST, planes } from '../core/state.js'; // ST: em physics() `S` �
 import { V3, QUAT, UP, clamp, lerp, rand, rv } from '../core/util.js';
 import { H, AIRLIMIT, AIRFIELDS } from '../world/terrain.js';
 import { obstNear, addCrater, treeHit } from '../world/scenery.js';
-import { PLANES, GUNS, MISSILES, RHO, G } from '../data/vehicles.js';
+import { PLANES, GUNS, MISSILES, RHO, G, beltRounds } from '../data/vehicles.js';
 import { EngineSet, ENGINES } from '../air/systems/engine.js';
 import { isa } from '../air/systems/atmosphere.js';
 import { Radar } from '../air/systems/radar.js';
@@ -54,7 +54,7 @@ export class Plane {
     this.elev = 0; this.ail = 0; this.rud = 0; this.throttle = 1; this.wep = false;
     this.flaps = 0; this.flapStage = 0; this.airbrake = false; this.iP = 0; this.gear = 0; this.gearCmd = 0; this.shotsN = 0; this.hitsN = 0;
     this.gStress = 0; this.koT = 0; this.koAge = 0; this.overG = 0; this.n = 1; this.alpha = 0; this.ias = speed; this.dropSign = 1; this.spottedUntil = 0; this.oobT = 0;
-    this.firing = false; this.ordOn = opts.ord !== false; this.onGround = false;
+    this.firing = false; this.ordOn = opts.ord !== false; this.beltSel = opts.belts || null; this.onGround = false;
     this.inv = new THREE.Matrix4();
     this.outfit();
     this.label = makeLabel(this);
@@ -74,7 +74,9 @@ export class Plane {
       const W = GUNS[g.w], mp = this.gunPts && this.gunPts[gi], pts = mp ? mp.map(q => q.slice()) : []; // boca do cano modelado
       if (!mp) for (const s of g.span) { pts.push([s, -0.1, g.z]); if (g.n > 1) pts.push([-s, -0.1, g.z]); }
       while (pts.length < g.n) pts.push(...pts.slice(0, g.n - pts.length));
-      this.guns.push({ W, pts: pts.slice(0, g.n), ammo: g.ammo * g.n, max: g.ammo * g.n, acc: 0, k: 0, heat: 0, jam: false });
+      // cinta escolhida no hangar (jogador) ou padrão/ar-ar (IA)
+      const beltName = (this.beltSel && this.beltSel[gi]) || (this.isPlayer ? 'Padrão' : Math.random() < 0.5 ? 'Padrão' : 'Ar-ar');
+      this.guns.push({ W, pts: pts.slice(0, g.n), ammo: g.ammo * g.n, max: g.ammo * g.n, acc: 0, k: 0, heat: 0, jam: false, beltName, belt: beltRounds(W, beltName) });
     });
     this.bombs = []; this.rockets = 0;
     if (this.ordOn) { for (const b of D.bombs) for (let i = 0; i < b.n; i++) this.bombs.push(b); this.rockets = D.rockets ? D.rockets.n : 0; }
@@ -395,7 +397,8 @@ export class Plane {
         // convergência a 350 m
         const aim = this.fireDir(_pfx).multiplyScalar(350).add(this.pos); // convergência a 350 m na direção de tiro
         const dir = aim.sub(pos).normalize().add(rv(0.0022)).normalize();
-        fireProj(this, pos, dir.multiplyScalar(g.W.v).add(this.vel), g.W, 'bullet', { tracer: g.k % g.W.tracer === 0 });
+        const am = g.belt[g.k % g.belt.length]; // próximo projétil da cinta
+        fireProj(this, pos, dir.multiplyScalar(g.W.v).add(this.vel), am, 'bullet', { tracer: am.tracer });
         if (g.k % 3 === 0) fxSmallFlash(pos, _pf.set(0, 0, 1).applyQuaternion(this.q));
         sndMG(pos, g.W.cal, this.isPlayer);
       }

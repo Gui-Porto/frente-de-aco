@@ -142,3 +142,9 @@
   #resGrid{grid-template-columns:repeat(2,1fr)}
 }
 @media (prefers-reduced-motion:reduce){#air *,.airgo::after,#airToast{animation:none!important;transition:none!important}}
+
+/* cintas de munição no cartão da aeronave */
+#apArms .belt{margin:4px 0 2px}
+#apArms .belt button{font-size:12px;padding:3px 8px;min-width:0}
+#apArms .bseq{font-family:var(--mono);font-size:11px;color:var(--sky)}
+#apArms .bseq span{cursor:help}

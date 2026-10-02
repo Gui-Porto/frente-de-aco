@@ -67,7 +67,7 @@ export const B = {
     this.stats = { kills: 0, assists: 0, dmgDealt: 0, dmgTaken: 0, missiles: 0, deaths: 0 };
     applyEnv(cfg.weather, cfg.time);
     S.me = mkWho('Você', 1, true); S.me.assists = 0;
-    const p = new Plane(cfg.plane, 1, S.me, new V3(0, this.arena.alt + 50, this.arena.spawnZ), Math.PI, PLANE_V(cfg.plane), { ord: false });
+    const p = new Plane(cfg.plane, 1, S.me, new V3(0, this.arena.alt + 50, this.arena.spawnZ), Math.PI, PLANE_V(cfg.plane), { ord: false, belts: cfg.belts && cfg.belts[cfg.plane] });
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
