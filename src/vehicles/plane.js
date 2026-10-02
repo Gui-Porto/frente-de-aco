@@ -42,7 +42,7 @@ const waveDrag = (D, M) => {
   return M < w.mpk ? w.peak * ((M - w.mcr) / (w.mpk - w.mcr)) ** 2 : w.peak * Math.max(0.6, 1 - 0.35 * (M - w.mpk));
 };
 const flapLim = (D, st) => st ? (D.flapV || FLAP_V)[st - 1] / 3.6 : Infinity;
-const AIM_CONE = 5 * Math.PI / 180, _pe = new THREE.Euler(), G0 = 9.81, _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
+const _pe = new THREE.Euler(), G0 = 9.81, _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
 export class Plane {
   constructor(key, team, who, pos, yaw, speed, opts = {}) {
     this.id = nextId(); this.def = PLANES[key]; const D = this.def;
@@ -375,15 +375,8 @@ export class Plane {
     if (this.onGround) elev = dir.y < 0.03 ? clamp(elev, -0.2, 0) : Math.min(elev, 0.8);
     this.elev = clamp(elev, -1, 1);
   }
-  // direção de tiro: o eixo das armas, ou — com a mira do mouse (aimCmd) — o próprio círculo do mouse quando ele
-  // está a até AIM_CONE do nariz (balas e retículo 100% no mouse); mais longe, o ponto do cone mais perto dele
-  fireDir(out) {
-    this.axes(); out.copy(_pf);
-    const a = this.aimCmd; if (!a) return out;
-    const ang = Math.acos(clamp(_pf.dot(a), -1, 1));
-    if (ang <= AIM_CONE) return out.copy(a);
-    return out.lerp(a, AIM_CONE / ang).normalize();
-  }
+  // direção de tiro: armas FIXAS no eixo do avião, como no WT (quem aponta é o avião, não o mouse)
+  fireDir(out) { this.axes(); return out.copy(_pf); }
   gunsPos(g, i, out) { const p = g.pts[i]; return out.set(p[0], p[1], p[2]).applyMatrix4(this.root.matrixWorld); }
   updateWeapons(dt) {
     if (!this.alive || !this.pilot) return;

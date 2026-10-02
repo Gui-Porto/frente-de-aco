@@ -100,7 +100,7 @@ function voices(skip, on) {
 function wind(p, on) {
   const q = p ? Math.min(1, (p.ias / 260) ** 2) : 0;
   eng.wind.g.gain.value = on ? q * (acam.mode === 2 ? 0.13 : 0.1) : 0; eng.wind.f.frequency.value = 500 + q * 900;
-  const as = p ? p.def.clmax / p.def.cla : 1, bf = p ? clamp((Math.abs(p.alpha) - as * 0.72) / (as * 0.3), 0, 1) * Math.min(1, p.ias / 60) : 0;
+  const as = p ? p.def.clmax / p.def.cla : 1, bf = p && !p.onGround ? clamp((Math.abs(p.alpha) - as * 0.85) / (as * 0.15), 0, 1) * Math.min(1, p.ias / 60) : 0;
   eng.wind.buffet.gain.value = on ? bf * 0.5 : 0;
   const gv = p && p.onGround ? Math.hypot(p.vel.x, p.vel.z) : 0;
   eng.roll.g.gain.value = on ? Math.min(1, gv / 35) * 0.16 : 0; eng.roll.f.frequency.value = 110 + gv * 4;

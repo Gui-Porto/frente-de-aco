@@ -10,7 +10,6 @@ import { S } from '../../core/state.js';
 // =====================================================================
 const QUAD = { FD: 'frente à direita', TD: 'atrás à direita', TE: 'atrás à esquerda', FE: 'frente à esquerda' };
 const where = (rw, az) => (rw && rw.W.res >= 90 ? QUAD[(az >= 0 ? (Math.abs(az) < Math.PI / 2 ? 'FD' : 'TD') : (Math.abs(az) < Math.PI / 2 ? 'FE' : 'TE'))] : clock(az));
-const stallV = p => Math.sqrt(2 * p.def.mass * 9.81 / (1.225 * p.def.S * p.def.clmax)) * 0.95;
 
 export function warnings(p) {
   const list = [], rw = p.sys.rwr, mw = p.sys.maw;
@@ -28,7 +27,10 @@ export function warnings(p) {
     if (!arc) arc = { az: th.az, col: th.lvl === 'TRACK' ? C.amber : C.enemy, k: th.strength, wide: rw.W.res >= 90 };
   }
   if (tone === 'launch' && th && th.lvl === 'GUIDANCE') tone = 'guidance'; // guiamento contra você vale mais que o lançamento visto
-  const as = p.def.clmax / p.def.cla, stall = Math.abs(p.alpha) > as * 0.9 || p.ias < stallV(p);
+  // estol = asa perto do ângulo crítico de verdade (a física perde sustentação acima de clmax/cla), só no ar.
+  // Antes: 90% do ângulo (o instrutor chega a 94% com flaps numa curva comum) ou velocidade < estol limpo ao nível
+  // do mar — tocava em curva, na aproximação com flaps e até parado no chão.
+  const as = p.def.clmax / p.def.cla, agl0 = p.pos.y - H(p.pos.x, p.pos.z), stall = !p.onGround && agl0 > 5 && Math.abs(p.alpha) > as * 0.97;
   if (stall) list.push(['ESTOL', C.amber, true]);
   const agl = p.pos.y - H(p.pos.x, p.pos.z), pull = agl < 220 && p.vel.y < -12;
   if (pull) list.push(['ALTITUDE · PUXE', C.enemy, true]);

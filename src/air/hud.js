@@ -171,7 +171,7 @@ const _q = new Quaternion();
 const RW = 'rgba(255,255,255,.85)', RWD = 'rgba(255,255,255,.5)';
 function rstroke(w, col = RW) { g.shadowBlur = 0; g.lineWidth = w + 1.2; g.strokeStyle = 'rgba(0,0,0,.35)'; g.stroke(); g.lineWidth = w; g.strokeStyle = col; g.stroke(); }
 function reticle(p) {
-  // para onde as balas vão (eixo das armas, ajustado para o mouse dentro do cone — plane.fireDir), a 400 m
+  // para onde as balas vão (eixo fixo das armas — plane.fireDir), a 400 m
   p.fireDir(_a).multiplyScalar(400).add(p.pos);
   const pr = proj(_a, P1);
   // distância da régua: radar telemétrico (F-86/MiG-15) mede quem está no cone; sem ele, o alvo marcado
