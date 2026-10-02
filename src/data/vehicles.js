@@ -123,16 +123,43 @@ export const PLANES = {
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
     fuseR: 0.72, noseR: 0.62, wingZ: 0.0, chord: 3.3, tipChord: 1.6, cowl: 'intake',
     guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300 }],
-    missiles: { w: 'AIM9B', n: 2 },
+    missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30',
     bombs: [], rockets: null
   },
   mig15: {
     key: 'mig15', type: 'plane', name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
     mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.016, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
-    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 },
+    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1',
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
     guns: [{ w: 'N37', n: 1, span: [0.45], z: 2.8, ammo: 40 }, { w: 'NR23', n: 2, span: [0.5], z: 2.6, ammo: 80 }],
+    bombs: [], rockets: null
+  },
+  // ---- geração com radar, pós-combustão e RWR (escala de jogo nas distâncias) ----
+  // mass: vazio + combustível embarcado (fuel) + piloto/munição; mísseis somam à parte.
+  // wave: arrasto de onda transônico/supersônico { mcr, peak (ΔCD no pico), mpk (Mach do pico) }
+  f4e: {
+    key: 'f4e', type: 'plane', name: 'F-4E Phantom II', short: 'F-4E', nation: 'EUA', year: 1967, color: 0x7a7d63, sp: 640, jet: true, sweep: 45,
+    mass: 18200, fuel: 4000, S: 49.2, span: 11.7, L: 19.2, cla: 3.5, clmax: 1.25, cd0: 0.021, e: 0.7, engine: 'j79', engines: 2, rcs: 6,
+    mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.5, 0.2],
+    vne: 1400 / 3.6, glim: 9.5, kda: 0.034, kde: 0.25, kdr: 0.03, armor: { pilot: 6 },
+    hpParts: { wingL: 60, wingR: 60, tail: 40, engine: 50, fuel: 36, fuse: 75 },
+    fuseR: 0.95, noseR: 0.5, wingZ: -1.2, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23,
+    radar: 'apq120', rwr: 'apr36',
+    guns: [{ w: 'M61', n: 1, span: [0], z: 8.2, ammo: 640 }],
+    missiles: [{ w: 'AIM7E', n: 4 }, { w: 'AIM9J', n: 4 }],
+    bombs: [], rockets: null
+  },
+  mig21: {
+    key: 'mig21', type: 'plane', name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
+    mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0175, e: 0.62, engine: 'r13', rcs: 3,
+    mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.4, 0.17],
+    vne: 1300 / 3.6, glim: 9.5, kda: 0.042, kde: 0.26, kdr: 0.035, armor: { pilot: 6 },
+    hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
+    fuseR: 0.62, noseR: 0.45, wingZ: -1.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2,
+    radar: 'rp22', rwr: 'spo10',
+    guns: [{ w: 'GSh23', n: 1, span: [0], z: 1.0, ammo: 200 }],
+    missiles: [{ w: 'R3R', n: 2 }, { w: 'R3S', n: 2 }],
     bombs: [], rockets: null
   }
 };
@@ -147,13 +174,24 @@ export const GUNS = {
   Hispano: { name: '20 mm Hispano Mk II', cal: 20, rpm: 600, v: 880, m: 0.13, pen: 20, he: 0.011, dmg: 3.4, tracer: 3 },
   M3: { name: '12,7 mm M3', cal: 12.7, rpm: 1200, v: 890, m: 0.046, pen: 24, he: 0, dmg: 1.2, tracer: 4 },
   N37: { name: '37 mm N-37D', cal: 37, rpm: 400, v: 690, m: 0.735, pen: 40, he: 0.04, dmg: 12, tracer: 2 },
-  NR23: { name: '23 mm NR-23', cal: 23, rpm: 850, v: 680, m: 0.2, pen: 25, he: 0.015, dmg: 3.6, tracer: 3 }
+  NR23: { name: '23 mm NR-23', cal: 23, rpm: 850, v: 680, m: 0.2, pen: 25, he: 0.015, dmg: 3.6, tracer: 3 },
+  M61: { name: '20 mm M61A1 Vulcan', cal: 20, rpm: 6000, v: 1030, m: 0.1, pen: 22, he: 0.011, dmg: 3.2, tracer: 5 },
+  GSh23: { name: '23 mm GSh-23L', cal: 23, rpm: 3400, v: 715, m: 0.175, pen: 24, he: 0.015, dmg: 3.6, tracer: 4 }
 };
 
 // Mísseis ar-ar (guiamento por navegação proporcional; buscador infravermelho de aspecto traseiro)
 export const MISSILES = {
   AIM9B: { name: 'AIM-9B Sidewinder', short: 'AIM-9B', mass: 70, d: 0.127, len: 2.83, thrust: 17800, burn: 2.2, cd: 0.45,
-    life: 22, range: 4600, minRange: 250, gimbal: 30, fov: 4, acq: 14, lockT: 0.9, maxG: 13, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 95 }
+    life: 22, range: 4600, minRange: 250, gimbal: 30, fov: 4, acq: 14, lockT: 0.9, maxG: 13, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 95, seeker: 'ir' },
+  AIM9J: { name: 'AIM-9J Sidewinder', short: 'AIM-9J', mass: 78, d: 0.127, len: 3.02, thrust: 15500, burn: 3.0, cd: 0.42,
+    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 18, nav: 4, fuse: 9, warhead: 4.5, rearAspect: 110, flareRes: 0.45, seeker: 'ir' },
+  R3S: { name: 'R-3S (K-13)', short: 'R-3S', mass: 75, d: 0.127, len: 2.84, thrust: 17000, burn: 2.2, cd: 0.45,
+    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 12, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 90, flareRes: 0.6, seeker: 'ir' },
+  // semiativos: não têm buscador próprio de aquisição — exigem o radar do lançador travado (STT) até o impacto
+  AIM7E: { name: 'AIM-7E Sparrow', short: 'AIM-7E', mass: 197, d: 0.203, len: 3.66, thrust: 26000, burn: 3.6, cd: 0.4,
+    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 16, nav: 4, fuse: 12, warhead: 9, seeker: 'sarh' },
+  R3R: { name: 'R-3R (K-13R)', short: 'R-3R', mass: 83, d: 0.127, len: 3.1, thrust: 17500, burn: 2.4, cd: 0.44,
+    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 13, nav: 3.8, fuse: 10, warhead: 5, seeker: 'sarh' }
 };
 
 // Campos derivados do motor (fonte única: air/systems/engine.js). Telas antigas leem hp/wep/thrust.

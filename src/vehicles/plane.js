@@ -7,6 +7,8 @@ import { obstNear, addCrater } from '../world/scenery.js';
 import { PLANES, GUNS, MISSILES, RHO, G } from '../data/vehicles.js';
 import { EngineSet, ENGINES } from '../air/systems/engine.js';
 import { isa } from '../air/systems/atmosphere.js';
+import { Radar } from '../air/systems/radar.js';
+import { Rwr, Maw } from '../air/systems/rwr.js';
 import { fxBurn, fxTrail, fxSmallFlash, fxExplosion, fxBigBlast } from '../fx/particles.js';
 import { sndMG, sndShot, sndBoom } from '../fx/audio.js';
 import { fireProj, destroyVehicle, spawnDebris, blast } from '../combat/ballistics.js';
@@ -29,6 +31,14 @@ export const _pf = new V3(), _pt = new V3();
 const FLAP_POS = [0, 0.33, 0.66, 1], FLAP_V = [480, 360, 290], FLAP_NAME = ['Recolhidos', 'Combate', 'Decolagem', 'Pouso'];
 // amortecimento aerodinâmico padrão [arfagem, rolagem, guinada]; def.damp sobrescreve
 const DAMP = [24, 0.45, 0.18], _atm = {};
+// arrasto de onda: jatos subsônicos (sem def.wave) crescem sem parar além do Mach crítico;
+// supersônicos têm pico transônico e depois cedem um pouco
+const waveDrag = (D, M) => {
+  const w = D.wave;
+  if (!w) { const mcr = D.mcrit || 0.68; return M > mcr ? 2.5 * (M - mcr) ** 2 : 0; }
+  if (M <= w.mcr) return 0;
+  return M < w.mpk ? w.peak * ((M - w.mcr) / (w.mpk - w.mcr)) ** 2 : w.peak * Math.max(0.6, 1 - 0.35 * (M - w.mpk));
+};
 const flapLim = (D, st) => st ? (D.flapV || FLAP_V)[st - 1] / 3.6 : Infinity;
 const _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
 export class Plane {
@@ -55,7 +65,15 @@ export class Plane {
     this.bombs = []; this.rockets = 0;
     if (opts.ord !== false) { for (const b of D.bombs) for (let i = 0; i < b.n; i++) this.bombs.push(b); this.rockets = D.rockets ? D.rockets.n : 0; }
     else for (const m of [...this.bombMeshes, ...this.rocketMeshes]) m.visible = false;
-    this.missiles = D.missiles ? D.missiles.n : 0; this.missileMass = D.missiles ? MISSILES[D.missiles.w].mass : 0;
+    // estantes de mísseis (uma por tipo) e o selecionado; malhas na mesma ordem do modelo
+    let mi = 0;
+    this.racks = (D.missiles || []).map(r => ({ w: r.w, M: MISSILES[r.w], n: r.n, max: r.n, meshes: this.missileMeshes.slice(mi, mi += r.n) }));
+    this.sel = 0;
+    // aviônicos: só existe o que a ficha da aeronave traz
+    this.sys = {};
+    if (D.radar) this.sys.radar = new Radar(D.radar, H);
+    if (D.rwr) this.sys.rwr = new Rwr(D.rwr);
+    if (D.maw) this.sys.maw = new Maw(D.maw);
     // componentes internos, combustível, contramedidas e extintor
     this.mods = planeModules(D); this.fuel = this.fuelMax = fuelOf(D); this.wounded = false;
     this.flares = this.chaff = D.jet ? 20 : 0; this.ext = 1; this.fireAt = [0, 0, D.jet ? -D.L * 0.15 : D.L * 0.3];
@@ -75,6 +93,10 @@ export class Plane {
   // fração de potência/empuxo entregue (HUD, som, temperatura): >1 com WEP/pós-combustão
   get spool() { return this.eng.output; }
   // WEP (pistão) ou pós-combustão (jato que tenha)
+  get missiles() { let n = 0; for (const r of this.racks) n += r.n; return n; }
+  // estante selecionada (pula para a próxima com míssil quando a atual esvazia)
+  get rack() { const R = this.racks; if (!R.length) return null; if (R[this.sel].n <= 0) { const i = R.findIndex(r => r.n > 0); if (i >= 0) this.sel = i; } return R[this.sel]; }
+  cycleRack() { const R = this.racks; for (let k = 1; k <= R.length; k++) { const i = (this.sel + k) % R.length; if (R[i].n > 0) { this.sel = i; break; } } return this.rack; }
   get canBoost() { return !this.eng.jet || this.eng.hasAB; }
   axes() { _pm.makeRotationFromQuaternion(this.q); _pl.setFromMatrixColumn(_pm, 0); _pu.setFromMatrixColumn(_pm, 1); _pf.setFromMatrixColumn(_pm, 2); }
   centerPos(out) { return out.copy(this.pos); }
@@ -86,7 +108,7 @@ export class Plane {
   physics(dt) {
     if (this.gone) return;
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
-    const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.missiles * this.missileMass - (this.fuelMax - this.fuel);
+    const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.racks.reduce((s, r) => s + r.n * r.M.mass, 0) - (this.fuelMax - this.fuel);
     const A = ctrlAuthority(this);
     if (this.mods.hyd && this.mods.hyd.dead) { this.flapStage = 0; this.airbrake = false; }
     // flaps por estágio (como no WT): acima do limite do estágio eles sobem um degrau sozinhos; o painel se move devagar
@@ -117,8 +139,7 @@ export class Plane {
       const kW = (hpL + hpR) / 2;
       const mach = V / _atm.a; this.mach = mach;
       CL += this.flaps * 0.38 * (aa <= as ? 1 : 0.5);
-      const mcr = D.mcrit || 0.68;
-      const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.flaps * 0.028 + (this.airbrake ? 0.06 : 0) + this.gear * 0.035 + this.bombs.length * 0.0012 + this.rockets * 0.0004 + this.missiles * 0.0008 + (mach > mcr ? 2.5 * Math.pow(mach - mcr, 2) : 0) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
+      const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.flaps * 0.028 + (this.airbrake ? 0.06 : 0) + this.gear * 0.035 + this.bombs.length * 0.0012 + this.rockets * 0.0004 + this.missiles * 0.0008 + waveDrag(D, mach) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
       // forças
       _pF.set(0, -m * G, 0);
       _pt.crossVectors(_pv, _pl); const ln = _pt.length();

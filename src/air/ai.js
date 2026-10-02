@@ -2,7 +2,7 @@ import { heatLevel } from '../vehicles/engineHeat.js';
 import { S, planes } from '../core/state.js';
 import { V3, UP, clamp, rand } from '../core/util.js';
 import { H } from '../world/terrain.js';
-import { G, MISSILES } from '../data/vehicles.js';
+import { G } from '../data/vehicles.js';
 import { AIR } from './aircraft.js';
 import { Seeker, leadPoint, energyHeight, fwdOf } from './targeting.js';
 import { launchMissile, incomingTo, dropCM } from './missiles.js';
@@ -26,7 +26,9 @@ export class FighterBrain {
     this.think = Math.random() * this.d.react; this.target = null; this.lostT = 0; this.state = 'patrol'; this.stateT = 0;
     this.err = new V3(); this.jinkT = 0; this.jinkS = Math.random() < .5 ? 1 : -1; this.mslT = rand(3, 6);
     this.home = new V3(p.pos.x * 0.5, p.pos.y, p.pos.z * 0.5); this.patrolA = Math.random() * 6.28;
-    this.seeker = p.def.missiles ? new Seeker(MISSILES[p.def.missiles.w]) : null;
+    // estantes: IR usa o buscador próprio; semiativo (sarh) depende do radar travado
+    this.irRack = p.racks.find(r => r.M.seeker !== 'sarh') || null; this.sarhRack = p.racks.find(r => r.M.seeker === 'sarh') || null;
+    this.seeker = this.irRack ? new Seeker(this.irRack.M) : null;
     this.threat = null; this.missile = null;
   }
   // percepção e decisão (em frequência menor que a física)
@@ -42,7 +44,8 @@ export class FighterBrain {
       const behind = _r.dot(_f) > 0.35, aiming = fwdOf(e.q, _a).dot(_r) > 0.94;
       if (behind && aiming && dist < td && Math.random() < d.defend) { td = dist; this.threat = e; }
     }
-    this.missile = incomingTo(p);
+    // só reage a míssil que consegue perceber: guiamento no RWR, alerta do MAW ou a fumaça à vista
+    const m = incomingTo(p); this.missile = m && perceives(p, m) ? m : null;
     // contramedidas: flares contra míssil chegando, chaff quando alguém está colado na cauda
     if (this.missile && this.missile.pos.distanceTo(p.pos) < 2200 && Math.random() < d.missileP) dropCM(p);
     else if (this.threat && p.chaff > 0 && Math.random() < 0.12 * d.missileP) dropCM(p);
@@ -51,13 +54,14 @@ export class FighterBrain {
     if (this.target && this.target.chaffUntil > S.now && Math.random() < 0.35) { this.target = null; this.lostT = 0; }
     // alvo: mantém o atual com histerese; senão o mais "barato" (perto e à frente)
     const t = this.target;
-    if (t && (!t.alive || t.pos.distanceTo(p.pos) > d.detect * 1.4)) { this.lostT += d.react; if (!t.alive || this.lostT > 3) { this.target = null; this.lostT = 0; } }
+    const rd = p.sys.radar && !p.sys.radar.ranging ? p.sys.radar : null;
+    if (t && (!t.alive || (t.pos.distanceTo(p.pos) > d.detect * 1.4 && !(rd && rd.contacts.has(t))))) { this.lostT += d.react; if (!t.alive || this.lostT > 3) { this.target = null; this.lostT = 0; } }
     else this.lostT = 0;
     if (!this.target) {
       let best = null, bs = 1e9;
       for (const e of planes) {
         if (!e.alive || e.team === p.team) continue;
-        const dist = e.pos.distanceTo(p.pos); if (dist > d.detect) continue;
+        const dist = e.pos.distanceTo(p.pos); if (dist > d.detect && !(rd && rd.contacts.has(e))) continue;
         _r.copy(e.pos).sub(p.pos).divideScalar(dist);
         const sc = dist + (1 - _r.dot(_f)) * 700 - (e.isPlayer ? 150 : 0);
         if (sc < bs) { bs = sc; best = e; }
@@ -142,10 +146,20 @@ export class FighterBrain {
           if (this.style === 'boom' && dist < 250 && _b.dot(_f) < 0) { this.state = 'zoom'; this.stateT = 0; }
         }
         // mísseis: travou, distância boa → dispara (com probabilidade pela dificuldade)
-        if (this.seeker && p.missiles > 0) {
+        this.mslT -= dt;
+        if (this.seeker && this.irRack.n > 0) {
           this.seeker.update(dt, p, [tg], tg, S.now);
-          if ((this.mslT -= dt) <= 0 && this.seeker.locked && dist > this.seeker.M.minRange && dist < this.seeker.M.range * 0.8) {
-            this.mslT = rand(5, 9); if (Math.random() < d.missileP) launchMissile(p, tg);
+          if (this.mslT <= 0 && this.seeker.locked && dist > this.seeker.M.minRange && dist < this.seeker.M.range * 0.8) {
+            this.mslT = rand(5, 9); if (Math.random() < d.missileP) launchMissile(p, tg, this.irRack);
+          }
+        }
+        // semiativo: trava o radar no alvo e dispara de mais longe; mantém o nariz no alvo até o impacto
+        const rdr = p.sys.radar;
+        if (rdr && !rdr.ranging && this.sarhRack) {
+          if (rdr.target !== tg && rdr.contacts.has(tg) && dist < rdr.R.range * 0.85) rdr.lock(tg, S.now);
+          const M = this.sarhRack.M, flying = this.sarhInFlight && !this.sarhInFlight.dead && this.sarhInFlight.tracking;
+          if (!flying && this.sarhRack.n > 0 && this.mslT <= 0 && rdr.locked && rdr.target === tg && dist > M.minRange && dist < M.range * 0.7) {
+            this.mslT = rand(6, 10); if (Math.random() < d.missileP) this.sarhInFlight = launchMissile(p, tg, this.sarhRack);
           }
         }
         break;
@@ -174,4 +188,12 @@ export class FighterBrain {
     p.firing = fire;
     p.steerTo(dir, dt, { glim: Math.min(glim, p.def.glim - 1) });
   }
+}
+// a IA sabe do míssil pelos MESMOS sistemas do jogador ou vendo a fumaça (motor aceso / perto)
+function perceives(p, m) {
+  const s = p.sys;
+  if (s.maw && s.maw.list.some(x => x.m === m)) return true;
+  if (s.rwr && s.rwr.list.some(t => t.lvl === 'GUIDANCE' && t.e === m.owner)) return true;
+  const d = m.pos.distanceTo(p.pos);
+  return d < 900 || (d < 1800 && m.t < m.M.burn + 1.5);
 }

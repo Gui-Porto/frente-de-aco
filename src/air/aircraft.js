@@ -40,6 +40,20 @@ export const AIR = {
     strong: ['Canhão de 37 mm derruba com 2 ou 3 acertos', 'Subida e teto excelentes', 'Leve e ágil'],
     weak: ['Cadência baixa e balística curva', 'Instável perto de Mach 0,9'],
   },
+  f4e: {
+    maker: 'McDonnell Douglas', role: 'Caça multifunção · BVR', era: 'radar', engine: '2× GE J79-GE-17 · 79,6 kN com PC',
+    vmax: 2370, cruise: 940, ceiling: 18000, climb: 210, ai: 'boom',
+    rate: { velocidade: 10, subida: 9, manobra: 5, resistencia: 9, fogo: 10 },
+    strong: ['Radar APQ-120 de longo alcance e modo de combate (ACM)', 'Quatro AIM-7E guiados pelo radar + quatro AIM-9J', 'RWR APR-36 identifica o emissor e o guiamento de míssil', 'Dois motores: empuxo enorme com pós-combustão'],
+    weak: ['Pesado: perde energia rápido em curva', 'Sparrow exige manter o radar travado até o impacto', 'Rolagem lenta em baixa velocidade'],
+  },
+  mig21: {
+    maker: 'Mikoyan-Gurevich', role: 'Interceptador leve · delta', era: 'radar', engine: 'Tumansky R-13-300 · 63,7 kN com PC',
+    vmax: 2230, cruise: 900, ceiling: 17800, climb: 225, ai: 'turn',
+    rate: { velocidade: 9, subida: 10, manobra: 7, resistencia: 5, fogo: 7 },
+    strong: ['Leve e pequeno: difícil de ver e de detectar no radar', 'Pós-combustão responde rápido', 'R-3R semiativo + R-3S infravermelho'],
+    weak: ['Radar RP-22 curto e estreito', 'RWR SPO-10 só indica o quadrante e não avisa de míssil', 'Pouco combustível e um único canhão'],
+  },
   il2: { maker: 'Ilyushin', role: 'Avião de ataque blindado', era: 'helice', engine: 'Mikulin AM-38 · 1.700 hp', vmax: 410, cruise: 340, ceiling: 6000, climb: 10, ai: 'bomber', hidden: true,
     rate: { velocidade: 2, subida: 2, manobra: 3, resistencia: 10, fogo: 5 }, strong: [], weak: [] },
 };
@@ -47,13 +61,16 @@ export const AIR_ROSTER = Object.keys(AIR).filter(k => !AIR[k].hidden);
 export const NATION_TAG = { 'Reino Unido': 'RU', EUA: 'EUA', Alemanha: 'ALE', URSS: 'URSS' };
 
 // Adversários por era (jato contra jato, hélice contra hélice)
-export const ENEMY_POOL = { helice: ['fw190', 'spit9', 'p47'], jato: ['mig15', 'f86'] };
-export const ALLY_POOL = { helice: ['spit9', 'p47', 'fw190'], jato: ['f86', 'mig15'] };
+export const ENEMY_POOL = { helice: ['fw190', 'spit9', 'p47'], jato: ['mig15', 'f86'], radar: ['mig21', 'f4e'] };
+export const ALLY_POOL = { helice: ['spit9', 'p47', 'fw190'], jato: ['f86', 'mig15'], radar: ['f4e', 'mig21'] };
+// arena por era: limite (m do centro), distância de spawn de cada lado e altitude inicial.
+// Com radar o combate começa além do alcance visual.
+export const ARENA = { helice: { limit: 4200, spawnZ: 2700, alt: 1600 }, jato: { limit: 4200, spawnZ: 2700, alt: 1600 }, radar: { limit: 8500, spawnZ: 6500, alt: 4000 } };
 
 // Linhas de armamento para a ficha
 export function armament(key) {
   const D = PLANES[key], rows = D.guns.map(g => ({ name: GUNS[g.w].name, n: g.n, ammo: g.ammo, rpm: GUNS[g.w].rpm, cal: GUNS[g.w].cal }));
-  if (D.missiles) { const M = MISSILES[D.missiles.w]; rows.push({ name: M.name, n: D.missiles.n, missile: true, range: M.range }); }
+  for (const r of D.missiles || []) { const M = MISSILES[r.w]; rows.push({ name: M.name, n: r.n, missile: true, range: M.range }); }
   return rows;
 }
 // peso de fogo (kg/s) para comparar poder de fogo

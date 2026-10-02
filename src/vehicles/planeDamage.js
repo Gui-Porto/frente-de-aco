@@ -18,7 +18,7 @@ export const LABEL = {
   ammoL: 'Munição esq.', ammoR: 'Munição dir.', gunL: 'Armas esq.', gunR: 'Armas dir.', ailL: 'Aileron esq.', ailR: 'Aileron dir.', elev: 'Profundor', rud: 'Leme', cables: 'Cabos de comando',
 };
 const FUEL = { spit9: 270, p47: 900, fw190: 400, il2: 600, f86: 1300, mig15: 1100 };
-export const fuelOf = D => FUEL[D.key] || 400;
+export const fuelOf = D => D.fuel || FUEL[D.key] || 400;
 
 // Componentes gerados das dimensões do avião: { name, kind, c:[x,y,z], h:[hx,hy,hz], hp, max }
 export function planeModules(D) {

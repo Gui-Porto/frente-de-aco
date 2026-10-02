@@ -36,7 +36,8 @@ export class Missile {
       const V = Math.max(this.vel.length(), 1);
       _f.copy(this.vel).divideScalar(V);
       // flares: cada flare novo dentro do campo do buscador tem uma chance de roubar o míssil
-      if (this.tracking && this.target && !this.target.isFlare) for (const fl of flares) {
+      const sarh = M.seeker === 'sarh';
+      if (this.tracking && this.target && !this.target.isFlare && !sarh) for (const fl of flares) {
         if (this.seen.has(fl)) continue; this.seen.add(fl);
         _rel.copy(fl.pos).sub(this.pos); const d = _rel.length();
         if (d < 3000 && _rel.dot(_f) / d > Math.cos(M.gimbal * Math.PI / 180) && Math.random() < (M.flareRes ?? 0.55)) { this.target = fl; break; }
@@ -47,6 +48,12 @@ export class Missile {
         _rel.copy(tg.pos).sub(this.pos);
         const d = _rel.length();
         if (!tg.alive || _rel.dot(_f) / d < Math.cos(M.gimbal * Math.PI / 180) || d > M.range * 1.4) this.tracking = false;
+        // semiativo: só segue enquanto o radar do lançador ilumina o alvo (o RWR do alvo ouve isso)
+        if (sarh && this.tracking) {
+          const rd = this.owner.sys && this.owner.sys.radar;
+          if (!this.owner.alive || !rd || rd.target !== tg || !rd.locked) this.tracking = false;
+          else { rd.guideUntil = S.now + 0.3; rd.guideTgt = tg; }
+        }
       }
       _a.set(0, -G, 0);
       if (this.tracking && tg) {
@@ -108,12 +115,11 @@ function closest(a, b, c, out) {
 }
 
 // Dispara o próximo míssil do avião contra o alvo travado (ou sem guiamento, se não houver)
-export function launchMissile(plane, target) {
-  const D = plane.def;
-  if (!D.missiles || plane.missiles <= 0 || !plane.alive) return null;
-  const M = MISSILES[D.missiles.w];
-  plane.missiles--;
-  const mesh = plane.missileMeshes[plane.missiles];
+export function launchMissile(plane, target, rack = plane.rack) {
+  if (!rack || rack.n <= 0 || !plane.alive) return null;
+  const M = rack.M;
+  rack.n--;
+  const mesh = rack.meshes[rack.n];
   const pos = mesh ? mesh.getWorldPosition(new V3()) : plane.pos.clone();
   if (mesh) mesh.visible = false;
   const vel = fwdOf(plane.q, new V3()).multiplyScalar(25).add(plane.vel);

@@ -65,9 +65,15 @@ describe('dados das aeronaves', () => {
     for (const k of ['f86', 'mig15']) { expect(PLANES[k].jet).toBe(true); expect(PLANES[k].thrust).toBeGreaterThan(20); }
     for (const k of ['spit9', 'p47', 'fw190']) expect(PLANES[k].hp).toBeGreaterThan(1000);
   });
-  it('só o F-86 leva mísseis', () => {
-    expect(PLANES.f86.missiles.w).toBe('AIM9B');
+  it('mísseis por estante: F-86 só IR; MiG-15 nenhum; F-4E e MiG-21 com semiativo + IR', () => {
+    expect(PLANES.f86.missiles.map(r => r.w)).toEqual(['AIM9B']);
     expect(PLANES.mig15.missiles).toBeUndefined();
+    for (const k of ['f4e', 'mig21']) expect(PLANES[k].missiles.map(r => MISSILES[r.w].seeker).sort()).toEqual(['ir', 'sarh']);
+  });
+  it('sistemas só onde existem historicamente', () => {
+    expect(PLANES.f86.rwr).toBeUndefined(); expect(PLANES.mig15.rwr).toBeUndefined();
+    expect(PLANES.f4e.rwr).toBe('apr36'); expect(PLANES.mig21.rwr).toBe('spo10');
+    expect(PLANES.spit9.radar).toBeUndefined();
   });
 });
 

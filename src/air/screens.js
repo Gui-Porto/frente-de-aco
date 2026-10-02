@@ -6,6 +6,8 @@ import { PLANES } from '../data/vehicles.js';
 import { audioInit, sndUi } from '../fx/audio.js';
 import { lockPointer, exitPointer } from '../game/controls.js';
 import { AIR, AIR_ROSTER, NATION_TAG, armament, burstMass } from './aircraft.js';
+const ERA_LABEL = { helice: 'motor a pistão', jato: 'era do jato', radar: 'supersônico com radar' };
+const ERA_FOES = { helice: 'caças a pistão', jato: 'jatos (MiG-15 / F-86)', radar: 'supersônicos (MiG-21 / F-4)' };
 import { MODES } from './missions.js';
 import { DIFF } from './ai.js';
 import { TIMES, WEATHER, resetEnv } from './environment.js';
@@ -55,7 +57,7 @@ function fillPlate(k) {
   const D = PLANES[k], A = AIR[k];
   $('#apMaker').textContent = `${A.maker} · ${D.nation} · ${D.year}`;
   $('#apName').textContent = D.name;
-  $('#apRole').textContent = A.role + (A.era === 'jato' ? ' · era do jato' : ' · motor a pistão');
+  $('#apRole').textContent = A.role + ' · ' + ERA_LABEL[A.era];
   $('#apRates').innerHTML = Object.entries(RATE).map(([r, l]) => `<div class="rate"><span>${l}</span><i><em style="width:${A.rate[r] * 10}%"></em></i><b>${A.rate[r]}</b></div>`).join('');
   const rows = [['Velocidade máxima', `${nf(A.vmax)} km/h`], ['Cruzeiro', `${nf(A.cruise)} km/h`], ['Teto', `${nf(A.ceiling)} m`], ['Razão de subida', `${A.climb} m/s`],
     ['Peso de combate', `${(D.mass / 1000).toFixed(2).replace('.', ',')} t`], ['Carga alar', `${Math.round(D.mass / D.S)} kg/m²`], ['Motor', A.engine],
@@ -88,7 +90,7 @@ function renderCfg() {
     const id = b.parentElement.dataset.id, v = b.dataset.v; cfg[id] = isNaN(+v) ? v : +v; save(); sndUi(); renderCfg();
   }));
   const D = PLANES[cfg.plane], era = AIR[cfg.plane].era;
-  $('#cfgSum').innerHTML = `<dt>Aeronave</dt><dd>${D.short}</dd><dt>Adversários</dt><dd>${era === 'jato' ? 'jatos (MiG-15 / F-86)' : 'caças a pistão'}</dd><dt>Esquadrilha</dt><dd>${M.allies ? `você + ${cfg.allies}` : 'só você'}</dd><dt>Dificuldade</dt><dd>${DIFF[cfg.diff].label}</dd><dt>Condições</dt><dd>${WEATHER[cfg.weather].label} · ${TIMES[cfg.time].label}</dd>`;
+  $('#cfgSum').innerHTML = `<dt>Aeronave</dt><dd>${D.short}</dd><dt>Adversários</dt><dd>${ERA_FOES[era]}</dd><dt>Esquadrilha</dt><dd>${M.allies ? `você + ${cfg.allies}` : 'só você'}</dd><dt>Dificuldade</dt><dd>${DIFF[cfg.diff].label}</dd><dt>Condições</dt><dd>${WEATHER[cfg.weather].label} · ${TIMES[cfg.time].label}</dd>`;
 }
 
 // ---------- carregamento ----------

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { planeDecals, camoTexture } from './paint.js';
+import { MISSILES } from '../data/vehicles.js';
 // =====================================================================
 // Modelo 3D procedural das aeronaves (só visual; física e caixas de
 // colisão vêm dos dados). Asas e empenagem são sólidos de perfil NACA
@@ -177,7 +178,7 @@ export function buildPlane(D) {
   const tail = new THREE.Group(); root.add(tail);
   const tsw = jet ? 38 : 4, th = D.span * 0.19, tc = L * 0.13, finH = L * 0.17;
   const stabY = D.key === 'mig15' ? finH * 0.55 : 0.08;
-  for (const s of [1, -1]) add(wingGeometry({ side: s, x0: 0.05, half: th, c0: tc, c1: tc * 0.5, zq0: -L * 0.44, sweep: th * Math.tan(tsw * deg), t0: 0.1, t1: 0.08, dih: 0, y0: stabY, ellip: !jet }), pair, tail);
+  for (const s of [1, -1]) add(wingGeometry({ side: s, x0: 0.05, half: th, c0: tc, c1: tc * 0.5, zq0: -L * 0.44, sweep: th * Math.tan(tsw * deg), t0: 0.1, t1: 0.08, dih: (D.tailDih || 0) * deg, y0: stabY, ellip: !jet }), pair, tail);
   const fin = add(wingGeometry({ side: 1, x0: 0, half: finH, c0: tc * 1.25, c1: tc * 0.55, zq0: -L * 0.43, sweep: finH * Math.tan((jet ? 45 : 18) * deg), t0: 0.1, t1: 0.08, dih: 0, y0: 0, ellip: false }), paint, tail);
   fin.rotation.z = Math.PI / 2; fin.position.y = fr * 0.6;
   add(new THREE.BoxGeometry(0.06, finH * 0.32, 0.04), accent, tail, 0, fr * 0.6 + finH * 0.82, -L * 0.43 - finH * Math.tan((jet ? 45 : 18) * deg) * 0.85); // faixa da deriva
@@ -205,14 +206,25 @@ export function buildPlane(D) {
     const side = i % 2 ? -1 : 1, k = Math.floor(i / 2);
     rocketMeshes.push(add(new THREE.CylinderGeometry(.06, .06, 1.4, 8).rotateX(Math.PI / 2), dark, root, side * (D.span * 0.22 + k * 0.45), -.3, D.wingZ + .2));
   }
-  const missileMeshes = [];
-  if (D.missiles) for (let i = 0; i < D.missiles.n; i++) {
-    const side = i % 2 ? -1 : 1, x = side * D.span * 0.3, y = -fr * 0.25 + (D.span * 0.3 - fr * 0.55) * Math.tan(dih) - 0.32, z = D.wingZ - (D.sweep ? (D.span * 0.3) * Math.tan(D.sweep * deg) : 0) + 0.4;
-    add(new THREE.BoxGeometry(0.06, 0.18, 1.6), dark, root, x, y + 0.14, z); // pilone
-    const m = add(new THREE.CylinderGeometry(.064, .064, 2.6, 12).rotateX(Math.PI / 2), white, root, x, y, z);
-    add(new THREE.ConeGeometry(.064, .25, 12).rotateX(Math.PI / 2), glass, m, 0, 0, 1.42);
-    for (const r of [0, Math.PI / 2]) { const f = add(new THREE.BoxGeometry(.5, .015, .28), white, m, 0, 0, -1.1); f.rotation.z = r; const c = add(new THREE.BoxGeometry(.3, .015, .14), white, m, 0, 0, 0.95); c.rotation.z = r; }
-    missileMeshes.push(m);
+  // mísseis por estante (def.missiles = [{ w, n, belly? }]); dimensões do próprio míssil.
+  // belly: semiembutidos sob a fuselagem (Sparrow do F-4); senão pilones sob a asa, de dentro para fora
+  const missileMeshes = []; let wk = 0;
+  for (const rk of D.missiles || []) {
+    const M = MISSILES[rk.w], r = M.d / 2, belly = rk.belly ?? (M.mass > 150 && D.L > 15);
+    for (let i = 0; i < rk.n; i++) {
+      const side = i % 2 ? -1 : 1;
+      let x, y, z;
+      if (belly) { const k = Math.floor(i / 2); x = side * fr * 0.5; y = -fr * 0.92; z = D.wingZ + 1.2 - k * (M.len + 0.6); }
+      else {
+        const k = Math.floor(wk++ / 2), sx = D.span * (0.24 + 0.1 * k);
+        x = side * sx; y = -fr * 0.25 + (sx - fr * 0.55) * Math.tan(dih) - 0.32; z = D.wingZ - (D.sweep ? sx * Math.tan(D.sweep * deg) * 0.8 : 0) + 0.4;
+        add(new THREE.BoxGeometry(0.06, 0.18, M.len * 0.6), dark, root, x, y + 0.14, z); // pilone
+      }
+      const m = add(new THREE.CylinderGeometry(r, r, M.len, 12).rotateX(Math.PI / 2), white, root, x, y, z);
+      add(new THREE.ConeGeometry(r, r * 4, 12).rotateX(Math.PI / 2), M.seeker === 'sarh' ? white : glass, m, 0, 0, M.len / 2 + r * 2);
+      for (const ro of [Math.PI / 4, -Math.PI / 4]) { const f = add(new THREE.BoxGeometry(r * 8, .015, M.len * 0.11), white, m, 0, 0, -M.len * 0.42); f.rotation.z = ro; const c = add(new THREE.BoxGeometry(r * 5, .015, M.len * 0.06), white, m, 0, 0, M.len * (M.seeker === 'sarh' ? 0.05 : 0.36)); c.rotation.z = ro; }
+      missileMeshes.push(m);
+    }
   }
   // pitot na ponta da asa esquerda / nariz dos jatos
   add(new THREE.CylinderGeometry(0.015, 0.015, 0.8, 4).rotateX(Math.PI / 2), dark, jet ? root : wingL, jet ? fr * 0.7 : fr * 0.55 + half * 0.82, jet ? 0.3 : -fr * 0.25 + half * 0.82 * Math.tan(dih) - 0.1, jet ? L * 0.47 : D.wingZ + D.chord * 0.25);

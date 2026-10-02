@@ -262,9 +262,12 @@ function flightInfo(p) {
     if (gg.jam || gg.broken) otxt(gg.broken ? 'INOPERANTE' : 'SUPERAQUECIDA', x + 156, y + 8, 10, C.enemy, 'left', UI, 600);
     y += 23;
   }
-  if (D.missiles) {
-    otxt(MISSILES[D.missiles.w].short, x, y, 14, 'rgba(238,241,236,.85)', 'left', UI, 500);
-    for (let i = 0; i < D.missiles.n; i++) { const mx = x + 214 - (D.missiles.n - i) * 16; g.fillStyle = C.out; g.fillRect(mx - 1, y - 12, 12, 14); g.fillStyle = i < p.missiles ? C.white : 'rgba(238,241,236,.15)'; g.fillRect(mx, y - 11, 10, 12); }
+  for (const r of p.racks) {
+    otxt(r.M.short, x, y, 14, r === p.rack ? C.white : 'rgba(238,241,236,.55)', 'left', UI, 500);
+    for (let i = 0; i < r.max; i++) { const mx = x + 214 - (r.max - i) * 16; g.fillStyle = C.out; g.fillRect(mx - 1, y - 12, 12, 14); g.fillStyle = i < r.n ? C.white : 'rgba(238,241,236,.15)'; g.fillRect(mx, y - 11, 10, 12); }
+    y += 20;
+  }
+  if (p.racks.length) {
     label(kb('a_missile').toUpperCase(), x, y + 14); y += 34;
   }
   if (D.jet) { otxt('Flares · chaff', x, y, 14, 'rgba(238,241,236,.85)', 'left', UI, 500); value(`${p.flares} · ${p.chaff}`, x + 214, y, p.flares ? C.white : C.amber, 16); y += 23; }
