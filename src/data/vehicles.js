@@ -1,3 +1,4 @@
+import { ENGINES } from '../air/systems/engine.js';
 // =====================================================================
 // Dados dos veículos (aproximações dos valores históricos)
 // Blindagem: [espessura mm, inclinação a partir da vertical em graus]
@@ -77,7 +78,7 @@ export const TANKS = {
 export const PLANES = {
   p47: {
     key: 'p47', type: 'plane', name: 'P-47D-28 Thunderbolt', short: 'P-47D', nation: 'EUA', year: 1944, color: 0x4a4d33, sp: 380, stripes: true,
-    mass: 6600, S: 27.87, span: 12.4, L: 11.0, cla: 4.6, clmax: 1.45, cd0: 0.0175, e: 0.8, hp: 2000, wep: 2300, eta: 0.82,
+    mass: 6600, S: 27.87, span: 12.4, L: 11.0, cla: 4.6, clmax: 1.45, cd0: 0.0175, e: 0.8, engine: 'r2800',
     vne: 810 / 3.6, glim: 12, kda: 0.04, kde: 0.32, kdr: 0.05, armor: { pilot: 9, engine: 0 },
     hpParts: { wingL: 38, wingR: 38, tail: 28, engine: 26, fuel: 20, fuse: 45 },
     fuseR: 0.78, noseR: 0.72, wingZ: 0.6, chord: 2.6, tipChord: 1.3, cowl: 'radial',
@@ -87,7 +88,7 @@ export const PLANES = {
   },
   il2: {
     key: 'il2', type: 'plane', name: 'Il-2 (1942)', short: 'Il-2', nation: 'URSS', year: 1942, color: 0x3d4a2c, sp: 340,
-    mass: 6100, S: 38.5, span: 14.6, L: 11.6, cla: 4.5, clmax: 1.4, cd0: 0.026, e: 0.8, hp: 1600, wep: 1700, eta: 0.8,
+    mass: 6100, S: 38.5, span: 14.6, L: 11.6, cla: 4.5, clmax: 1.4, cd0: 0.026, e: 0.8, engine: 'am38',
     vne: 620 / 3.6, glim: 9, kda: 0.035, kde: 0.3, kdr: 0.05, armor: { pilot: 12, engine: 6, fuel: 6 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 30, fuel: 22, fuse: 55 },
     fuseR: 0.72, noseR: 0.55, wingZ: 0.35, chord: 2.9, tipChord: 1.3, cowl: 'inline',
@@ -97,7 +98,7 @@ export const PLANES = {
   },
   fw190: {
     key: 'fw190', type: 'plane', name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
-    mass: 4750, S: 18.3, span: 10.5, L: 9.0, cla: 4.8, clmax: 1.45, cd0: 0.019, e: 0.8, hp: 1700, wep: 2050, eta: 0.82,
+    mass: 4750, S: 18.3, span: 10.5, L: 9.0, cla: 4.8, clmax: 1.45, cd0: 0.019, e: 0.8, engine: 'bmw801',
     vne: 850 / 3.6, glim: 12, kda: 0.06, kde: 0.32, kdr: 0.05, armor: { pilot: 8, engine: 6 },
     hpParts: { wingL: 30, wingR: 30, tail: 24, engine: 22, fuel: 18, fuse: 36 },
     fuseR: 0.66, noseR: 0.66, wingZ: 0.7, chord: 2.2, tipChord: 1.1, cowl: 'radial',
@@ -108,7 +109,7 @@ export const PLANES = {
   // ---- Batalha aérea: caças sem carga externa e os primeiros jatos ----
   spit9: {
     key: 'spit9', type: 'plane', name: 'Spitfire LF Mk IX', short: 'Spitfire IX', nation: 'Reino Unido', year: 1943, color: 0x59604a, sp: 300,
-    mass: 3400, S: 22.48, span: 11.23, L: 9.5, cla: 4.9, clmax: 1.5, cd0: 0.0195, e: 0.85, hp: 1580, wep: 1720, eta: 0.82,
+    mass: 3400, S: 22.48, span: 11.23, L: 9.5, cla: 4.9, clmax: 1.5, cd0: 0.0195, e: 0.85, engine: 'merlin66',
     vne: 760 / 3.6, glim: 12, kda: 0.055, kde: 0.36, kdr: 0.05, armor: { pilot: 7 },
     hpParts: { wingL: 28, wingR: 28, tail: 22, engine: 20, fuel: 16, fuse: 32 },
     fuseR: 0.6, noseR: 0.5, wingZ: 0.55, chord: 2.5, tipChord: 0.9, cowl: 'inline',
@@ -117,7 +118,7 @@ export const PLANES = {
   },
   f86: {
     key: 'f86', type: 'plane', name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
-    mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.0145, e: 0.78, thrust: 26.3, eta: 1, mcrit: 0.9, vctrl: 290,
+    mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.0145, e: 0.78, engine: 'j47', mcrit: 0.9, vctrl: 290, flapV: [410, 305, 245],
     vne: 1150 / 3.6, glim: 12, kda: 0.05, kde: 0.3, kdr: 0.04, armor: { pilot: 8 },
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
     fuseR: 0.72, noseR: 0.62, wingZ: 0.0, chord: 3.3, tipChord: 1.6, cowl: 'intake',
@@ -127,7 +128,7 @@ export const PLANES = {
   },
   mig15: {
     key: 'mig15', type: 'plane', name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
-    mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.016, e: 0.78, thrust: 26.5, eta: 1, mcrit: 0.86, vctrl: 270,
+    mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.016, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 },
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
@@ -155,6 +156,11 @@ export const MISSILES = {
     life: 22, range: 4600, minRange: 250, gimbal: 30, fov: 4, acq: 14, lockT: 0.9, maxG: 13, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 95 }
 };
 
+// Campos derivados do motor (fonte única: air/systems/engine.js). Telas antigas leem hp/wep/thrust.
+for (const D of Object.values(PLANES)) {
+  const E = ENGINES[D.engine]; D.engines = D.engines || 1; D.jet = E.kind === 'turbojet';
+  if (D.jet) D.thrust = E.mil * D.engines; else { D.hp = E.hp * D.engines; D.wep = E.wep * D.engines; D.eta = E.eta; }
+}
 export const VEHICLES = Object.assign({}, TANKS, PLANES);
 export const LINEUP = ['sherman', 't34', 'pz4', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'];
 

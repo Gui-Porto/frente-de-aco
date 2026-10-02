@@ -317,7 +317,7 @@ function damagePanel(p, top) {
   if (p.fire > 0) { const [a, b] = P(p.fireAt[0], p.fireAt[2]); g.fillStyle = `rgba(255,${120 + Math.random() * 80},40,${0.5 + Math.random() * 0.3})`; g.beginPath(); g.arc(a, b, 8 + Math.random() * 3, 0, 7); g.fill(); }
   // combustível
   let fy = y + sh + 22;
-  const burn = D.jet ? 0.75 * Math.max(p.spool, 0.3) : (p.wep ? D.wep : D.hp) * 0.000105 * Math.max(p.throttle, 0.3);
+  const burn = Math.max(p.eng.flow, 0.05);
   const mins = p.fuel / Math.max(burn + leak, 0.01) / 60, low = p.fuel < p.fuelMax * 0.15;
   label('COMBUSTÍVEL', x, fy);
   otxt(`${mins > 99 ? '99+' : Math.floor(mins)} min`, x + w, fy, 14, low ? C.amber : C.white, 'right', MONO, 500);

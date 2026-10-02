@@ -1,17 +1,19 @@
 import * as THREE from 'three';
 import { scene } from '../core/render.js';
-import { S, planes } from '../core/state.js';
+import { S, S as ST, planes } from '../core/state.js'; // ST: em physics() `S` é a área da asa
 import { V3, QUAT, UP, clamp, lerp, rand, rv } from '../core/util.js';
 import { H, AIRLIMIT } from '../world/terrain.js';
 import { obstNear, addCrater } from '../world/scenery.js';
-import { PLANES, GUNS, RHO, G } from '../data/vehicles.js';
+import { PLANES, GUNS, MISSILES, RHO, G } from '../data/vehicles.js';
+import { EngineSet, ENGINES } from '../air/systems/engine.js';
+import { isa } from '../air/systems/atmosphere.js';
 import { fxBurn, fxTrail, fxSmallFlash, fxExplosion, fxBigBlast } from '../fx/particles.js';
 import { sndMG, sndShot, sndBoom } from '../fx/audio.js';
 import { fireProj, destroyVehicle, spawnDebris, blast } from '../combat/ballistics.js';
 import { makeLabel, showDmg, flashVign, shakeAt } from '../ui/hud.js';
 import { nextId } from './tank.js';
 import { buildPlane } from './planeModel.js';
-import { stepHeat, coolingOf } from './engineHeat.js';
+import { stepHeat } from './engineHeat.js';
 import { planeModules, fuelOf, ctrlAuthority, fuelLeak, applyMod } from './planeDamage.js';
 export { buildPlane };
 // =====================================================================
@@ -23,7 +25,11 @@ export { buildPlane };
 export const sweepOf = D => (D.span / 2 - D.fuseR * 0.6) * Math.tan((D.sweep || 0) * Math.PI / 180);
 
 export const _pf = new V3(), _pt = new V3();
-const FLAP_POS = [0, 0.33, 0.66, 1], FLAP_VMAX = [0, 480, 360, 290], FLAP_NAME = ['Recolhidos', 'Combate', 'Decolagem', 'Pouso'];
+// limites de flap (km/h) por estágio; cada avião pode trazer os seus em def.flapV
+const FLAP_POS = [0, 0.33, 0.66, 1], FLAP_V = [480, 360, 290], FLAP_NAME = ['Recolhidos', 'Combate', 'Decolagem', 'Pouso'];
+// amortecimento aerodinâmico padrão [arfagem, rolagem, guinada]; def.damp sobrescreve
+const DAMP = [24, 0.45, 0.18], _atm = {};
+const flapLim = (D, st) => st ? (D.flapV || FLAP_V)[st - 1] / 3.6 : Infinity;
 const _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
 export class Plane {
   constructor(key, team, who, pos, yaw, speed, opts = {}) {
@@ -34,10 +40,10 @@ export class Plane {
     this.vel = new V3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(speed);
     this.pr = 0; this.rr = 0; this.yr = 0; // arfagem (nariz para cima +), rolagem (direita +), guinada (esquerda +)
     this.elev = 0; this.ail = 0; this.rud = 0; this.throttle = 1; this.wep = false;
-    this.flaps = 0; this.flapStage = 0; this.airbrake = false; this.iP = 0; this.gear = 0; this.spool = 1; this.shotsN = 0; this.hitsN = 0;
+    this.flaps = 0; this.flapStage = 0; this.airbrake = false; this.iP = 0; this.gear = 0; this.shotsN = 0; this.hitsN = 0;
     this.hp = Object.assign({}, D.hpParts); this.maxHp = D.hpParts;
     this.wingOn = { L: true, R: true }; this.tailOn = true; this.engineOn = true; this.pilot = true;
-    this.alive = true; this.gone = false; this.fire = 0; this.temp = 80; this.heat = { water: 85, oil: 70 }; this.cooling = coolingOf(key, D.jet); this.oil = 0; this.lastHitBy = null; this.lastHitT = -99;
+    this.alive = true; this.gone = false; this.fire = 0; this.temp = 80; this.heat = { water: 85, oil: 70 }; this.eng = new EngineSet(D.engine, D.engines); this.cooling = ENGINES[D.engine].cooling || 'jet'; this.oil = 0; this.lastHitBy = null; this.lastHitT = -99;
     this.gStress = 0; this.overG = 0; this.n = 1; this.alpha = 0; this.ias = speed; this.dropSign = 1; this.spottedUntil = 0; this.oobT = 0;
     this.firing = false; this.guns = [];
     for (const g of D.guns) {
@@ -49,7 +55,7 @@ export class Plane {
     this.bombs = []; this.rockets = 0;
     if (opts.ord !== false) { for (const b of D.bombs) for (let i = 0; i < b.n; i++) this.bombs.push(b); this.rockets = D.rockets ? D.rockets.n : 0; }
     else for (const m of [...this.bombMeshes, ...this.rocketMeshes]) m.visible = false;
-    this.missiles = D.missiles ? D.missiles.n : 0;
+    this.missiles = D.missiles ? D.missiles.n : 0; this.missileMass = D.missiles ? MISSILES[D.missiles.w].mass : 0;
     // componentes internos, combustível, contramedidas e extintor
     this.mods = planeModules(D); this.fuel = this.fuelMax = fuelOf(D); this.wounded = false;
     this.flares = this.chaff = D.jet ? 20 : 0; this.ext = 1; this.fireAt = [0, 0, D.jet ? -D.L * 0.15 : D.L * 0.3];
@@ -66,6 +72,10 @@ export class Plane {
     this.applyTransform();
     planes.push(this);
   }
+  // fração de potência/empuxo entregue (HUD, som, temperatura): >1 com WEP/pós-combustão
+  get spool() { return this.eng.output; }
+  // WEP (pistão) ou pós-combustão (jato que tenha)
+  get canBoost() { return !this.eng.jet || this.eng.hasAB; }
   axes() { _pm.makeRotationFromQuaternion(this.q); _pl.setFromMatrixColumn(_pm, 0); _pu.setFromMatrixColumn(_pm, 1); _pf.setFromMatrixColumn(_pm, 2); }
   centerPos(out) { return out.copy(this.pos); }
   eyePos(out) { return out.copy(this.pos); }
@@ -76,22 +86,23 @@ export class Plane {
   physics(dt) {
     if (this.gone) return;
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
-    const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.missiles * 70 - (this.fuelMax - this.fuel);
+    const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.missiles * this.missileMass - (this.fuelMax - this.fuel);
     const A = ctrlAuthority(this);
     if (this.mods.hyd && this.mods.hyd.dead) { this.flapStage = 0; this.airbrake = false; }
     // flaps por estágio (como no WT): acima do limite do estágio eles sobem um degrau sozinhos; o painel se move devagar
-    if (this.flapStage && this.ias > FLAP_VMAX[this.flapStage] / 3.6 * (D.jet ? 0.85 : 1)) { this.flapStage--; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[this.flapStage]} · velocidade alta`, true); }
+    if (this.flapStage && this.ias > flapLim(D, this.flapStage)) { this.flapStage--; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[this.flapStage]} · velocidade alta`, true); }
     this.flaps += clamp(FLAP_POS[this.flapStage] - this.flaps, -dt * 0.5, dt * 0.5);
-    // motor danificado rende menos; a turbina responde com atraso (spool)
+    // motor danificado rende menos; dinâmica de rotação/potência fica em EngineSet
     const engK = this.engineOn ? 0.35 + 0.65 * clamp(this.hp.engine / this.maxHp.engine, 0, 1) : 0;
-    this.spool += (this.throttle - this.spool) * Math.min(1, dt * (D.jet ? 0.7 : 4));
-    const Ip = m * Math.pow(D.L * 0.27, 2), Ir = m * Math.pow(b * 0.2, 2), Iy = Ip * 1.25;
+    const I = D.inertia, Ip = I ? I[0] * m / D.mass : m * Math.pow(D.L * 0.27, 2), Ir = I ? I[1] * m / D.mass : m * Math.pow(b * 0.2, 2), Iy = I ? I[2] * m / D.mass : Ip * 1.25;
+    const dmp = D.damp || DAMP;
     const as = D.clmax / D.cla;
     for (let s = 0; s < n; s++) {
       this.axes();
       const V = this.vel.length() + 1e-6;
       _pv.copy(this.vel).divideScalar(V);
-      const rho = RHO * Math.exp(-Math.max(0, this.pos.y) / 8500);
+      isa(this.pos.y, _atm); _atm.alt = Math.max(0, this.pos.y);
+      const rho = _atm.rho;
       const qd = 0.5 * rho * V * V;
       this.ias = Math.sqrt(2 * qd / RHO);
       const vf = this.vel.dot(_pf), vu = this.vel.dot(_pu), vl = this.vel.dot(_pl);
@@ -104,7 +115,7 @@ export class Plane {
       if (aa > Math.PI / 2) CL = -CL * 0.3;
       const hpL = this.wingOn.L ? 0.6 + 0.4 * this.hp.wingL / this.maxHp.wingL : 0, hpR = this.wingOn.R ? 0.6 + 0.4 * this.hp.wingR / this.maxHp.wingR : 0;
       const kW = (hpL + hpR) / 2;
-      const mach = V / 340;
+      const mach = V / _atm.a; this.mach = mach;
       CL += this.flaps * 0.38 * (aa <= as ? 1 : 0.5);
       const mcr = D.mcrit || 0.68;
       const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.flaps * 0.028 + (this.airbrake ? 0.06 : 0) + this.gear * 0.035 + this.bombs.length * 0.0012 + this.rockets * 0.0004 + this.missiles * 0.0008 + (mach > mcr ? 2.5 * Math.pow(mach - mcr, 2) : 0) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
@@ -114,10 +125,8 @@ export class Plane {
       if (ln > 1e-4) _pF.addScaledVector(_pt.divideScalar(ln), qd * S * CL * kW);
       _pF.addScaledVector(_pv, -qd * S * CD);
       _pF.addScaledVector(_pl, -qd * S * 0.9 * beta);
-      const alt = Math.max(0, this.pos.y), altF = alt < 2200 ? 1 : Math.exp(-(alt - 2200) / 9000);
-      // hélice: potência/velocidade; jato: empuxo que cai com a densidade e ganha um pouco com a pressão dinâmica
-      const P = D.jet ? 0 : (this.wep ? D.wep : D.hp) * 745.7 * this.throttle * altF * engK;
-      _pF.addScaledVector(_pf, D.jet ? D.thrust * 1000 * this.spool * engK * Math.pow(rho / RHO, 0.8) * (1 + 0.2 * mach * mach) : P * D.eta / Math.max(V, 28));
+      this.eng.step(h, this.throttle, this.wep, engK, this.engineOn);
+      _pF.addScaledVector(_pf, this.eng.force(V, _atm, mach));
       this.vel.addScaledVector(_pF, h / m);
       this.pos.addScaledVector(this.vel, h);
       this.n = (qd * S * CL * kW) / (m * G);
@@ -125,13 +134,13 @@ export class Plane {
       const ctrl = (this.pilot ? 1 : 0) * clamp(1 - (this.ias - (D.vctrl || 215)) / 75, 0.28, 1) * (this.gStress > 1 ? 0.3 : 1);
       const tE = this.tailOn ? 0.45 + 0.55 * clamp(this.hp.tail / this.maxHp.tail, 0, 1) : 0.06, Vd = Math.max(V, 20);
       const aE = clamp(alpha, -0.5, 0.5);
-      let Mp = qd * S * c * (D.kde * this.elev * ctrl * tE * A.elev -0.9 * aE * (this.tailOn ? 1 : 0.1)) - qd * S * c * c / (2 * Vd) * 24 * this.pr * (this.tailOn ? 1 : 0.15);
-      let Mr = qd * S * b * D.kda * (this.ail * A.ail + A.ailBias * 0.15) * ctrl * (this.wingOn.L && this.wingOn.R ? 1 : 0.5) - qd * S * b * b / (2 * Vd) * 0.45 * this.rr * Math.max(kW, 0.3);
+      let Mp = qd * S * c * (D.kde * this.elev * ctrl * tE * A.elev -0.9 * aE * (this.tailOn ? 1 : 0.1)) - qd * S * c * c / (2 * Vd) * dmp[0] * this.pr * (this.tailOn ? 1 : 0.15);
+      let Mr = qd * S * b * D.kda * (this.ail * A.ail + A.ailBias * 0.15) * ctrl * (this.wingOn.L && this.wingOn.R ? 1 : 0.5) - qd * S * b * b / (2 * Vd) * dmp[1] * this.rr * Math.max(kW, 0.3);
       Mr += qd * S * CL * (hpL - hpR) / 2 * b * 0.22;           // assimetria de sustentação
       if (aa > as) Mr += qd * S * b * 0.02 * this.dropSign * Math.min(1, (aa - as) * 8); // queda de asa no estol
-      Mr -= this.throttle * P / 140 * 0.5 / Math.max(1, V / 60);   // torque da hélice
+      if (!this.eng.jet) Mr -= this.eng.shaft * (this.eng.E.torque || 1) / 280 / Math.max(1, V / 60); // torque da hélice
       Mr += qd * S * b * 0.03 * beta;                             // efeito diedro
-      let My = qd * S * b * (D.kdr * this.rud * ctrl * tE * A.rud +0.1 * beta * (this.tailOn ? 1 : 0.1)) - qd * S * b * b / (2 * Vd) * 0.18 * this.yr;
+      let My = qd * S * b * (D.kdr * this.rud * ctrl * tE * A.rud +0.1 * beta * (this.tailOn ? 1 : 0.1)) - qd * S * b * b / (2 * Vd) * dmp[2] * this.yr;
       this.pr += Mp / Ip * h; this.rr += Mr / Ir * h; this.yr += My / Iy * h;
       _pw.set(-this.pr, this.yr, this.rr).applyQuaternion(this.q);
       _pq.set(_pw.x * h * 0.5, _pw.y * h * 0.5, _pw.z * h * 0.5, 0).multiply(this.q);
@@ -143,7 +152,7 @@ export class Plane {
     const gx = this.n > gT ? (this.n - gT) * 0.35 : this.n < -2.5 ? (-2.5 - this.n) * 0.5 : -0.5;
     // combustível: consumo do motor + vazamentos; seco = motor apaga
     const leak = fuelLeak(this);
-    if (this.engineOn) this.fuel -= (D.jet ? 0.75 * this.spool : (this.wep ? D.wep : D.hp) * 0.000105 * this.throttle) * dt;
+    if (this.engineOn) this.fuel -= this.eng.flow * dt;
     this.fuel = Math.max(0, this.fuel - leak * dt);
     if (this.fuel <= 0 && this.engineOn && this.alive) { this.engineStop(); if (this.isPlayer) showDmg('Sem combustível'); }
     if (leak > 0 && this.fuel > 0 && Math.random() < dt * 18) for (const n of ['fuelF', 'fuelL', 'fuelR']) if (this.mods[n].leak > 0) fxTrail(_pt.set(...this.mods[n].c).applyMatrix4(this.root.matrixWorld).clone(), 0xe8e6e0, 0.6, 1.6);
@@ -156,7 +165,7 @@ export class Plane {
     }
     // temperatura do motor
     // água → óleo → desgaste (engineHeat.js). Antes um só número chegava a 142 °C no WEP e o motor morria em ~30 s.
-    const wear = stepHeat(this.heat, this.cooling, this.engineOn ? (D.jet ? this.spool : this.throttle) : 0, this.wep, this.ias, this.oil > 0, dt);
+    const wear = stepHeat(this.heat, this.cooling, this.engineOn ? Math.min(1, this.spool) : 0, this.wep, this.ias, this.oil > 0, dt);
     this.temp = this.heat.oil;
     if (wear > 0 && this.engineOn) { this.hp.engine -= wear * this.maxHp.engine; if (this.hp.engine <= 0) { this.engineStop(); if (this.isPlayer) showDmg('Motor fundido por superaquecimento'); } }
     if (this.fire > 0) {
@@ -177,7 +186,7 @@ export class Plane {
       if (wy < H(wx, wz) + 0.2) { this.crash(); return; }
     }
     for (const b of obstNear(this.pos.x - 6, this.pos.z - 6, this.pos.x + 6, this.pos.z + 6)) if (this.pos.x > b.mn[0] && this.pos.x < b.mx[0] && this.pos.z > b.mn[2] && this.pos.z < b.mx[2] && this.pos.y < b.mx[1]) { this.crash(); return; }
-    if (Math.max(Math.abs(this.pos.x), Math.abs(this.pos.z)) > (S.airLimit || AIRLIMIT)) this.oobT += dt; else this.oobT = 0;
+    if (Math.max(Math.abs(this.pos.x), Math.abs(this.pos.z)) > (ST.airLimit || AIRLIMIT)) this.oobT += dt; else this.oobT = 0;
     if (this.oobT > 15 && this.alive) destroyVehicle(this, null, 'oob');
   }
   // Instrutor (estilo "mouse aim" do WT): leva o VETOR VELOCIDADE à direção pedida.
@@ -262,7 +271,7 @@ export class Plane {
   // F desce um estágio; do pouso volta para recolhido
   cycleFlaps() {
     if (this.mods.hyd && this.mods.hyd.dead) { if (this.isPlayer) showDmg('Hidráulico inoperante'); return; }
-    const nx = (this.flapStage + 1) % FLAP_POS.length, lim = FLAP_VMAX[nx] / 3.6 * (this.def.jet ? 0.85 : 1);
+    const nx = (this.flapStage + 1) % FLAP_POS.length, lim = flapLim(this.def, nx);
     if (nx && this.ias > lim) { if (this.isPlayer) showDmg(`Flaps de ${FLAP_NAME[nx].toLowerCase()}: abaixo de ${Math.round(lim * 3.6)} km/h`, true); return; }
     this.flapStage = nx; if (this.isPlayer) showDmg(`Flaps: ${FLAP_NAME[nx]}`, true);
   }
