@@ -12,7 +12,8 @@ import { Seeker, LOCK } from './targeting.js';
 import { launchMissile, updateMissiles, clearMissiles, dropCM, missiles } from './missiles.js';
 import { readInput, pilot } from './input.js';
 import { applyEnv, updateEnv } from './environment.js';
-import { AIRFIELDS, onAirfield } from '../world/terrain.js';
+import { AIRFIELDS, onAirfield, H } from '../world/terrain.js';
+import { Euler } from 'three';
 import { updateAirfields } from '../world/airfield.js';
 import { acam, resetAirCam } from './camera.js';
 import { showResult, toast } from './screens.js';
@@ -70,10 +71,12 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
-    this.weapon = 1; this.marked = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
+    this.weapon = 1; this.marked = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
+    // como no WT: a partida começa no chão, na cabeceira da própria pista
+    const home = AIRFIELDS.find(f => f.team === p.team); if (home && p.gearMesh) this.parkAtRunway(p, home);
   },
   onDamage(v, dmg, by) {
     if (!v.dmgBy) return;
@@ -122,7 +125,7 @@ export const B = {
       if (this.seeker && p.missiles > 0) this.seeker.update(dt, p, planes, this.marked, S.now); else if (this.seeker) { this.seeker.state = LOCK.OFF; this.seeker.target = null; }
       if (c.missile && p.missiles > 0) this.fireMissile(p);
       else if (c.missile) toast(p.racks.length ? 'Mísseis esgotados' : 'Esta aeronave não leva mísseis', 1600);
-      this.refitStep(p, dt);
+      this.refitStep(p, dt); this.fadeK = this.fadeStep(p, dt);
     } else if (p) { p.firing = false; }
     updateAirfields(dt);
     updateMissiles(dt);
@@ -159,7 +162,27 @@ export const B = {
     if (R.done) return;
     if (!R.t) R.dur = 6 + 18 * wear(p); // rearme ~6 s; reparo cresce com o estrago
     R.t += dt;
-    if (R.t >= R.dur) { p.refit(); R.done = true; this.syncSeeker(); toast('Reparado, reabastecido e rearmado', 2200); }
+    if (R.t >= R.dur) { p.refit(); R.done = true; this.syncSeeker(); this.fade = { t: 0, a }; }
+  },
+  // avião parado na cabeceira da pista, trem baixado, motor em marcha lenta, pronto para decolar
+  parkAtRunway(p, a) {
+    const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), x = a.x - fx * (a.len / 2 - 50), z = a.z - fz * (a.len / 2 - 50), G = p.gearMesh.userData;
+    p.pos.set(x, H(x, z) + G.lift, z); p.vel.set(0, 0, 0); p.q.setFromEuler(new Euler(-G.pitch, a.yaw, 0, 'YXZ'));
+    p.pr = p.yr = p.rr = 0; p.ias = 0; p.onGround = true; p.gear = p.gearCmd = 1; p.throttle = 0; p.wep = false; p.airbrake = false;
+    p.applyTransform(); resetAirCam(a.yaw);
+    this.refit.done = true; // já sai reparado: não repara de novo parado na cabeceira
+  },
+  // como no WT: depois do reparo a tela apaga e o avião reaparece parado na cabeceira, pronto para decolar
+  fade: null,
+  fadeStep(p, dt) {
+    const F = this.fade; if (!F) return 0;
+    const was = F.t; F.t += dt;
+    if (was < 0.6 && F.t >= 0.6) {
+      const m = acam.mode; this.parkAtRunway(p, F.a); acam.mode = m;
+      toast('Reparado, reabastecido e rearmado · decole quando quiser', 2600);
+    }
+    if (F.t >= 1.5) this.fade = null;
+    return F.t < 0.6 ? F.t / 0.6 : Math.max(0, 1 - (F.t - 0.7) / 0.8);
   },
   // ---------- armas e aviônicos do jogador ----------
   // buscador IR existe só quando a estante selecionada é infravermelha (o semiativo usa o radar)

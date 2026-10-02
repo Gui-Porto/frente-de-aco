@@ -107,11 +107,11 @@ export function updatePlaneFx(p, dt) {
 // Malhas pequenas com o MESMO material de pintura do avião (nenhum shader novo na partida); caixa fina
 // em vez de plano para aparecer dos dois lados sem DoubleSide (que compilaria outro programa).
 const FLAKE = new THREE.BoxGeometry(1, 0.02, 0.7), flakes = [];
-export function fxFlakes(pl, pos, n = 2) {
+export function fxFlakes(pl, pos, n = 2, big = false) {
   const mat = pl.mats && pl.mats[0]; if (!mat || pos.distanceToSquared(camera.position) > 1500 * 1500) return;
   for (let i = 0; i < n; i++) {
     if (flakes.length > 60) { const o = flakes.shift(); o.m.removeFromParent(); }
-    const m = new THREE.Mesh(FLAKE, mat), s = rand(0.12, 0.38);
+    const m = new THREE.Mesh(FLAKE, mat), s = big ? rand(0.5, 1.1) : rand(0.12, 0.38); // big: painel inteiro arrancado
     m.scale.set(s, s, s * rand(0.6, 1.2)); m.position.copy(pos); m.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6));
     pl.root.parent && pl.root.parent.add(m);
     flakes.push({ m, v: pl.vel.clone().multiplyScalar(0.85).add(new THREE.Vector3(rand(-1, 1), rand(-0.3, 1), rand(-1, 1)).multiplyScalar(9)), w: new THREE.Vector3(rand(-14, 14), rand(-14, 14), rand(-14, 14)), t: rand(2.5, 4) });
@@ -142,20 +142,32 @@ const HOLE = new THREE.MeshBasicMaterial({ map: holeTex, transparent: true, dept
 const HOLEGEO = new THREE.PlaneGeometry(1, 1);
 const _rc = new THREE.Raycaster(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _n = new THREE.Vector3();
 const solid = h => { const m = Array.isArray(h.object.material) ? h.object.material[0] : h.object.material; return h.face && !h.object.userData.fx && !m.transparent; };
-export function fxHole(pl, lp, ld, he) {
-  if (!ld || pl.pos.distanceToSquared(camera.position) > 900 * 900) return;
+// back: quanto o raio recua antes do ponto de entrada (tiro); 0 = parte do ponto (explosão). Devolve o ponto no mundo.
+export function fxHole(pl, lp, ld, he, back = 3, size = 0) {
+  if (!ld || pl.pos.distanceToSquared(camera.position) > 900 * 900) return null;
   const W = pl.root.matrixWorld;
   _d.set(ld[0], ld[1], ld[2]).transformDirection(W);
-  _o.set(lp[0], lp[1], lp[2]).applyMatrix4(W).addScaledVector(_d, -3);
-  _rc.set(_o, _d); _rc.far = 8;
-  const hit = _rc.intersectObject(pl.root, true).find(solid); if (!hit) return;
+  _o.set(lp[0], lp[1], lp[2]).applyMatrix4(W).addScaledVector(_d, -back);
+  _rc.set(_o, _d); _rc.far = back + 14;
+  const hit = _rc.intersectObject(pl.root, true).find(solid); if (!hit) return null;
   _n.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
   if (_n.dot(_d) > 0) _n.negate();
   const m = new THREE.Mesh(HOLEGEO, HOLE);
   m.position.copy(hit.point).addScaledVector(_n, 0.01); m.lookAt(_o.copy(m.position).add(_n));
-  m.rotateZ(rand(0, 6.28)); m.scale.setScalar(he ? rand(0.45, 0.8) : rand(0.12, 0.2));
+  m.rotateZ(rand(0, 6.28)); m.scale.setScalar(size || (he ? rand(0.45, 0.8) : rand(0.12, 0.2)));
   m.userData.fx = true; m.renderOrder = 2;
   hit.object.attach(m);
   const H = pl.root.userData.holes || (pl.root.userData.holes = []);
-  H.push(m); if (H.length > 50) H.shift().removeFromParent();
+  H.push(m); if (H.length > 60) H.shift().removeFromParent();
+  return hit.point;
+}
+// explosão perto (míssil, granada AA): rombos queimados na face voltada para ela e painéis arrancados
+export function fxBlast(pl, lp, R) {
+  const n = Math.min(8, 3 + Math.round(R)), D = pl.def;
+  for (let i = 0; i < n; i++) {
+    const tx = clamp(lp[0] * 0.5, -D.span / 2, D.span / 2) + rand(-1.5, 1.5), ty = rand(-0.4, 0.4), tz = clamp(lp[2] * 0.5, -D.L / 2, D.L / 2) + rand(-2, 2);
+    const dx = tx - lp[0], dy = ty - lp[1], dz = tz - lp[2], l = Math.hypot(dx, dy, dz) || 1;
+    const at = fxHole(pl, lp, [dx / l, dy / l, dz / l], true, 0, rand(0.6, 1.3));
+    if (at && Math.random() < 0.6) fxFlakes(pl, at, 1 + (Math.random() < 0.5), true);
+  }
 }

@@ -21,7 +21,7 @@ export function readInput() {
   cmd.fire = isDown('a_guns'); cmd.missile = pressed('a_missile'); cmd.aim = isDown('a_zoom');
   cmd.cm = pressed('a_cm'); cmd.ext = pressed('a_ext');
   cmd.cam = pressed('a_cam'); cmd.target = pressed('a_target');
-  cmd.gear = pressed('a_gear'); cmd.flaps = pressed('a_flaps'); cmd.brake = isDown('a_airbrake');
+  cmd.gear = pressed('a_gear'); cmd.flaps = pressed('a_flaps'); cmd.brake = pressed('a_airbrake');
   cmd.wsel = pressed('a_wsel'); cmd.rmode = pressed('a_rmode'); cmd.rlock = pressed('a_rlock');
   cmd.lookX = cmd.lookY = 0; cmd.pad = false;
   // Gamepad padrão (Xbox/PS): esquerdo = rolagem/arfagem direta, direito = mira, gatilhos = potência
@@ -51,7 +51,7 @@ export function pilot(p, c, aimDir, dt) {
   if (c.thr < 0) { p.throttle = Math.max(0, p.throttle + dt * THR_RATE * c.thr); p.wep = false; }
   if (c.flaps) p.cycleFlaps();
   if (c.gear) p.toggleGear();
-  p.airbrake = c.brake;
+  if (c.brake) p.airbrake = !p.airbrake; // H liga/desliga (freio aerodinâmico no ar, freio das rodas no chão)
   // Tecla de manche no modo mouse = controle direto naquele instante (como no WT): antes só o profundor
   // era trocado e o instrutor seguia rolando o avião atrás do círculo do mouse parado → avião "bambo".
   // A câmera continua livre no mouse; ao soltar, o instrutor volta a levar o nariz para o círculo.
@@ -64,7 +64,7 @@ export function pilot(p, c, aimDir, dt) {
   } else {
     // instrutor: nariz (linha das armas) no círculo do mouse, resposta mais viva que a da IA.
     // lead 0,1 s: com o integral e a inclinação de curva da mira, 0,3 deixava o nariz ~3° À FRENTE do círculo em curva
-    p.steerTo(aimDir, dt, { glim: Math.min(p.def.glim - 1.5, 10), groundAssist: !p.gear, nose: !p.gear, // trem baixado: o círculo é para ONDE O AVIÃO VAI (trajetória), não o nariz — mira-se o ponto de toque
+    p.steerTo(aimDir, dt, { glim: Math.min(p.def.glim - 1.5, 10), groundAssist: !p.gearCmd, nose: true, // pouso é do piloto: o círculo leva o nariz também com trem baixado
       gain: 1.3, lead: 0.1 });
   }
 }

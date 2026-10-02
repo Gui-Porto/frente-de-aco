@@ -4,7 +4,6 @@ import { segBox } from '../combat/ballistics.js';
 import { GUNS } from '../data/vehicles.js';
 import { wingCfg, tailCfg, finCfg, station, surfBox, SURF } from './planeGeom.js';
 import { fxExplosion } from '../fx/particles.js';
-import { showDmg } from '../ui/hud.js';
 
 // =====================================================================
 // Dano por módulos (estilo WT): cada avião tem componentes internos com
@@ -113,7 +112,7 @@ export function hitPlaneModules(pl, lp, ld, am, dmg, pen, by, shell) {
 }
 // Explosão próxima (míssil, bomba, granada antiaérea) em coordenadas locais
 export function blastPlaneModules(pl, lx, ly, lz, R, dmg, by) {
-  if (pl.hitFx && dmg > 1) pl.hitFx(null, true);
+  if (pl.hitFx && dmg > 1) pl.hitFx([lx, ly, lz], true, null, R);
   for (const m of Object.values(pl.mods)) { const dd = boxDist(m, lx, ly, lz); if (dd < R) applyMod(pl, m, dmg * (1 - dd / R), by, { tnt: 1 }); }
 }
 const inside = (m, p) => p[0] > m.mn[0] && p[0] < m.mx[0] && p[1] > m.mn[1] && p[1] < m.mx[1] && p[2] > m.mn[2] && p[2] < m.mx[2];
@@ -124,8 +123,8 @@ export function applyMod(pl, m, dmg, by, am) {
   if (m.lost) return; // peça que já caiu junto com a ponta da asa ou a asa
   m.hitT = S.now;
   const inc = am && ((am.he || 0) > 0 || (am.tnt || 0) > 0) ? 2.2 : 1; // explosiva/incendiária pega fogo mais fácil
-  const me = pl.isPlayer, shooter = by && by.isPlayer;
-  const crit = t => { if (me) showDmg(t); if (shooter && S.air) S.air.crit(t); };
+  const shooter = by && by.isPlayer;
+  const crit = t => { if (shooter && S.air) S.air.crit(t); }; // o dano em você aparece só na silhueta de integridade, sem texto
   if (m.kind === 'engine') { pl.damage('engine', dmg, by, true, true, m.i); return; }
   if (m.kind === 'pilot') {
     m.hp -= dmg;

@@ -147,7 +147,7 @@ function fuel(p, x, y, w) {
 function chips(p) {
   const list = [];
   if (p.flapStage || p.flaps > 0.02) list.push([`FLAPS ${FLAP_TXT[p.flapStage] || '↑'}`, C.ok]);
-  if (p.gear) list.push(['TREM', C.amber]);
+  if (p.gear > 0) list.push([p.gear < 1 ? (p.gearCmd ? 'TREM DESCENDO' : 'TREM SUBINDO') : 'TREM', C.amber]);
   if (p.brakeOn) list.push(['FREIO', C.amber]);
   const rd = p.sys.radar;
   if (rd && !rd.ranging) list.push([`RADAR ${RADAR_MODE[rd.mode].toUpperCase()}`, rd.on ? T.accent : T.dim]);

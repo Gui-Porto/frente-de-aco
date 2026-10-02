@@ -26,16 +26,25 @@ export function resetAirCam(yaw) {
   aimQ.setFromAxisAngle(Y, yaw); aimQ.multiply(_qa.setFromAxisAngle(X, 0.04)); viewQ.copy(aimQ);
   fwdQ(aimQ, cam.aimDir); acam.init = false; acam.mode = 0; acam.hit = 0; acam.aimK = 0;
 }
+// testes (Playwright): aponta a mira numa direção do mundo, como se o mouse tivesse ido até lá
+export function aimAt(dir) { aimQ.setFromUnitVectors(_t.set(0, 0, 1), dir); cam.aimDir.copy(dir); }
 // dx, dy em radianos (já com sensibilidade). Mouse para a direita = mira para a direita.
 export function airMouse(dx, dy) {
   const q = acam.free ? viewQ : aimQ;
   q.multiply(_qa.setFromAxisAngle(Y, -dx)).multiply(_qa.setFromAxisAngle(X, dy)).normalize();
 }
-// gira a orientação em torno do próprio eixo frontal até o "para cima" ficar o mais vertical possível
-function autoLevel(q, k) {
-  fwdQ(q, _f); if (Math.abs(_f.y) > 0.82) return; // perto da vertical não briga com o loop
-  upQ(q, _u);
-  _w.copy(UP).addScaledVector(_f, -_f.y).normalize(); // cima desejado ⟂ frente
+// gira a orientação em torno do próprio eixo frontal até o "para cima" ficar o mais vertical possível.
+// Perto da vertical o céu não define "cima": aí o cima desejado passa a ser o dorso do avião (ref), como no WT.
+// Antes o nivelamento simplesmente desligava acima de ~55° e a mira ficava torta/invertida depois de um looping.
+const _h = new V3(), _ref = new V3();
+function autoLevel(q, k, ref) {
+  fwdQ(q, _f); upQ(q, _u);
+  const t = ref ? clamp((Math.abs(_f.y) - 0.7) / 0.2, 0, 1) : 0;
+  if (!ref && Math.abs(_f.y) > 0.82) return;
+  _w.copy(UP).addScaledVector(_f, -_f.y);
+  if (t > 0) { _h.copy(ref).addScaledVector(_f, -ref.dot(_f)); if (_h.lengthSq() > 1e-6) _w.normalize().lerp(_h.normalize(), t); }
+  if (_w.lengthSq() < 1e-6) return;
+  _w.normalize(); // cima desejado ⟂ frente
   const ang = Math.atan2(_r.crossVectors(_u, _w).dot(_f), _u.dot(_w));
   q.premultiply(_qa.setFromAxisAngle(_f, ang * k)).normalize();
 }
@@ -56,7 +65,7 @@ export function updateAirCamera(dt) {
   // tecla de manche no modo mouse: a câmera continua livre no mouse (o jogador não quer a vista presa);
   // ao soltar, o instrutor volta a levar o nariz para o círculo, como no WT
   // o horizonte nivela devagar (mais rápido quando de cabeça para baixo)
-  upQ(aimQ, _u); autoLevel(aimQ, 1 - Math.exp(-dt * (_u.y < 0 ? 2.2 : 1.4)));
+  upQ(aimQ, _u); autoLevel(aimQ, 1 - Math.exp(-dt * (_u.y < 0 ? 2.2 : 1.4)), own ? upQ(v.q, _ref) : null);
   // visão: igual à mira; no modo livre ela gira sozinha e volta ao sair
   if (!free) viewQ.slerp(aimQ, 1 - Math.exp(-dt * 28)); else autoLevel(viewQ, 1 - Math.exp(-dt * 2));
   fwdQ(aimQ, _d); cam.aimDir.copy(own ? _d : fwdQ(viewQ, _t));

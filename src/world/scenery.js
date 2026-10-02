@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { scene, camera } from '../core/render.js';
 import { V3, QUAT, UP, rand, srand, hash2 } from '../core/util.js';
-import { H, LIMIT, INNER, POINTS, SPAWN, FW, FD, roadDist, maskGrass, HMAP } from './terrain.js';
+import { H, LIMIT, INNER, POINTS, SPAWN, FW, FD, roadDist, maskGrass, HMAP, AIRFIELDS, onAirfield } from './terrain.js';
 import { addStaticBox } from './physics.js';
 import { sndCrack } from '../fx/audio.js';
 
@@ -179,6 +179,17 @@ const vegMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughn
   mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh);
 }
 // Árvores da área de combate (derrubáveis) e florestas distantes
+// Colisão das árvores com aviões: grade de células de 32 m com { x, z, r (copa), top (altura do topo) }
+const TGRID = new Map(), TCELL = 32;
+const regTree = (x, z, r, top) => { const k = gk(Math.floor(x / TCELL), Math.floor(z / TCELL)); if (!TGRID.has(k)) TGRID.set(k, []); TGRID.get(k).push({ x, z, r, top }); };
+// algo de raio `rad` em (x, y, z) bate numa árvore?
+export function treeHit(x, y, z, rad) {
+  const i0 = Math.floor((x - rad - 4) / TCELL), i1 = Math.floor((x + rad + 4) / TCELL), j0 = Math.floor((z - rad - 4) / TCELL), j1 = Math.floor((z + rad + 4) / TCELL);
+  for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) for (const t of TGRID.get(gk(i, j)) || []) if (y < t.top && Math.hypot(x - t.x, z - t.z) < t.r + rad) return true;
+  return false;
+}
+// pista e corredor de aproximação ficam livres de árvores
+const runwayClear = (x, z) => AIRFIELDS.some(a => onAirfield(a, x, z, 40) || (Math.abs(x - a.x) < 140 && Math.abs(z - a.z) < a.len / 2 + 1600));
 export let treeMesh;
 {
   const trunk = new THREE.CylinderGeometry(0.18, 0.3, 3.2, 7); trunk.translate(0, 1.6, 0);
@@ -202,19 +213,19 @@ export let treeMesh;
   list.forEach(([x, z, sc], i) => {
     p.set(x, H(x, z) - 0.2, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc, sc, sc);
     m.compose(p, q, s); treeMesh.setMatrixAt(i, m); col.setScalar(rand(.8, 1.2)); treeMesh.setColorAt(i, col);
-    TREES.push({ x, z, sc, down: false, i, rot: q.clone() });
+    TREES.push({ x, z, sc, down: false, i, rot: q.clone() }); regTree(x, z, 1.6 * sc, H(x, z) + 9 * sc);
     maskGrass(x - 1, z - 1, x + 1, z + 1);
   });
   scene.add(treeMesh);
   const far = [];
-  for (let i = 0; i < 26000 && far.length < 3400; i++) {
-    const x = srand() * 8000 - 4000, z = srand() * 8000 - 4000;
-    if (Math.max(Math.abs(x), Math.abs(z)) < INNER / 2) continue;
+  for (let i = 0; i < 40000 && far.length < 5200; i++) {
+    const x = srand() * 9000 - 4500, z = srand() * 9000 - 4500;
+    if (Math.max(Math.abs(x), Math.abs(z)) < INNER / 2 || runwayClear(x, z)) continue;
     if (Math.sin(x * 0.004) * Math.cos(z * 0.0035) + Math.sin(x * 0.011 + z * 0.007) * 0.5 < 0.55) continue;
     far.push([x, z, 0.9 + srand() * 0.7]);
   }
   const fm = new THREE.InstancedMesh(oak, vegMat(), far.length);
-  far.forEach(([x, z, sc], i) => { p.set(x, H(x, z) - 1.6, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc * 1.4, sc * 1.4, sc * 1.4); m.compose(p, q, s); fm.setMatrixAt(i, m); col.setScalar(rand(.75, 1.2)); fm.setColorAt(i, col); });
+  far.forEach(([x, z, sc], i) => { p.set(x, H(x, z) - 1.6, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc * 1.4, sc * 1.4, sc * 1.4); m.compose(p, q, s); fm.setMatrixAt(i, m); col.setScalar(rand(.75, 1.2)); fm.setColorAt(i, col); regTree(x, z, 2.6 * sc, H(x, z) - 1.6 + 9 * sc * 1.4); });
   fm.castShadow = true; scene.add(fm);
 }
 export function resetTrees() {

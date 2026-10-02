@@ -61,7 +61,7 @@ export function updateAirHUD(dt) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, V.W / 2, V.H - 40, 15, C.ally, 'center', UI);
   }
   tacMap(v, T);
-  $('#gdark').style.opacity = live ? p.blackout * 0.97 : 0;
+  $('#gdark').style.opacity = live ? Math.max(p.blackout * 0.97, B.fadeK || 0) : 0; // desmaio ou troca de tela pós-reparo
   if (live && p.koT > 0) otxt(`PILOTO DESMAIADO · ${Math.ceil(p.koT)} s`, V.W / 2, V.H / 2 + 6, 22, C.white, 'center');
 }
 
@@ -81,8 +81,8 @@ function baseHud(p) {
   if (!R.onField) {
     // aproximação: dica do trem (com o limite de velocidade) e do pouso
     const agl = p.pos.y - a.h;
-    if (p.gear && d < 4000 && !p.onGround) otxt('TREM BAIXADO · pouse na pista para reparar e rearmar', V.W / 2, V.H * 0.72, 14, C.ally, 'center');
-    else if (!p.gear && d < 3000 && agl < 500) otxt(`Para pousar: abaixo de ${Math.round(p.gearV * 3.6)} km/h baixe o trem (${keyName(settings.binds.a_gear[0])}) e os flaps (${keyName(settings.binds.a_flaps[0])})`, V.W / 2, V.H * 0.72, 14, p.ias > p.gearV ? C.amber : C.ally, 'center');
+    if (p.gearCmd && d < 4000 && !p.onGround) otxt('TREM BAIXADO · pouse na pista para reparar e rearmar', V.W / 2, V.H * 0.72, 14, C.ally, 'center');
+    else if (!p.gearCmd && d < 3000 && agl < 500) otxt(`Para pousar: abaixo de ${Math.round(p.gearV * 3.6)} km/h baixe o trem (${keyName(settings.binds.a_gear[0])}) e os flaps (${keyName(settings.binds.a_flaps[0])})`, V.W / 2, V.H * 0.72, 14, p.ias > p.gearV ? C.amber : C.ally, 'center');
     return;
   }
   const y = V.H * 0.7, w = 320, x = V.W / 2 - w / 2;

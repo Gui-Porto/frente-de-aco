@@ -240,7 +240,6 @@ export function buildPlane(D) {
       nozzles.push({ x: nx, y: nn > 1 ? -fr * 0.15 : 0, z: -L * 0.53 - 0.3, r: nr * 0.85 });
       add(new THREE.CircleGeometry(nr * 0.9, 18).rotateY(Math.PI), black, root, nx, nn > 1 ? -fr * 0.15 : 0, -L * 0.52);
     }
-    if (D.gunPod) { const g0 = add(new THREE.CylinderGeometry(0.16, 0.2, L * 0.16, 12).rotateX(Math.PI / 2), paint, root, 0, -fr * 0.72, L * 0.31); g0.scale.x = 1.3; add(new THREE.CylinderGeometry(0.035, 0.035, 0.3, 6).rotateX(Math.PI / 2), black, root, 0, -fr * 0.72, L * 0.39); } // carenagem do Vulcan sob o queixo
   } else {
     if (D.cowl === 'radial') { add(new THREE.TorusGeometry(D.noseR * 0.93, 0.06, 8, 28), dark, root, 0, 0, L * 0.43); add(new THREE.CylinderGeometry(D.noseR * 0.92, D.noseR * 0.98, 0.25, 28, 1, true).rotateX(Math.PI / 2), dark, root, 0, 0, L * 0.22); }
     else for (const s of [1, -1]) for (let i = 0; i < 6; i++) { add(new THREE.BoxGeometry(0.12, 0.09, 0.2), dark, root, s * fr * 0.88, fr * 0.42, L * 0.36 - i * 0.24); stacks.push({ x: s * fr * 0.98, y: fr * 0.42, z: L * 0.36 - i * 0.24 - 0.08, dir: -s * 0.75 }); } // escapamentos
@@ -255,6 +254,16 @@ export function buildPlane(D) {
   add(canopyGeometry(C.len, C.w, C.h), glass, root, 0, cy, czc);
   for (const t of C.frames) add(canopyFrame(C.len, C.w, C.h, t, jet ? 0.014 : 0.02), jet ? paint : dark, root, 0, cy, czc); // montantes finos, da cor da chapa no jato
   add(new THREE.BoxGeometry(C.w * 1.9, 0.035, 0.04), dark, root, 0, cy + 0.01, czc - C.len / 2 + 0.02); // trilho traseiro
+  // piloto sob a capota (capacete branco no jato, de couro no pistão); a hitbox 'pilot' é alinhada a ele (plane.js)
+  const pilot = new THREE.Group(), suit = new THREE.MeshStandardMaterial({ color: jet ? 0x5b5f45 : 0x6b5a3e, roughness: .9 });
+  const helm = new THREE.MeshStandardMaterial({ color: jet ? 0xd9d8d0 : 0x4a3424, roughness: jet ? .35 : .8 });
+  const hy = cy + C.h * 0.62, pz = czc - C.len * 0.08; pilot.position.set(0, hy, pz); root.add(pilot);
+  add(new THREE.SphereGeometry(0.135, 14, 10), helm, pilot, 0, 0, 0);                                        // capacete
+  add(new THREE.BoxGeometry(0.2, 0.06, 0.03), jet ? new THREE.MeshStandardMaterial({ color: 0x2e3a40, roughness: .2, metalness: .6 }) : dark, pilot, 0, 0.0, 0.125); // viseira / óculos
+  if (jet) add(new THREE.CylinderGeometry(0.035, 0.05, 0.1, 8).rotateX(Math.PI / 2), black, pilot, 0, -0.09, 0.12); // máscara de oxigênio
+  add(new THREE.CapsuleGeometry(0.17, 0.32, 4, 10), suit, pilot, 0, -0.42, -0.04);                        // tronco
+  add(new THREE.BoxGeometry(0.36, 0.55, 0.06), dark, pilot, 0, -0.2, -0.24);                              // encosto do assento
+  for (const o of pilot.children) o.userData.fx = true; // marcas de bala não grudam no piloto
   if (jet) {
     const at = fuseG.userData.at, olive = new THREE.MeshStandardMaterial({ color: 0x3d4130, roughness: .8 });
     // carenagem dorsal só para quem não tem perfil próprio (o perfil def.fuse já desenha o dorso)
@@ -264,10 +273,6 @@ export function buildPlane(D) {
     }
     if (D.key === 'f86') {
       add(new THREE.BoxGeometry(0.62, 0.02, 1.5), olive, root, 0, at((cz + 1.6) / L).top + 0.005, cz + 1.6); // painel antirreflexo
-      for (const sd of [1, -1]) for (let i = 0; i < 3; i++) { const z = L * 0.34, a = at(z / L); add(new THREE.BoxGeometry(0.05, 0.07, 0.28), dark, root, sd * (a.hw * 0.97), a.yc + 0.22 - i * 0.16, z); } // 3 M3 de cada lado
-    } else if (D.key === 'mig15') {
-      for (const [sd, r, k, dz] of [[1, 0.11, 0.45, 0], [-1, 0.09, 0.35, 0.2], [-1, 0.09, 0.62, -0.3]]) { const a = at(0.3); add(new THREE.CylinderGeometry(r, r * 0.8, 1.6, 10).rotateX(Math.PI / 2), paint, root, sd * a.hw * k, a.yc - a.h * 0.85, L * 0.3 + dz); } // carenagens: N-37 à direita, dois NR-23 à esquerda
-      add(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8).rotateX(Math.PI / 2), dark, root, D.noseR * 0.45, -D.noseR * 0.7, L * 0.42); // boca do N-37
     }
   }
   // asas (grupos separados para poder perdê-las)
@@ -319,6 +324,48 @@ export function buildPlane(D) {
     return grp;
   };
   const wingL = wing(1), wingR = wing(-1);
+  // ---- canhões (def.guns[i].mount): canos, carenagens, casulos, calhas; a boca é o ponto de tiro (gunPts) ----
+  const at = fuseG.userData.at, steel = new THREE.MeshStandardMaterial({ color: 0x2b2c2d, roughness: .4, metalness: .8 });
+  const secY = (a, ay) => (ay >= 0 ? a.yc + ay * (a.top - a.yc) : a.yc + ay * a.h);
+  const tube = (r0, r1, len, m, x, y, zTip) => add(new THREE.CylinderGeometry(r1, r0, len, 12).rotateX(Math.PI / 2), m, root, x, y, zTip - len / 2); // r1 = ponta
+  const gunPts = (D.guns || []).map(g => {
+    const M = g.mount; if (!M) return null;
+    const a = at(M.zf), z = M.zf * L;
+    return M.b.map(([ax, ay]) => {
+      let x = ax * a.hw, y = secY(a, ay);
+      if (M.pod) { // casulo sob a fuselagem: corpo, ponta afinando e boca escura
+        y = a.yc - a.h - M.pod.r * 0.55;
+        tube(M.pod.r * 0.85, M.pod.r, M.pod.len, paint, x, y, z - 0.25);
+        tube(M.pod.r, M.pod.r * 0.7, 0.25, paint, x, y, z);
+        add(new THREE.CircleGeometry(M.pod.r * 0.66, 16), black, root, x, y, z + 0.002);
+        add(new THREE.BoxGeometry(0.06, a.yc - a.h - y + 0.05, M.pod.len * 0.7), paint, root, x, (y + a.yc - a.h) / 2 + 0.02, z - M.pod.len * 0.55); // pilone
+      }
+      if (M.fair) tube(M.fair.r * 0.9, M.fair.r * 0.7, M.fair.len, paint, x, y, z);       // carenagem do cano
+      if (M.port) add(new THREE.BoxGeometry(0.07, 0.09, 0.5), black, root, x - Math.sign(x) * 0.02, y, z - 0.2); // calha escura
+      const tip = z + M.len, bl = Math.max(M.len, 0) + 0.45;
+      if (M.cluster) for (let i = 0; i < M.cluster; i++) { const t = i / M.cluster * Math.PI * 2; tube(M.r, M.r, bl, steel, x + Math.cos(t) * M.rr, y + Math.sin(t) * M.rr, tip); }
+      else for (const dx of M.twin ? [-M.twin / 2, M.twin / 2] : [0]) {
+        tube(M.r * 1.25, M.r, bl, steel, x + dx, y, tip);
+        if (M.brake) tube(M.r * 1.5, M.r * 1.5, 0.2, steel, x + dx, y, tip);           // freio de boca
+        add(new THREE.CircleGeometry(M.r * 0.6, 10), black, root, x + dx, y, tip + 0.002);
+      }
+      if (M.blast) add(new THREE.BoxGeometry(0.012, 0.62, 1.1), steel, root, x - Math.sign(x) * 0.03, a.yc + 0.05, z - 0.45); // painel anti-sopro
+      return [x, y, tip + 0.1];
+    });
+  });
+  // ---- freios aerodinâmicos (def.brake): painel articulado na borda dianteira + vão escuro por baixo ----
+  const brakes = [];
+  for (const b of D.brake || []) {
+    const sd = Math.sign(b.ax) || 0, side = b.open === 'side';
+    let x, y, z, par = root;
+    if (b.ws != null) { const o = wingCfg(sd), p = station(o, b.ws, b.cf), c = chordAt(o, b.ws); x = p[0]; z = p[2] + b.len / 2; y = p[1] - (o.t0 + (o.t1 - o.t0) * b.ws) * c * 0.5 - 0.02; par = sd > 0 ? wingL : wingR; }
+    else { const a = at(b.zf); x = b.ax * a.hw; y = secY(a, b.ay); z = b.zf * L + b.len / 2; }
+    const piv = new THREE.Group(); piv.position.set(x, y, z); par.add(piv);
+    const dims = side ? [0.03, b.w, b.len] : [b.w, 0.03, b.len];
+    add(new THREE.BoxGeometry(...dims).translate(0, 0, -b.len / 2), side ? paint : under, piv);
+    add(new THREE.BoxGeometry(...dims), ductM, par, x - (side ? sd * 0.03 : 0), y + (side ? 0 : 0.03), z - b.len / 2); // vão
+    brakes.push({ pivot: piv, axis: side ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0), max: -(side ? sd : 1) * b.deg * deg });
+  }
   // empenagem: estabilizador e deriva também com perfil
   const tail = new THREE.Group(); root.add(tail);
   const finH = L * 0.17;
@@ -402,20 +449,30 @@ export function buildPlane(D) {
   const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes]);
   for (const grp of [root, wingL, wingR, wingL.userData.tip, wingR.userData.tip, tail]) mergeStatic(grp, keep);
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
-  return { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at };
+  return { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };
 }
 // Trem de pouso: pernas principais na asa, bequilha (pistão) ou trem do nariz (jato). userData.lift = altura
 // do CG ao chão com o trem baixado; userData.pitch = atitude parado (cauda baixa no pistão).
 export function buildGear(D, root, wingCfg, mat) {
   const g = new THREE.Group(); g.visible = false; root.add(g);
   const lift = D.fuseR + 1.35, tire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: .9 });
-  const wheel = (r, w, x, y, z) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 18).rotateZ(Math.PI / 2), tire); m.position.set(x, y, z); g.add(m); const h = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.5, r * 0.5, w + 0.02, 12).rotateZ(Math.PI / 2), mat); h.position.copy(m.position); g.add(h); };
-  const leg = (x, z, len, rad) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad * 1.2, len, 8), mat); m.position.set(x, -len / 2, z); g.add(m); };
-  const mz = D.wingZ + 0.4, mx = D.span * 0.16, mr = D.jet ? 0.36 : 0.4;
-  for (const s of [1, -1]) { leg(s * mx, mz, lift - mr, 0.07); wheel(mr, 0.2, s * mx, -lift + mr, mz); const door = new THREE.Mesh(new THREE.BoxGeometry(0.03, lift * 0.55, 0.7), mat); door.position.set(s * (mx + 0.14), -lift * 0.35, mz); g.add(door); }
+  // cada perna é um pivô no ponto de fixação: recolhe girando (principais para dentro, nariz para a frente,
+  // bequilha para trás); userData.anim(k) põe o trem em k (0 recolhido, 1 baixado)
+  const mk = (geo, m, par, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; par.add(o); return o; };
+  const strut = (x, z, len, rad, r, w, door) => {
+    const p = new THREE.Group(); p.position.set(x, 0, z); g.add(p);
+    mk(new THREE.CylinderGeometry(rad, rad * 1.2, len, 8), mat, p, 0, -len / 2, 0);                              // perna
+    mk(new THREE.CylinderGeometry(rad * 0.7, rad * 0.7, len * 0.35, 8), mat, p, 0, -len * 0.82, 0.04);           // amortecedor
+    mk(new THREE.CylinderGeometry(r, r, w, 18).rotateZ(Math.PI / 2), tire, p, 0, -len - r * 0.9, 0);            // pneu
+    mk(new THREE.CylinderGeometry(r * 0.5, r * 0.5, w + 0.02, 12).rotateZ(Math.PI / 2), mat, p, 0, -len - r * 0.9, 0); // cubo
+    if (door) mk(new THREE.BoxGeometry(0.03, len * 0.75, Math.max(0.5, r * 1.8)), mat, p, door * 0.14, -len * 0.45, 0); // porta presa à perna
+    return p;
+  };
+  const mz = D.wingZ + 0.4, mx = D.span * 0.16, mr = D.jet ? 0.36 : 0.4, legs = [];
+  for (const s of [1, -1]) legs.push([strut(s * mx, mz, lift - mr * 1.9, 0.07, mr, 0.2, s), 'z', -s]);
   const nz = D.jet ? D.L * 0.33 : -D.L * 0.46, nl = D.jet ? lift : lift * 0.45, nr = D.jet ? 0.28 : 0.17;
-  leg(0, nz, nl - nr, 0.06); wheel(nr, 0.14, 0, -nl + nr, nz);
-  for (const o of g.children) o.castShadow = true;
+  legs.push([strut(0, nz, nl - nr * 1.9, 0.06, nr, 0.14, 0), 'x', D.jet ? -1 : 1]);
+  g.userData.anim = k => { const a = (1 - k) * Math.PI / 2; for (const [p, ax, sg] of legs) p.rotation[ax] = sg * a; };
   g.userData.lift = lift; g.userData.pitch = D.jet ? 0 : Math.atan2(lift - nl, D.L * 0.46 + mz) * 0.9;
   g.userData.mainZ = mz; g.userData.noseZ = nz;
   return g;

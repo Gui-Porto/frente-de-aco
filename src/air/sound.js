@@ -147,10 +147,10 @@ function detents(p) {
   if (p.wep !== prevWep && p.canBoost) cockpitTone(p.wep ? 240 : 160, p.wep ? 300 : 120, 0.06, 0.05, 'square');
   const ab = p.eng.hasAB ? p.eng.ab : 0;
   if (ab > 0.02 && prevAB <= 0.02) { cockpitThump(0.7, 55, 0.6); sndAB(); }
-  if (p.gear !== prevGear) sndGear(p.gear > 0.5);
+  if (p.gearCmd !== prevGear) sndGear(p.gearCmd > 0.5);
   if (p.flapStage !== prevFlap) sndFlaps();
   if (p.touchT && p.touchT !== prevTouch) sndTouch(Math.min(1.4, 0.4 + (p.touchV || 0) / 4));
-  prevThr = t; prevAB = ab; prevWep = p.wep; prevGear = p.gear; prevFlap = p.flapStage; prevTouch = p.touchT || 0;
+  prevThr = t; prevAB = ab; prevWep = p.wep; prevGear = p.gearCmd; prevFlap = p.flapStage; prevTouch = p.touchT || 0;
 }
 
 // tons contínuos: buscador IR e alerta de maior prioridade
