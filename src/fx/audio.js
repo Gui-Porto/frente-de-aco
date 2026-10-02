@@ -33,6 +33,11 @@ export function audioInit() {
     const jwg = AC.createGain(); jwg.gain.value = 0.04; const jg = AC.createGain(); jg.gain.value = 0;
     jn.connect(jf); jf.connect(jg); jw.connect(jwg); jwg.connect(jg); jg.connect(engBus); jn.start(); jw.start();
     eng.jet = { g: jg, f: jf, w: jw };
+    // pós-combustão: ronco grave de ruído (ganho = fração acesa)
+    const an = AC.createBufferSource(); an.buffer = noiseBuf; an.loop = true; an.playbackRate.value = 0.6;
+    const af = AC.createBiquadFilter(); af.type = 'lowpass'; af.frequency.value = 220; af.Q.value = 0.9;
+    const ag = AC.createGain(); ag.gain.value = 0; an.connect(af); af.connect(ag); ag.connect(engBus); an.start();
+    eng.ab = { g: ag, f: af };
     // tons do cockpit: buscador do míssil (rosnado/tom) e alarmes
     const tone = (type) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; g.gain.value = 0; o.connect(g); g.connect(sfx); o.start(); return { o, g }; };
     eng.seek = tone('triangle'); eng.warn = tone('square');
@@ -40,6 +45,14 @@ export function audioInit() {
 }
 export function sndCm(pos) { const a = at(pos, 0.7); if (!a) return; noiseBurst(a.t, Math.min(a.vol, .6), 3200, 0.35, 2); noiseBurst(a.t + 0.12, Math.min(a.vol, .5), 2600, 0.3, 2); }
 export function sndLaunch(pos) { const a = at(pos, 1.2); if (!a) return; noiseBurst(a.t, Math.min(a.vol, 1), 1600, 1.6, 0.5); }
+// tom curto de cockpit (bipes de radar/RWR): varre f0→f1 em dur s, começando após `delay` s
+export function cockpitTone(f0, f1, dur, vol = 0.05, type = 'sine', delay = 0) {
+  if (!AC) return; const t = AC.currentTime + delay, o = AC.createOscillator(), gg = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.linearRampToValueAtTime(f1, t + dur);
+  gg.gain.setValueAtTime(0.0001, t); gg.gain.exponentialRampToValueAtTime(vol, t + 0.008); gg.gain.setValueAtTime(vol, t + Math.max(0.01, dur - 0.02)); gg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(gg); gg.connect(sfx); o.start(t); o.stop(t + dur + 0.02);
+}
+export function cockpitThump(vol = 0.5, f0 = 70, dur = 0.35) { if (AC) thump(AC.currentTime, vol, f0, dur); }
 export function audioPause(p) { if (AC) p ? AC.suspend() : AC.resume(); }
 function at(pos, base) { if (!AC) return null; const d = camera.position.distanceTo(pos); return { t: AC.currentTime + d / 343, vol: base / (1 + d / 40), d }; }
 function noiseBurst(t, vol, freq, dur, q = 0.7) {
