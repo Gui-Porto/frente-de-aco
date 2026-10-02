@@ -1,3 +1,4 @@
+import { updatePlaneFx } from '../vehicles/planeFx.js';
 import { camera, frameLighting, renderFrame } from '../core/render.js';
 import { S, tanks, planes, projs } from '../core/state.js';
 import { endFrame } from '../core/settings.js';
@@ -37,7 +38,7 @@ export function simulate(dt) {
     t.afterPhysics(dt);
     if (!t.alive && t.burnT > 0) { t.burnT -= dt; if ((t.smokeT -= dt) < 0) { t.smokeT = .22; fxBurn(t.centerPos(new V3()).add(rv(1)), 1.2); } }
   }
-  for (const p of planes) { p.physics(dt); p.updateWeapons(dt); p.applyTransform(); }
+  for (const p of planes) { p.physics(dt); p.updateWeapons(dt); p.applyTransform(); updatePlaneFx(p, dt); }
   updateProjs(dt); updatePopped(); updateParts(dt);
   if (S.mode !== 'air' && (S.state === 'play' || S.state === 'spawn' || S.state === 'spectate')) updateMatch(dt);
 }
@@ -65,7 +66,7 @@ function frame(ts) {
     let near = pl, nd = 0;
     if (!near) { nd = 1e9; for (const q of planes) { if (!q.alive) continue; const d = q.pos.distanceTo(camera.position); if (d < nd) { nd = d; near = q; } } }
     eng.air.g.gain.value = near && !S.paused && S.state !== 'menu' ? (pl ? 0.06 : 0.12 / (1 + nd / 120)) * (near.engineOn ? 1 : 0.1) : 0;
-    if (near) { eng.air.o.frequency.value = 45 + near.throttle * 40 + (near.wep ? 8 : 0); eng.air.o2.frequency.value = eng.air.o.frequency.value / 2; }
+    if (near) { eng.air.o.frequency.value = 45 + near.throttle * 40 + (near.wep ? 8 : 0); eng.air.o2.frequency.value = eng.air.o.frequency.value / 2; if (eng.air.lfo) eng.air.lfo.frequency.value = eng.air.o.frequency.value / 6; }
   }
   if (S.mode === 'air') updateAirHUD(dt || 0.016); else updateHUD(dt || 0.016);
   renderFrame();
@@ -78,4 +79,4 @@ requestAnimationFrame(frame);
 // gancho para testes automatizados
 import * as R from '../core/render.js';
 window.__r = R;
-window.__game = { B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam };
+window.__game = { B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };

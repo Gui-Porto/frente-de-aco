@@ -122,6 +122,8 @@ export const PLANES = {
     vne: 1150 / 3.6, glim: 12, kda: 0.05, kde: 0.3, kdr: 0.04, armor: { pilot: 8 },
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
     fuseR: 0.72, noseR: 0.62, wingZ: 0.0, chord: 3.3, tipChord: 1.6, cowl: 'intake',
+    fuse: [[-0.53, .4, .42, .4, .04], [-0.44, .5, .55, .5, .06], [-0.3, .7, .8, .72, .05], [-0.14, .9, 1.02, .92, .02], [0.02, 1, 1.1, 1, 0], [0.16, 1, 1.12, 1, 0], [0.28, .94, 1.02, .96, -.03], [0.38, 'n1.02', 'n.98', 'n1.04', -.05], [0.46, 'n.98', 'n.9', 'n1', -.06]],
+    canopy: { z: 0.22, len: 2.7, w: 0.44, h: 0.62, frames: [0.24] },
     guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300 }],
     missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30',
     bombs: [], rockets: null
@@ -132,6 +134,8 @@ export const PLANES = {
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1',
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
+    fuse: [[-0.53, .42, .46, .44, .08], [-0.45, .56, .62, .58, .08], [-0.32, .78, .86, .82, .05], [-0.16, .96, 1.04, 1, .02], [0, 1.04, 1.1, 1.06, 0], [0.14, 1.04, 1.1, 1.06, 0], [0.27, .98, 1.02, 1, -.01], [0.37, 'n1.06', 'n1.06', 'n1.06', -.02], [0.46, 'n1', 'n1', 'n1', -.02]],
+    canopy: { z: 0.22, len: 2.3, w: 0.42, h: 0.55, frames: [0.24, 0.6] },
     guns: [{ w: 'N37', n: 1, span: [0.45], z: 2.8, ammo: 40 }, { w: 'NR23', n: 2, span: [0.5], z: 2.6, ammo: 80 }],
     bombs: [], rockets: null
   },
@@ -144,8 +148,10 @@ export const PLANES = {
     mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.5, 0.2],
     vne: 1400 / 3.6, glim: 9.5, kda: 0.034, kde: 0.25, kdr: 0.03, armor: { pilot: 6 },
     hpParts: { wingL: 60, wingR: 60, tail: 40, engine: 50, fuel: 36, fuse: 75 },
-    fuseR: 0.95, noseR: 0.5, wingZ: -1.2, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, intakes: 'side', nozzles: 2, gunPod: true, finish: 'camo', underColor: 0xc9ccc6,
+    fuseR: 0.95, noseR: 0.5, wingZ: -1.2, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, intakes: 'side', nozzles: 2, gunPod: true, wingBreak: [0.66, 12], finish: 'camo', underColor: 0xc9ccc6,
     radar: 'apq120', rwr: 'apr36',
+    fuse: [[-0.53, .72, .42, .5, -.1], [-0.46, .78, .5, .56, -.08], [-0.36, .86, .62, .66, -.04], [-0.2, .95, .86, .82, 0], [0, 1, 1, .95, 0], [0.14, .92, 1.02, .9, 0], [0.26, .7, .92, .78, .02], [0.36, .52, .7, .62, 0], [0.45, 'n1', 'n1', 'n1', 0]],
+    canopy: { z: 0.27, len: 5.0, w: 0.46, h: 0.62, frames: [0.2, 0.5, 0.76] }, smoke: 0.8,
     guns: [{ w: 'M61', n: 1, span: [0], z: 8.2, ammo: 640 }],
     missiles: [{ w: 'AIM7E', n: 4 }, { w: 'AIM9J', n: 4 }],
     bombs: [], rockets: null
@@ -158,6 +164,8 @@ export const PLANES = {
     hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
     fuseR: 0.62, noseR: 0.45, wingZ: -1.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,
     radar: 'rp22', rwr: 'spo10',
+    fuse: [[-0.53, .82, .84, .82, 0], [-0.44, .86, .9, .86, 0], [-0.3, .92, 1, .92, 0], [-0.1, .96, 1.18, .96, 0], [0.08, .98, 1.22, .98, 0], [0.2, .98, 1.18, .98, 0], [0.3, .94, 1, .94, 0], [0.39, 'n1.18', 'n1.18', 'n1.18', 0], [0.46, 'n1.1', 'n1.1', 'n1.1', 0]],
+    canopy: { z: 0.26, len: 2.7, w: 0.38, h: 0.5, frames: [0.26, 0.62] },
     guns: [{ w: 'GSh23', n: 1, span: [0], z: 1.0, ammo: 200 }],
     missiles: [{ w: 'R3R', n: 2 }, { w: 'R3S', n: 2 }],
     bombs: [], rockets: null

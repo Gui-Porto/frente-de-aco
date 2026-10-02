@@ -1,6 +1,6 @@
 import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
-import { AC, eng, cockpitTone, cockpitThump } from '../fx/audio.js';
+import { AC, eng, cockpitTone, cockpitThump, sndWhoosh, sndSonicBoom } from '../fx/audio.js';
 import { B } from './battle.js';
 import { LOCK } from './targeting.js';
 // =====================================================================
@@ -21,6 +21,8 @@ export function airAudio(dt) {
   if (!near) { nd = 1e9; for (const q of planes) { if (!q.alive) continue; const d = q.pos.distanceTo(camera.position); if (d < nd) { nd = d; near = q; } } }
   const vol = !live || S.paused || !near ? 0 : (p ? 1 : 1.6 / (1 + nd / 150)) * (near.engineOn ? 1 : 0.1);
   engine(near, vol);
+  wind(p, live && !S.paused);
+  passes(live && !S.paused);
   if (p && !S.paused && S.state === 'play') { cockpitEvents(p); detents(p); }
   else drain(p);
   tones(p, dt);
@@ -28,9 +30,12 @@ export function airAudio(dt) {
 
 function engine(q, vol) {
   const E = q && q.eng, jet = E && E.jet, sd = E ? E.E.snd || {} : {};
-  eng.air.g.gain.value = E && !jet ? vol * 0.06 : 0;
+  // pistão no WEP: mais alto e mais "sujo" (a distorção vem do ganho maior entrando no waveshaper)
+  eng.air.g.gain.value = E && !jet ? vol * (0.06 + 0.05 * Math.max(0, E.power - 1) * 10) : 0;
   eng.jet.g.gain.value = jet ? vol * 0.09 : 0;
-  eng.ab.g.gain.value = jet ? vol * (sd.ab || 0) * E.ab : 0;
+  // PC: ronco com estalos (ganho tremendo aleatoriamente a cada quadro)
+  eng.ab.g.gain.value = jet ? vol * (sd.ab || 0) * E.ab * (0.75 + Math.random() * 0.5) : 0;
+  eng.rumble.g.gain.value = jet ? vol * (0.05 + 0.12 * Math.min(1, E.output)) : 0;
   if (!E) return;
   if (jet) {
     const n = Math.max(0, (E.N - E.E.nIdle) / (1 - E.E.nIdle)), [r0, r1] = sd.roar || [300, 1200], [w0, w1] = sd.whine || [1800, 3400];
@@ -39,9 +44,28 @@ function engine(q, vol) {
   } else {
     const f = (sd.f0 || 45) + Math.min(E.power, 1.2) * ((sd.f1 || 85) - (sd.f0 || 45));
     eng.air.o.frequency.value = f; eng.air.o2.frequency.value = f / 2;
+    eng.air.lfo.frequency.value = f / 6; // batida dos cilindros acompanha a rotação
   }
 }
 
+// vento: cresce com a pressão dinâmica; na cabine (câmera 2) abafa um pouco
+function wind(p, on) {
+  const q = p ? Math.min(1, (p.ias / 260) ** 2) : 0;
+  eng.wind.g.gain.value = on ? q * 0.11 : 0; eng.wind.f.frequency.value = 500 + q * 900;
+}
+// avião passando perto da câmera ("vush") e estrondo de quem cruza Mach 1 por perto
+const passMem = new WeakMap();
+function passes(on) {
+  if (!on) return;
+  for (const q of planes) {
+    if (!q.alive || q === S.player) continue;
+    const d = q.pos.distanceTo(camera.position), m = passMem.get(q) || { d, mach: q.mach || 0, t: 0 };
+    if (m.d < 160 && d > m.d && m.closing && performance.now() - m.t > 1500) { sndWhoosh(q.pos, Math.min(1.5, q.ias / 180)); m.t = performance.now(); }
+    m.closing = d < m.d;
+    if (d < 1800 && (m.mach < 1) !== ((q.mach || 0) < 1) && (q.mach || 0) >= 1) sndSonicBoom(q.pos);
+    m.d = d; m.mach = q.mach || 0; passMem.set(q, m);
+  }
+}
 // eventos do jogador (radar/RWR/MAW) viram bipes curtos
 function cockpitEvents(p) {
   const s = p.sys;
@@ -94,4 +118,4 @@ function tones(p, dt) {
   else if (w === 'stall') { wn.o.frequency.value = 330; wn.g.gain.value = pulse(3, 0.6) ? 0.025 : 0; }
   else wn.g.gain.value = 0;
 }
-export function airAudioOff() { if (!eng.jet) return; eng.jet.g.gain.value = 0; eng.ab.g.gain.value = 0; eng.seek.g.gain.value = 0; eng.warn.g.gain.value = 0; eng.air.g.gain.value = 0; }
+export function airAudioOff() { if (!eng.jet) return; eng.jet.g.gain.value = 0; eng.ab.g.gain.value = 0; eng.wind.g.gain.value = 0; eng.rumble.g.gain.value = 0; eng.seek.g.gain.value = 0; eng.warn.g.gain.value = 0; eng.air.g.gain.value = 0; }

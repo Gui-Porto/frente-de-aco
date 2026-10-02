@@ -3,6 +3,7 @@ import { planeDecals, camoTexture } from './paint.js';
 import { MISSILES } from '../data/vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hasModel, gltfPlane } from './modelLibrary.js';
+import { buildPlaneFx } from './planeFx.js';
 // =====================================================================
 // Modelo 3D procedural das aeronaves (só visual; física e caixas de
 // colisão vêm dos dados). Asas e empenagem são sólidos de perfil NACA
@@ -22,7 +23,8 @@ export function wingGeometry(o) {
     const s = j / N;
     const c = o.ellip ? Math.max(o.c0 * Math.sqrt(1 - Math.min(s, 0.985) ** 2), o.c1 || 0) : o.c0 + (o.c1 - o.c0) * s;
     const zq = o.zq0 - o.sweep * s, zle = zq + 0.25 * c, x = o.side * (o.x0 + s * o.half);
-    const t = (o.t0 + (o.t1 - o.t0) * s) * c, y = o.y0 + s * o.half * Math.tan(o.dih);
+    // quebra de diedro opcional (o.brk = { at: fração da envergadura, dih: rad }), ex.: ponta da asa do F-4
+    const t = (o.t0 + (o.t1 - o.t0) * s) * c, y = o.y0 + (o.brk && s > o.brk.at ? o.brk.at * o.half * Math.tan(o.dih) + (s - o.brk.at) * o.half * Math.tan(o.brk.dih) : s * o.half * Math.tan(o.dih));
     const ring = [];
     for (let k = 0; k < NP; k++) ring.push([XS[k], 1]);
     for (let k = NP - 2; k >= 1; k--) ring.push([XS[k], -1]);
@@ -60,7 +62,7 @@ const FUSE = {
 function fuselage(D) {
   const L = D.L, fr = D.fuseR, nr = D.noseR / fr, kind = D.jet ? 'intake' : D.cowl === 'radial' ? 'radial' : 'inline';
   const belly = D.key === 'p47' ? 1.18 : D.key === 'mig15' ? 1.06 : 1, tall = D.key === 'f86' ? 1.06 : 1;
-  const st = FUSE[kind].map(r => r.map((v, i) => (typeof v === 'string' ? nr * +v.slice(1) : v) * (i === 3 ? (r[0] < 0.3 ? belly : 1) : i === 2 ? tall : 1)));
+  const st = (D.fuse || FUSE[kind]).map(r => r.map((v, i) => (typeof v === 'string' ? nr * +v.slice(1) : v) * (i === 3 ? (r[0] < 0.3 ? belly : 1) : i === 2 ? tall : 1)));
   // Catmull-Rom entre estações (suaviza o perfil sem precisar de dezenas de pontos à mão)
   const cr = (a, b, c, d, t) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
   const SEG = 5, rings = [];
@@ -104,19 +106,33 @@ function bladeGeometry(len) {
 }
 // chapa metálica com painéis e rebites (jatos sem pintura)
 let metalTex = null;
+// chapa de alumínio: painéis em fiadas desencontradas (como chapas reais), cada painel com tom e
+// rugosidade levemente diferentes (o reflexo "quebra" painel a painel), juntas finas e rebites
 function metalTexture() {
   if (metalTex) return metalTex;
-  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
-  g.fillStyle = '#c4c7c8'; g.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 46; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '40,45,50'},${Math.random() * .08})`; g.fillRect(Math.floor(Math.random() * 8) * 64, Math.floor(Math.random() * 16) * 32, 64, 32); }
-  g.strokeStyle = 'rgba(60,64,68,.2)'; g.lineWidth = 1.2;
-  for (let x = 0; x <= 512; x += 64) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 512); g.stroke(); }
-  for (let y = 0; y <= 512; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke(); }
-  g.fillStyle = 'rgba(70,74,78,.25)'; for (let x = 0; x < 512; x += 64) for (let y = 4; y < 512; y += 8) g.fillRect(x + 3, y, 1.4, 1.4);
-  for (let i = 0; i < 4000; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * .05})`; g.fillRect(Math.random() * 512, Math.random() * 512, 2, 1); }
-  metalTex = new THREE.CanvasTexture(c); metalTex.colorSpace = THREE.SRGBColorSpace; metalTex.wrapS = metalTex.wrapT = THREE.RepeatWrapping; metalTex.anisotropy = 8;
+  const N = 1024, c = document.createElement('canvas'), r = document.createElement('canvas'); c.width = c.height = r.width = r.height = N;
+  const g = c.getContext('2d'), q = r.getContext('2d');
+  g.fillStyle = '#c3c6c8'; g.fillRect(0, 0, N, N); q.fillStyle = '#5a5a5a'; q.fillRect(0, 0, N, N);
+  const rows = 22, rh = N / rows;
+  for (let y = 0; y < rows; y++) {
+    let x = -Math.random() * 90;
+    while (x < N) {
+      const w = 70 + Math.random() * 110, t = (Math.random() - 0.5) * 6 | 0, b = Math.random() < 0.15 ? 3 : 0;
+      g.fillStyle = `rgb(${195 + t},${198 + t + b},${200 + t + b})`; g.fillRect(x, y * rh, w, rh);
+      const rr = 78 + Math.random() * 22 | 0; q.fillStyle = `rgb(${rr},${rr},${rr})`; q.fillRect(x, y * rh, w, rh);
+      g.fillStyle = 'rgba(55,60,66,.32)'; g.fillRect(x, y * rh, 1, rh);          // junta vertical
+      g.fillStyle = 'rgba(70,74,78,.22)'; for (let k = 6; k < rh - 3; k += 9) g.fillRect(x + 4, y * rh + k, 1.6, 1.6); // rebites
+      x += w;
+    }
+    g.fillStyle = 'rgba(55,60,66,.28)'; g.fillRect(0, y * rh, N, 1);              // junta horizontal
+  }
+  for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * .035})`; g.fillRect(Math.random() * N, Math.random() * N, 3, 1); }
+  metalTex = new THREE.CanvasTexture(c); metalTex.colorSpace = THREE.SRGBColorSpace;
+  metalRough = new THREE.CanvasTexture(r);
+  for (const t of [metalTex, metalRough]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
   return metalTex;
 }
+let metalRough = null;
 
 export function buildPlane(D) {
   // modelo glTF carregado para esta aeronave? (modelLibrary.js) — senão, procedural
@@ -129,7 +145,7 @@ export function buildPlane(D) {
   // jato sem pintura (metal) a menos que a ficha peça camuflagem (def.finish = 'camo')
   const metal = jet && D.finish !== 'camo';
   const paint = metal
-    ? new THREE.MeshStandardMaterial({ color: 0xffffff, map: metalTexture(), roughness: 0.32, metalness: 0.78 })
+    ? new THREE.MeshStandardMaterial({ color: 0xffffff, map: metalTexture(), roughnessMap: metalRough, roughness: 0.7, metalness: 0.82 })
     : new THREE.MeshStandardMaterial({ color: 0xffffff, map: camoTexture(D), roughness: 0.58, metalness: 0.18 });
   const under = metal ? paint : D.underColor ? new THREE.MeshStandardMaterial({ color: D.underColor, roughness: .6, metalness: .2 }) : new THREE.MeshStandardMaterial({ color: D.key === 'il2' ? 0x6f8aa0 : D.key === 'fw190' ? 0x9aa3a6 : D.key === 'spit9' ? 0x9ea19a : 0x8d8c80, roughness: .6, metalness: .2 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1b1b1a, roughness: .45, metalness: .5 });
@@ -138,6 +154,7 @@ export function buildPlane(D) {
   const black = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: .7 });
   const accent = new THREE.MeshStandardMaterial({ color: D.nation === 'URSS' ? 0xa8231b : D.nation === 'Alemanha' ? 0xc9b440 : D.nation === 'Reino Unido' ? 0xc9c2a8 : 0x23305a, roughness: .55, metalness: .2 });
   const pair = [paint, under];
+  const nozzles = [], stacks = [];
   const add = (g, m, p = root, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; p.add(o); return o; };
   // fuselagem, coberta inferior e nariz
   const fuseG = fuselage(D); add(fuseG, pair);
@@ -147,38 +164,50 @@ export function buildPlane(D) {
     else {
       // radome cinza-escuro e entradas laterais com placa separadora da camada-limite
       const at = fuseG.userData.at, nz = L * 0.455, an = at(0.44);
-      add(new THREE.ConeGeometry(an.hw * 0.92, L * 0.09, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x3b3f3c, roughness: .55 }), root, 0, an.yc, nz + L * 0.045);
+      add(new THREE.ConeGeometry(an.hw * 0.92, L * 0.14, 24).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x6a6e6a, roughness: .5 }), root, 0, an.yc, nz + L * 0.07);
+      // duto lateral: perfil trapezoidal (boca inclinada, afina até a raiz da asa) extrudado para fora
+      const zf = L * 0.25, zb = -L * 0.04, a = at(0.12), shp = new THREE.Shape();
+      shp.moveTo(-zf, 0.32); shp.lineTo(-zb, 0.12); shp.lineTo(-zb, -0.42); shp.lineTo(-(zf - L * 0.045), -0.78); shp.closePath();
+      const duct = new THREE.ExtrudeGeometry(shp, { depth: 0.5, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 2 }).rotateY(Math.PI / 2);
+      const slant = Math.atan2(L * 0.045, 1.1);
       for (const s of [1, -1]) {
-        const a = at(0.2), ix = s * (a.hw + 0.28);
-        add(new THREE.BoxGeometry(0.55, a.h * 1.5, L * 0.16), paint, root, ix, a.yc - 0.05, L * 0.16);
-        add(new THREE.PlaneGeometry(0.42, a.h * 1.35), black, root, ix, a.yc - 0.05, L * 0.16 + L * 0.081);
-        add(new THREE.BoxGeometry(0.04, a.h * 1.6, 0.9), paint, root, ix + s * 0.33, a.yc - 0.05, L * 0.235); // placa separadora
+        const x0 = s > 0 ? a.hw - 0.2 : -(a.hw - 0.2) - 0.5;
+        add(duct, paint, root, x0, a.yc, 0);
+        const mouth = add(new THREE.PlaneGeometry(0.42, 0.98), black, root, s * (a.hw + 0.05), a.yc - 0.23, zf - L * 0.022 + 0.07);
+        mouth.rotation.x = -slant;
+        add(new THREE.BoxGeometry(0.03, 1.15, 0.7), paint, root, s * (a.hw - 0.28), a.yc - 0.22, zf - 0.25); // placa separadora
       }
     }
     // tubeiras: uma central ou várias lado a lado (def.nozzles)
-    const nn = D.nozzles || 1, nr = fr * (nn > 1 ? 0.36 : 0.5);
+    const nn = D.nozzles || 1, tailR = fuseG.userData.at(-0.52).hw, nr = nn > 1 ? fr * 0.36 : tailR * 0.9;
     for (let i = 0; i < nn; i++) {
       const nx = nn > 1 ? (i - (nn - 1) / 2) * nr * 2.1 : 0;
       add(new THREE.CylinderGeometry(nr, nr * 0.9, 0.7, 18, 1, true).rotateX(Math.PI / 2), dark, root, nx, nn > 1 ? -fr * 0.15 : 0, -L * 0.53);
+      nozzles.push({ x: nx, y: nn > 1 ? -fr * 0.15 : 0, z: -L * 0.53 - 0.3, r: nr * 0.85 });
       add(new THREE.CircleGeometry(nr * 0.9, 18).rotateY(Math.PI), black, root, nx, nn > 1 ? -fr * 0.15 : 0, -L * 0.52);
     }
-    if (D.gunPod) add(new THREE.CylinderGeometry(0.14, 0.18, L * 0.18, 10).rotateX(Math.PI / 2), paint, root, 0, -fr * 0.95, L * 0.36); // carenagem do canhão sob o nariz
+    if (D.gunPod) { const g0 = add(new THREE.CylinderGeometry(0.16, 0.2, L * 0.16, 12).rotateX(Math.PI / 2), paint, root, 0, -fr * 0.72, L * 0.31); g0.scale.x = 1.3; add(new THREE.CylinderGeometry(0.035, 0.035, 0.3, 6).rotateX(Math.PI / 2), black, root, 0, -fr * 0.72, L * 0.39); } // carenagem do Vulcan sob o queixo
   } else {
     if (D.cowl === 'radial') { add(new THREE.TorusGeometry(D.noseR * 0.93, 0.06, 8, 28), dark, root, 0, 0, L * 0.43); add(new THREE.CylinderGeometry(D.noseR * 0.92, D.noseR * 0.98, 0.25, 28, 1, true).rotateX(Math.PI / 2), dark, root, 0, 0, L * 0.22); }
-    else for (const s of [1, -1]) for (let i = 0; i < 6; i++) add(new THREE.BoxGeometry(0.12, 0.09, 0.2), dark, root, s * fr * 0.88, fr * 0.42, L * 0.36 - i * 0.24); // escapamentos
+    else for (const s of [1, -1]) for (let i = 0; i < 6; i++) { add(new THREE.BoxGeometry(0.12, 0.09, 0.2), dark, root, s * fr * 0.88, fr * 0.42, L * 0.36 - i * 0.24); stacks.push({ x: s * fr * 0.98, y: fr * 0.42, z: L * 0.36 - i * 0.24 - 0.08, dir: -s * 0.75 }); } // escapamentos
+    if (D.cowl === 'radial') for (const s of [1, -1]) for (let i = 0; i < 4; i++) stacks.push({ x: s * fr * 0.9, y: -fr * 0.35 + i * 0.16, z: L * 0.2, dir: -s * 0.3 });
     add(new THREE.CylinderGeometry(fr * 0.25, fr * 0.32, 0.6, 12).rotateX(Math.PI / 2), dark, root, 0, -fr * 0.95, D.key === 'p47' ? L * 0.2 : -L * 0.08); // radiador/tomada de ar ventral
   }
   // cabine: bolha de vidro com montantes
   const cz = jet ? L * 0.24 : D.key === 'il2' ? L * 0.08 : -L * 0.02;
-  const can = add(new THREE.SphereGeometry(0.55, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), glass, root, 0, fr * 0.92, cz);
-  can.scale.set(0.95, jet ? 0.95 : 0.72, jet ? 2.4 : 2.1);
-  for (const dz of jet ? [0.5] : [0.55, -0.15]) { const r = add(new THREE.TorusGeometry(0.52, 0.035, 6, 16, Math.PI), dark, root, 0, fr * 0.92, cz + dz); r.scale.set(0.95, jet ? 0.95 : 0.72, 1); }
-  add(new THREE.BoxGeometry(0.04, 0.05, 1.9), dark, root, 0, fr * 0.92 + 0.52 * (jet ? 1 : 0.72), cz);
+  // capota em gota (perfil próprio por aeronave em def.canopy), assentada no dorso da fuselagem
+  const C = Object.assign({ z: cz / L, len: jet ? 2.6 : 2.3, w: 0.5, h: jet ? 0.55 : 0.42, frames: jet ? [0.24] : [0.24, 0.62] }, D.canopy);
+  const cAt = fuseG.userData.at(C.z), cy = cAt.top - 0.06, czc = C.z * L;
+  add(canopyGeometry(C.len, C.w, C.h), glass, root, 0, cy, czc);
+  for (const t of C.frames) add(canopyFrame(C.len, C.w, C.h, t), dark, root, 0, cy, czc);
+  add(new THREE.BoxGeometry(C.w * 1.9, 0.035, 0.04), dark, root, 0, cy + 0.01, czc - C.len / 2 + 0.02); // trilho traseiro
   if (jet) {
     const at = fuseG.userData.at, olive = new THREE.MeshStandardMaterial({ color: 0x3d4130, roughness: .8 });
-    // carenagem dorsal: da traseira da capota até a deriva
-    const z0 = cz - 1.25, z1 = -L * 0.36, zm = (z0 + z1) / 2, spine = add(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), paint, root, 0, at(zm / L).top - 0.08, zm);
-    spine.scale.set(0.2, 0.26, (z0 - z1) / 2);
+    // carenagem dorsal só para quem não tem perfil próprio (o perfil def.fuse já desenha o dorso)
+    if (!D.fuse) {
+      const z0 = cz - 1.25, z1 = -L * 0.36, zm = (z0 + z1) / 2, spine = add(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), paint, root, 0, at(zm / L).top - 0.08, zm);
+      spine.scale.set(0.2, 0.26, (z0 - z1) / 2);
+    }
     if (D.key === 'f86') {
       add(new THREE.BoxGeometry(0.62, 0.02, 1.5), olive, root, 0, at((cz + 1.6) / L).top + 0.005, cz + 1.6); // painel antirreflexo
       for (const sd of [1, -1]) for (let i = 0; i < 3; i++) { const z = L * 0.34, a = at(z / L); add(new THREE.BoxGeometry(0.05, 0.07, 0.28), dark, root, sd * (a.hw * 0.97), a.yc + 0.22 - i * 0.16, z); } // 3 M3 de cada lado
@@ -191,11 +220,11 @@ export function buildPlane(D) {
   const ellip = D.key === 'spit9' || D.key === 'p47';
   const dih = (D.dih ?? (jet ? (D.key === 'mig15' ? -2 : 3) : 5.5)) * deg;
   const half = D.span / 2 - fr * 0.55;
-  const wingCfg = side => ({ side, x0: fr * 0.55, half, c0: D.chord, c1: ellip ? D.tipChord * 0.35 : D.tipChord, zq0: D.wingZ + D.chord * 0.1, sweep: half * Math.tan((D.sweep || 0) * deg) + (ellip ? 0 : (D.chord - D.tipChord) * 0.1), t0: jet ? 0.1 : 0.15, t1: jet ? 0.08 : 0.09, dih, y0: -fr * 0.25, ellip });
+  const wingCfg = side => ({ side, x0: fr * 0.55, half, c0: D.chord, c1: ellip ? D.tipChord * 0.35 : D.tipChord, zq0: D.wingZ + D.chord * 0.1, sweep: half * Math.tan((D.sweep || 0) * deg) + (ellip ? 0 : (D.chord - D.tipChord) * 0.1), t0: jet ? 0.1 : 0.15, t1: jet ? 0.08 : 0.09, dih, y0: -fr * 0.25, ellip, brk: D.wingBreak ? { at: D.wingBreak[0], dih: D.wingBreak[1] * deg } : null });
   const wing = side => {
     const grp = new THREE.Group(); root.add(grp);
     add(wingGeometry(wingCfg(side)), pair, grp);
-    const tipY = -fr * 0.25 + half * Math.tan(dih);
+    const tipY = -fr * 0.25 + (D.wingBreak ? half * (D.wingBreak[0] * Math.tan(dih) + (1 - D.wingBreak[0]) * Math.tan(D.wingBreak[1] * deg)) : half * Math.tan(dih));
     if (D.stripes) for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.3, 0.02, D.chord * 0.86), i % 2 ? black : white, grp, side * (fr + 1.0 + i * 0.3), -fr * 0.25 - 0.17 + (1 + i * 0.3) * Math.tan(dih), D.wingZ - D.chord * 0.2);
     if (D.key === 'mig15') for (const k of [0.38, 0.7]) { const sx = fr * 0.55 + half * k, sw = half * k * Math.tan(D.sweep * deg); add(new THREE.BoxGeometry(0.03, 0.18, D.chord * 0.85), paint, grp, side * sx, -fr * 0.25 + half * k * Math.tan(dih) + 0.12, D.wingZ - sw - D.chord * 0.2); }
     if (D.key === 'spit9') add(new THREE.BoxGeometry(0.45, 0.22, 1.1), paint, grp, side * (fr + 1.0), -fr * 0.25 - 0.22, D.wingZ - 0.4); // radiadores sob a asa
@@ -252,7 +281,7 @@ export function buildPlane(D) {
       else {
         const k = Math.floor(wk++ / 2), sx = D.span * (0.24 + 0.1 * k);
         x = side * sx; y = -fr * 0.25 + (sx - fr * 0.55) * Math.tan(dih) - 0.32; z = D.wingZ - (D.sweep ? sx * Math.tan(D.sweep * deg) * 0.8 : 0) + 0.4;
-        add(new THREE.BoxGeometry(0.06, 0.18, M.len * 0.6), dark, root, x, y + 0.14, z); // pilone
+        add(new THREE.BoxGeometry(0.05, 0.14, M.len * 0.5), paint, root, x, y + 0.13, z); // pilone
       }
       const m = add(missileGeometry(M), [white, M.seeker === 'sarh' ? white : glass], root, x, y, z);
       missileMeshes.push(m);
@@ -262,11 +291,13 @@ export function buildPlane(D) {
   add(new THREE.CylinderGeometry(0.015, 0.015, 0.8, 4).rotateX(Math.PI / 2), dark, jet ? root : wingL, jet ? fr * 0.7 : fr * 0.55 + half * 0.82, jet ? 0.3 : -fr * 0.25 + half * 0.82 * Math.tan(dih) - 0.1, jet ? L * 0.47 : D.wingZ + D.chord * 0.25);
   const ws = 0.72, wz = D.wingZ + D.chord * 0.1 - half * ws * Math.tan((D.sweep || 0) * deg);
   planeDecals(D, root, wingL, wingR, { y: -fr * 0.25 + half * ws * Math.tan(dih) + D.chord * 0.075, x: fr * 0.55 + half * ws, z: wz - D.chord * 0.1, size: Math.min(D.chord * 0.7, 1.6), fuseAt: fuseG.userData.at });
+  // efeitos presos ao avião (chama da PC, fogo do WEP, cone de vapor) — fora da fusão de malhas
+  const fx = buildPlaneFx(D, root, nozzles, stacks);
   // une as peças estáticas por material (menos draw calls); superfícies que se soltam ou somem ficam à parte
   const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes]);
   for (const grp of [root, wingL, wingR, tail]) mergeStatic(grp, keep);
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
-  return { root, wingL, wingR, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under] };
+  return { root, wingL, wingR, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under], fx };
 }
 // Funde filhos diretos de `grp` que são malhas simples (sem filhos, material único, sem espelhamento)
 // em uma malha por material. Reduz ~70 malhas de um jato para ~20 (e o mesmo na passada de sombra).
@@ -274,7 +305,7 @@ const _MERGE_ATTR = ['position', 'normal', 'uv'];
 function mergeStatic(grp, keep) {
   const buckets = new Map();
   for (const o of grp.children) {
-    if (!o.isMesh || keep.has(o) || o.children.length || Array.isArray(o.material) || !o.geometry.index) continue;
+    if (!o.isMesh || keep.has(o) || o.userData.fx || o.children.length || Array.isArray(o.material) || !o.geometry.index) continue;
     o.updateMatrix(); if (o.matrix.determinant() < 0) continue;
     const g = o.geometry.clone().applyMatrix4(o.matrix);
     if (!_MERGE_ATTR.every(k => g.attributes[k])) continue;
@@ -305,4 +336,27 @@ export function missileGeometry(M) {
   const nose = new THREE.ConeGeometry(r, r * 4, 12).rotateX(Math.PI / 2).translate(0, 0, M.len / 2 + r * 2).toNonIndexed(); nose.deleteAttribute('uv');
   const g = mergeGeometries([body, nose], true);
   _mslGeo.set(M, g); return g;
+}
+// ---------- capota ----------
+// perfil ao longo do comprimento (t: 0 = para-brisa, 1 = traseira): sobe rápido no para-brisa,
+// platô sobre o piloto e afina em gota até a traseira
+const canProf = t => (t < 0.28 ? Math.sin(t / 0.28 * Math.PI / 2) ** 0.8 : t < 0.55 ? 1 : Math.cos((t - 0.55) / 0.45 * Math.PI / 2) ** 0.7);
+function canopyPoint(len, w, h, t, a, out) {
+  const k = canProf(t), wk = Math.max(0.05, 0.55 + 0.45 * Math.min(1, k * 1.4)), c = Math.cos(a), s = Math.sin(a), ex = 0.75;
+  out[0] = Math.sign(c) * Math.abs(c) ** ex * w * wk; out[1] = Math.abs(s) ** ex * h * k; out[2] = len / 2 - t * len;
+  return out;
+}
+function canopyGeometry(len, w, h) {
+  const NL = 18, NA = 14, pos = [], idx = [], P = [0, 0, 0];
+  for (let i = 0; i <= NL; i++) for (let j = 0; j <= NA; j++) { canopyPoint(len, w, h, i / NL, j / NA * Math.PI, P); pos.push(...P); }
+  for (let i = 0; i < NL; i++) for (let j = 0; j < NA; j++) { const a = i * (NA + 1) + j, b = a + 1, c = a + NA + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.computeVertexNormals();
+  return g;
+}
+// montante: tubo fino seguindo a seção da capota na fração t do comprimento
+function canopyFrame(len, w, h, t) {
+  const pts = []; const P = [0, 0, 0];
+  for (let j = 0; j <= 12; j++) { canopyPoint(len, w * 1.006, h * 1.006, t, j / 12 * Math.PI, P); pts.push(new THREE.Vector3(...P)); }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, 0.02, 5, false);
 }

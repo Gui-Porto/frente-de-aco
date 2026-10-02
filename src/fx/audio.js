@@ -38,6 +38,21 @@ export function audioInit() {
     const af = AC.createBiquadFilter(); af.type = 'lowpass'; af.frequency.value = 220; af.Q.value = 0.9;
     const ag = AC.createGain(); ag.gain.value = 0; an.connect(af); af.connect(ag); ag.connect(engBus); an.start();
     eng.ab = { g: ag, f: af };
+    const loopNoise = rate => { const n = AC.createBufferSource(); n.buffer = noiseBuf; n.loop = true; n.playbackRate.value = rate; n.start(); return n; };
+    // vento na fuselagem: cresce com a pressão dinâmica
+    const wf = AC.createBiquadFilter(); wf.type = 'bandpass'; wf.frequency.value = 700; wf.Q.value = 0.5;
+    const wg = AC.createGain(); wg.gain.value = 0; loopNoise(1).connect(wf); wf.connect(wg); wg.connect(engBus);
+    eng.wind = { g: wg, f: wf };
+    // ronco grave da turbina (o "peso" do motor que o apito sozinho não tem)
+    const rf = AC.createBiquadFilter(); rf.type = 'lowpass'; rf.frequency.value = 110; rf.Q.value = 1.2;
+    const rg = AC.createGain(); rg.gain.value = 0; loopNoise(0.5).connect(rf); rf.connect(rg); rg.connect(engBus);
+    eng.rumble = { g: rg, f: rf };
+    // pistão: batida dos cilindros (modulação de amplitude) e distorção do escapamento
+    const am = AC.createGain(); am.gain.value = 0.75; const lfo = AC.createOscillator(); lfo.frequency.value = 12; const lfoG = AC.createGain(); lfoG.gain.value = 0.25;
+    lfo.connect(lfoG); lfoG.connect(am.gain); lfo.start();
+    const sh = AC.createWaveShaper(); const curve = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(x * 2.6); } sh.curve = curve;
+    eng.air.g.disconnect(); eng.air.g.connect(am); am.connect(sh); sh.connect(engBus);
+    eng.air.lfo = lfo;
     // tons do cockpit: buscador do míssil (rosnado/tom) e alarmes
     const tone = (type) => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; g.gain.value = 0; o.connect(g); g.connect(sfx); o.start(); return { o, g }; };
     eng.seek = tone('triangle'); eng.warn = tone('square');
@@ -52,6 +67,16 @@ export function cockpitTone(f0, f1, dur, vol = 0.05, type = 'sine', delay = 0) {
   gg.gain.setValueAtTime(0.0001, t); gg.gain.exponentialRampToValueAtTime(vol, t + 0.008); gg.gain.setValueAtTime(vol, t + Math.max(0.01, dur - 0.02)); gg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(gg); gg.connect(sfx); o.start(t); o.stop(t + dur + 0.02);
 }
+// "vush" de avião passando perto (ruído que varre do agudo ao grave)
+export function sndWhoosh(pos, k = 1) {
+  const a = at(pos, 1.2 * k); if (!a) return;
+  const s = AC.createBufferSource(); s.buffer = noiseBuf; const f = AC.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4;
+  f.frequency.setValueAtTime(2600, a.t); f.frequency.exponentialRampToValueAtTime(380, a.t + 0.9);
+  const g = AC.createGain(); g.gain.setValueAtTime(0.0001, a.t); g.gain.exponentialRampToValueAtTime(Math.max(Math.min(a.vol, 0.9), 0.0002), a.t + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, a.t + 1.1);
+  s.connect(f); f.connect(g); g.connect(sfx); s.start(a.t, rand(0, 1)); s.stop(a.t + 1.2);
+}
+// estrondo sônico: dois estalos secos (onda N) com grave
+export function sndSonicBoom(pos) { const a = at(pos, 2.5); if (!a) return; noiseBurst(a.t, Math.min(a.vol, 1.3), 900, 0.35, 1); noiseBurst(a.t + 0.12, Math.min(a.vol, 1.1), 900, 0.4, 1); thump(a.t, Math.min(a.vol, 1.2), 45, 0.8); }
 export function cockpitThump(vol = 0.5, f0 = 70, dur = 0.35) { if (AC) thump(AC.currentTime, vol, f0, dur); }
 export function audioPause(p) { if (AC) p ? AC.suspend() : AC.resume(); }
 function at(pos, base) { if (!AC) return null; const d = camera.position.distanceTo(pos); return { t: AC.currentTime + d / 343, vol: base / (1 + d / 40), d }; }
