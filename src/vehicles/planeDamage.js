@@ -1,7 +1,7 @@
 import { S } from '../core/state.js';
 import { clamp } from '../core/util.js';
 import { segBox } from '../combat/ballistics.js';
-import { GUNS } from '../data/vehicles.js';
+import { GUNS, ROUNDS } from '../data/vehicles.js';
 import { wingCfg, tailCfg, finCfg, station, surfBox, SURF, chordAt, tipBreak } from './planeGeom.js';
 import { fxExplosion } from '../fx/particles.js';
 
@@ -110,6 +110,7 @@ export const modFrac = m => (m.kind === 'engine' ? 1 : clamp(m.hp / m.max, 0, 1)
 export function hitPlaneModules(pl, lp, ld, am, dmg, pen, by, shell) {
   pl.hitLx = lp[0]; // onde (na envergadura) acertou: decide se a ponta da asa se solta
   pl.damage(shell, dmg * 0.55, by, false); // furos na estrutura
+  recordHit(pl, 'skin_' + shell, SKIN[shell], 'skin', dmg * 0.55, by, am);
   // lascas de chapa: granada explosiva arranca mais; bala comum de vez em quando
   if (pl.hitFx) pl.hitFx(lp, (am.tnt || am.he || 0) > 0, ld); // lascas de chapa e o som do acerto (plane.js)
   if (pl.gone) return;
@@ -138,17 +139,57 @@ export function hitPlaneModules(pl, lp, ld, am, dmg, pen, by, shell) {
   }
 }
 // Explosão próxima (míssil, bomba, granada antiaérea) em coordenadas locais
-export function blastPlaneModules(pl, lx, ly, lz, R, dmg, by) {
+export function blastPlaneModules(pl, lx, ly, lz, R, dmg, by, am = { name: 'Explosão', tnt: 1 }) {
   if (pl.hitFx && dmg > 1) pl.hitFx([lx, ly, lz], true, null, R);
-  for (const m of Object.values(pl.mods)) { const dd = boxDist(m, lx, ly, lz); if (dd < R) applyMod(pl, m, dmg * (1 - dd / R), by, { tnt: 1 }); }
+  for (const m of Object.values(pl.mods)) { const dd = boxDist(m, lx, ly, lz); if (dd < R) applyMod(pl, m, dmg * (1 - dd / R), by, am); }
 }
 const inside = (m, p) => p[0] > m.mn[0] && p[0] < m.mx[0] && p[1] > m.mn[1] && p[1] < m.mx[1] && p[2] > m.mn[2] && p[2] < m.mx[2];
 function boxDist(m, x, y, z) { const dx = Math.max(m.mn[0] - x, 0, x - m.mx[0]), dy = Math.max(m.mn[1] - y, 0, y - m.mx[1]), dz = Math.max(m.mn[2] - z, 0, z - m.mx[2]); return Math.hypot(dx, dy, dz); }
 
+const SKIN = { wingL: 'Asa esq. (revestimento)', wingR: 'Asa dir. (revestimento)', tail: 'Empenagem (revestimento)', fuse: 'Fuselagem (revestimento)' };
+// estado atual de um componente em texto curto (cartões e raio-X)
+export function partState(pl, h) {
+  if (h.kind === 'skin') { const k = h.name.slice(5), f = pl.hp && pl.maxHp ? pl.hp[k] / pl.maxHp[k] : 1; return `${h.n} furo${h.n > 1 ? 's' : ''} · ${Math.max(0, Math.round(f * 100))}%`; }
+  const m = pl.mods[h.name]; if (!m) return '';
+  if (m.lost) return m.kind === 'spar' ? 'perdida' : 'perdido';
+  if (m.kind === 'spar' && m.dead) return 'cortada';
+  if (m.kind === 'boom' && m.dead) return 'cortado';
+  if (m.kind === 'fuel') return m.leak > 0 ? (m.left > 0 ? 'vazando' : 'vazio') : 'perfurado';
+  if (m.kind === 'engine') { const e = pl.engs && pl.engs[m.i]; return e && !e.on ? 'parado' : e ? `${Math.round(100 * (0.35 + 0.65 * Math.max(0, e.hp) / pl.maxHp.engine))}%` : 'atingido'; }
+  if (m.kind === 'pilot') return pl.pilot === false ? 'morto' : pl.wounded ? 'ferido' : 'atingido';
+  if (m.ripped) return 'arrancado';
+  if (m.dead) return m.kind === 'ctrl' || m.kind === 'flap' ? 'travado' : 'destruído';
+  return `${Math.round(clamp(m.hp / m.max, 0, 1) * 100)}%`;
+}
+// resumo dos acertos (de `by`, ou de todos): componentes mais castigados primeiro + munições usadas
+// (pedaços do mesmo componente — os 3 de cada longarina — viram uma linha, com o pior estado)
+const BAD = ['perdida', 'perdido', 'cortada', 'cortado', 'arrancado', 'destruído', 'parado', 'morto', 'vazio', 'travado'];
+const worse = (a, b) => { const ia = BAD.indexOf(a), ib = BAD.indexOf(b); if (ia >= 0 || ib >= 0) return ia < 0 ? b : ib < 0 ? a : ia <= ib ? a : b; const na = parseInt(a), nb = parseInt(b); return !isNaN(na) && !isNaN(nb) && nb < na ? b : a; };
+export function hitSummary(pl, by, max = 7) {
+  const G = new Map();
+  for (const h of Object.values(pl.hits || {})) {
+    if (by && !h.by.has(by)) continue;
+    const st = partState(pl, h), g = G.get(h.label);
+    if (!g) G.set(h.label, { label: h.label, state: st, n: h.n, dmg: h.dmg, w: new Set(h.w) });
+    else { g.n += h.n; g.dmg += h.dmg; g.state = worse(g.state, st); for (const x of h.w) g.w.add(x); }
+  }
+  const L = [...G.values()].sort((a, b) => b.dmg - a.dmg);
+  // munições agrupadas por arma: "23 mm NR-23 (AP-T, HEF-I)"
+  const W = new Map(); for (const g of L) for (const x of g.w) { const [gun, r] = x.split(' · '); if (!W.has(gun)) W.set(gun, new Set()); if (r) W.get(gun).add(r); }
+  return { parts: L.slice(0, max).map(g => ({ label: g.label, state: g.state, n: g.n })), more: Math.max(0, L.length - max), weapons: [...W].map(([gun, r]) => (r.size ? `${gun} (${[...r].join(', ')})` : gun)) };
+}
+// nome da munição para o registro/cartões: "12,7 mm M3 · API-T", "R-3S", "Explosão"
+export const ammoName = am => (!am ? 'Explosão' : am.round ? `${am.name} · ${ROUNDS[am.round].s}` : am.name || 'Explosão');
+// registro de acertos por componente (cartões de abate/morte e raio-X): quantos, quanto, quem e com o quê
+export function recordHit(pl, name, label, kind, dmg, by, am) {
+  const H = pl.hits || (pl.hits = {}), h = H[name] || (H[name] = { name, label, kind, n: 0, dmg: 0, by: new Set(), w: new Set(), at: 0 });
+  h.n++; h.dmg += dmg; h.at = S.now; if (by) h.by.add(by); h.w.add(ammoName(am));
+}
 export function applyMod(pl, m, dmg, by, am) {
   if (pl.gone || !isFinite(dmg) || dmg <= 0) return;
   if (m.lost) return; // peça que já caiu junto com a ponta da asa ou a asa
   m.hitT = S.now;
+  recordHit(pl, m.name, m.label, m.kind, dmg, by, am);
   // explosiva pega fogo mais fácil; incendiária (cinta: am.inc) muito mais — e só a explosiva arranca superfícies
   const hev = !!am && ((am.he || 0) > 0 || (am.tnt || 0) > 0), inc = (hev ? 2.2 : 1) + (am && am.inc ? am.inc * 6 : 0);
   const shooter = by && by.isPlayer;

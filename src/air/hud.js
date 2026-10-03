@@ -13,7 +13,8 @@ import { acam, CAM_MODES } from './camera.js';
 import { cam } from '../game/camera.js';
 import { cv, g, V, C, MONO, UI, glow, txt, otxt, gstroke, fmtD } from './hud/kit.js';
 import { themeOf } from './hud/themes.js';
-import { flightPanel } from './hud/flight.js';
+import { flightPanel, xrayPanel } from './hud/flight.js';
+import { killCard, deathCard } from './hud/cards.js';
 import { leftPanels, tacMap } from './hud/scopes.js';
 import { warnings } from './hud/warnings.js';
 // =====================================================================
@@ -44,6 +45,7 @@ export function updateAirHUD(dt) {
   const v = live ? p : S.spectate;
   g.lineCap = 'round'; g.lineJoin = 'round';
   topBar(v);
+  if (p && !live) deathCard(themeOf(p.def)); // você caiu: quem, com o quê e o que levou
   if (!v) return;
   const T = themeOf(v.def);
   targets(v, live);
@@ -56,7 +58,9 @@ export function updateAirHUD(dt) {
     leftPanels(p, T);
     warnings(p);
     hitMessages();
+    killCard(T);
     baseHud(p);
+    if (isDown('a_xray')) xrayPanel(p, T);
   } else if (S.state === 'spectate' && v) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, V.W / 2, V.H - 40, 15, C.ally, 'center', UI);
   }

@@ -117,7 +117,7 @@ export class Missile {
       if (d > R) continue;
       const f = 1 - d / R, k = M.warhead * 14 * f * f;
       pl.damage(nearestPlanePart(pl, p), k, this.owner, true);
-      if (pl.mods && !pl.gone) { const l = p.clone().applyMatrix4(pl.inv); blastPlaneModules(pl, l.x, l.y, l.z, R * 0.7, k * 0.8, this.owner); }
+      if (pl.mods && !pl.gone) { const l = p.clone().applyMatrix4(pl.inv); blastPlaneModules(pl, l.x, l.y, l.z, R * 0.7, k * 0.8, this.owner, { name: M.name, tnt: M.warhead }); }
       for (let i = 0; i < 2; i++) if (Math.random() < f) pl.damage(['wingL', 'wingR', 'fuse', 'engine', 'tail', 'fuel'][Math.floor(Math.random() * 6)], k * 0.45, this.owner, true);
     }
   }

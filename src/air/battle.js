@@ -6,6 +6,7 @@ import { destroyVehicle } from '../combat/ballistics.js';
 import { fxBurn, fxExplosion, spawnP, TEX } from '../fx/particles.js';
 import { addFeed, showDmg, flashVign, shakeCam } from '../ui/hud.js';
 import { AIR, ENEMY_POOL, ALLY_POOL, ARENA } from './aircraft.js';
+import { hitSummary } from '../vehicles/planeDamage.js';
 import { MODES } from './missions.js';
 import { FighterBrain } from './ai.js';
 import { Seeker, LOCK } from './targeting.js';
@@ -19,6 +20,8 @@ import { acam, resetAirCam } from './camera.js';
 import { showResult, toast } from './screens.js';
 import { cam } from '../game/camera.js';
 const _tv = new V3();
+// causa do abate em texto (cartões e tela final)
+export const CAUSE_TXT = { tail: 'cauda arrancada', wing: 'asa arrancada', structure: 'estrutura destruída', fire: 'incêndio', pilot: 'piloto abatido', crash: 'queda', overg: 'asa quebrou por excesso de G', vne: 'velocidade máxima excedida', oob: 'fora da área', ammo: 'munição detonou' };
 // =====================================================================
 // BattleManager: estados da batalha, equipes, objetivo, estatísticas,
 // colisões entre aeronaves, armas do jogador e fim de partida.
@@ -55,7 +58,7 @@ export const B = {
   toast(t) { toast(t); },
   // acertos críticos do jogador ("Tanque perfurado", "Piloto ferido"…), mostrados perto do retículo
   critLog: [],
-  crit(t) { this.critLog.push({ t, at: S.now }); if (this.critLog.length > 4) this.critLog.shift(); this.flash('ACERTO CRÍTICO', 2); },
+  crit(t) { if (this.critLog.some(c => c.t === t && S.now - c.at < 2)) return; this.critLog.push({ t, at: S.now }); if (this.critLog.length > 4) this.critLog.shift(); this.flash('ACERTO CRÍTICO', 2); },
   // mensagem grande de acerto no centro (como "Hit / Critical hit / Shot down" do WT); só sobe de nível
   hitMsg: null, hitT: -9, hitBig: false, hurtT: -9, hurtK: 0, hurtFrom: new V3(),
   flash(t, lvl) { const m = this.hitMsg; if (m && S.now - m.at < 0.9 && m.lvl > lvl) return; this.hitMsg = { t, lvl, at: S.now }; },
@@ -71,7 +74,7 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
-    this.weapon = 1; this.marked = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
+    this.weapon = 1; this.marked = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.killCard = this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
@@ -96,7 +99,9 @@ export const B = {
       pl.who.assists = (pl.who.assists || 0) + 1; pl.who.score += 40;
       if (pl === this.player) { this.stats.assists++; showDmg('Assistência · +40', true); }
     }
-    if (k === this.player) { this.stats.kills++; showDmg(`${v.def.short || v.def.name} derrubado · +100`, true); this.flash('ABATIDO', 3); }
+    if (k === this.player) { this.stats.kills++; this.flash('ABATIDO', 3); this.killCard = { at: S.now, v, cause, sum: hitSummary(v, k) }; }
+    // você caiu: quem, com o quê e o que você levou (fica na tela até a próxima vida/fim)
+    if (v === this.player) this.deathCard = { at: S.now, k, cause, sum: hitSummary(v, null), kw: k ? hitSummary(v, k).weapons : [] };
     addFeed(k, v, cause);
     // explosão no ar quando a estrutura cede (o resto cai em chamas até o solo)
     if (cause === 'structure' || cause === 'wing' || cause === 'tail' || cause === 'fire') {
@@ -142,7 +147,7 @@ export const B = {
     if (p && !p.alive && this.downT > 0 && (this.downT -= dt) <= 0) {
       const ally = planes.find(q => q.alive && q.team === 1);
       if (ally && this.mode.allies) { S.state = 'spectate'; S.spectate = ally; toast('Você foi abatido · assistindo à esquadrilha (T troca, Esc sai)'); }
-      else return this.finish({ win: false, why: 'Você foi abatido.' });
+      else { const d = this.deathCard, k = d && d.k; return this.finish({ win: false, why: k ? `Você foi abatido por ${k.who ? k.who.name : 'um inimigo'} (${k.def.short}) · ${CAUSE_TXT[d.cause] || 'derrubado'}.` : 'Você foi abatido.' }); }
     }
     if (S.state === 'spectate') {
       if (!S.spectate || !S.spectate.alive) S.spectate = planes.find(q => q.alive && q.team === 1) || S.spectate;

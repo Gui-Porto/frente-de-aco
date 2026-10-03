@@ -43,6 +43,7 @@ export const ACTIONS = [
   ['a_ext', 'Avião', 'Extintor de incêndio', ['KeyK']],
   ['a_cam', 'Avião', 'Trocar câmera (cockpit / externa)', ['KeyV']],
   ['a_target', 'Avião', 'Marcar alvo na mira', ['Mouse1', 'KeyT']],
+  ['a_xray', 'Avião', 'Raio-X da aeronave (segurar)', ['KeyJ']],
   ['freelook', 'Geral', 'Olhar livre (segurar)', ['KeyC']],
   ['score', 'Geral', 'Placar (segurar)', ['Tab']],
   ['map', 'Geral', 'Mapa ampliado (segurar)', ['KeyM']],

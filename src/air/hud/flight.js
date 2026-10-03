@@ -3,7 +3,7 @@ import { clamp } from '../../core/util.js';
 import { H } from '../../world/terrain.js';
 import { settings, keyName } from '../../core/settings.js';
 import { HEAT_LIMITS } from '../../vehicles/engineHeat.js';
-import { modFrac, fuelLeak, sparFrac } from '../../vehicles/planeDamage.js';
+import { modFrac, fuelLeak, sparFrac, partState } from '../../vehicles/planeDamage.js';
 import { wingCfg, tailCfg, finCfg, station, finStation, tipBreak, SURF } from '../../vehicles/planeGeom.js';
 import { RADAR_MODE } from '../battle.js';
 import { g, V, C, MONO, UI, ptxt, plate, dec } from './kit.js';
@@ -144,6 +144,51 @@ function fuel(p, x, y, w) {
   num(`≈ ${mins > 99 ? '99+' : Math.floor(mins)} min`, x + w, y + 56, 11, T.dim);
 }
 
+// ---------- raio-X da aeronave (segurar a tecla): silhueta grande + cada componente e seu estado ----------
+const XG = [
+  ['ESTRUTURA', ['skin', 'spar', 'boom']], ['MOTOR', ['engine', 'oil', 'cool', 'turbo']], ['COMBUSTÍVEL', ['fuel']],
+  ['COMANDOS', ['ctrl', 'flap', 'act']], ['ARMAS E SISTEMAS', ['gun', 'ammo', 'radar', 'pilot']],
+];
+export function xrayPanel(p, theme) {
+  T = theme;
+  const w = 700, h = 470, x0 = 16, y0 = 70;
+  g.save(); g.translate(x0, y0);
+  plate(0, 0, w, h, T);
+  ptxt(`RAIO-X · ${p.def.short}`, 22, 26, 16, T.fg, 'left', UI, 700);
+  ptxt(`solte ${kb('a_xray')} para fechar`, w - 16, 26, 11, T.dim, 'right', UI, 600);
+  silhouette(p, 10, 44, 230, 410);
+  // linhas: [rótulo, estado]; estruturas agregadas (4 longarinas, 4 revestimentos), o resto componente a componente
+  const M = p.mods, lines = [];
+  for (const [title, kinds] of XG) {
+    const L = [];
+    for (const k of kinds) {
+      if (k === 'skin') for (const [n, lab] of [['wingL', 'Asa esq.'], ['wingR', 'Asa dir.'], ['fuse', 'Fuselagem'], ['tail', 'Empenagem']]) {
+        const lost = n === 'tail' ? !p.tailOn : n.startsWith('wing') ? !p.wingOn[n.slice(4)] : false;
+        L.push([lab + ' (revestimento)', lost ? 'perdida' : `${Math.round(clamp(p.hp[n] / p.maxHp[n], 0, 1) * 100)}%`]);
+      } else if (k === 'spar') for (const seg of ['L0', 'L1', 'R0', 'R1']) {
+        const lost = !p.wingOn[seg[0]] || (seg[1] === '1' && !p.tipOn[seg[0]]), f = sparFrac(p, seg);
+        L.push([`Longarina ${seg[0] === 'L' ? 'esq.' : 'dir.'} (${seg[1] === '0' ? 'raiz' : 'externa'})`, lost ? 'perdida' : f <= 0 ? 'cortada' : `${Math.round(f * 100)}%`]);
+      } else for (const m of Object.values(M)) if (m.kind === k) L.push([m.label, partState(p, { name: m.name, kind: m.kind })]);
+      if (k === 'oil') L.push(['Óleo', `${Math.round(p.oilQ * 100)}% · ${Math.round(p.heat.oil)} °C${p.oil > 0 ? ' · vazando' : ''}`]);
+      if (k === 'cool' && p.cooling === 'liquid') L.push(['Água', `${Math.round(p.waterQ * 100)}% · ${Math.round(p.heat.water)} °C${p.water > 0 ? ' · vazando' : ''}`]);
+    }
+    // tanques: quanto resta em cada um junto do estado
+    if (kinds[0] === 'fuel') for (const r of L) { const m = Object.values(M).find(q => q.label === r[0]); if (m && m.cap) r[1] = `${Math.round(m.left)} kg · ${r[1]}`; }
+    lines.push([title, L]);
+  }
+  // duas colunas de grupos
+  let col = 0, x = 256, y = 56; const cw = 205, maxY = h - 16;
+  for (const [title, L] of lines) {
+    if (y + 20 + L.length * 15 > maxY && col === 0) { col = 1; x = 256 + cw + 16; y = 56; }
+    lbl(title, x, y); y += 16;
+    for (const [a, b] of L) {
+      const bad = /perdid|cortad|destru|arrancad|parad|mort|vazio|travad/.test(b), warn = /vazando|ferido/.test(b) || (/^\d+%$/.test(b) && parseInt(b) < 70);
+      ptxt(a, x, y, 11.5, T.fg, 'left', UI, 500); ptxt(b, x + cw, y, 10.5, bad ? C.enemy : warn ? C.amber : T.dim, 'right', MONO, 500); y += 15;
+    }
+    y += 8;
+  }
+  g.restore();
+}
 // registro de avarias como no WT: um aviso por problema que EXISTE agora (some quando deixa de existir)
 const UP = t => t.toUpperCase(), SD = { L: 'ESQ.', R: 'DIR.' };
 export function damageList(p) {

@@ -4,9 +4,8 @@ Lista viva dos pedidos, na ordem em que serão feitos. Cada item vira uma branch
 
 ## Em andamento / próximos
 
-1. **Dano detalhado na interface**: silhueta/raio-X com cada componente e estado; cartão pós-abate dizendo o que acertou o quê.
-2. **Mísseis detalhados**: modelo 3D melhor (cabeça de busca, aletas, canards, asas do Sparrow), ficha completa no hangar, motor/fumaça mais fiéis.
-3. **Modelos dos jatos mais detalhados e arredondados** (manter F-86F, MiG-15bis, MiG-21MF, F-4E): antenas, luzes, assento ejetável, cabine, bocais e entradas de ar fiéis, tanques externos.
+1. **Mísseis detalhados**: modelo 3D melhor (cabeça de busca, aletas, canards, asas do Sparrow), ficha completa no hangar, motor/fumaça mais fiéis.
+2. **Modelos dos jatos mais detalhados e arredondados** (manter F-86F, MiG-15bis, MiG-21MF, F-4E): antenas, luzes, assento ejetável, cabine, bocais e entradas de ar fiéis, tanques externos.
 
 ## Pendências menores
 
