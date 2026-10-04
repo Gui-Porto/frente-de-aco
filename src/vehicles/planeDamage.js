@@ -2,7 +2,7 @@ import { S } from '../core/state.js';
 import { clamp } from '../core/util.js';
 import { segBox } from '../combat/ballistics.js';
 import { GUNS, ROUNDS } from '../data/vehicles.js';
-import { wingCfg, tailCfg, finCfg, station, surfBox, SURF, chordAt, tipBreak } from './planeGeom.js';
+import { wingCfg, tailCfg, finCfg, station, surfBox, SURF, chordAt, tipBreak, gearPlan } from './planeGeom.js';
 import { fxExplosion } from '../fx/particles.js';
 
 // =====================================================================
@@ -90,6 +90,11 @@ export function planeModules(D) {
   // profundor (ou estabilizador todo móvel) em duas metades: cada lado trava/cai sozinho
   for (const sd of ['L', 'R']) { const b = surfBox(tailCfg(D, SIDE[sd][0]), 0, 0.95, D.stab === 'all' ? 0 : 0.65); put('elev' + sd, 'ctrl', (D.stab === 'all' ? 'Estabilizador' : 'Profundor') + SIDE[sd][1], b.c, b.h, 6); }
   const rb = surfBox(finCfg(D), 0.1, 0.95, 0.68, true); put('rud', 'ctrl', 'Leme', rb.c, rb.h, 7);
+  // trem: cada perna na posição RECOLHIDA (dentro da asa/fuselagem, onde fica o voo todo); principais recolhem
+  // para dentro, a do nariz para a frente e a bequilha para trás
+  const G = gearPlan(D);
+  for (const sd of ['L', 'R']) put('gear' + sd, 'gear', 'Trem' + SIDE[sd][1], [SIDE[sd][0] * (G.mx - G.lift * 0.4), -fr * 0.3, G.mz], [G.lift * 0.42, 0.22, G.mr * 1.1], 8, { leg: sd });
+  put('gearN', 'gear', jet ? 'Trem do nariz' : 'Bequilha', [0, -fr * 0.45, G.nz - G.nl * 0.4], [0.22, 0.25, G.nl * 0.42], 6, { leg: 'N' });
   put('cables', 'ctrl', D.boost ? 'Hastes de comando' : LABEL.cables, [0, 0, -L * 0.25], [0.18, 0.18, L * 0.14], 9);
   const out = {};
   for (const m of M) out[m.name] = Object.assign(m, { mn: [m.c[0] - m.h[0], m.c[1] - m.h[1], m.c[2] - m.h[2]], mx: [m.c[0] + m.h[0], m.c[1] + m.h[1], m.c[2] + m.h[2]], max: m.hp, hitT: -9, leak: 0, dead: false });
@@ -158,7 +163,7 @@ export function partState(pl, h) {
   if (m.kind === 'engine') { const e = pl.engs && pl.engs[m.i]; return e && !e.on ? 'parado' : e ? `${Math.round(100 * (0.35 + 0.65 * Math.max(0, e.hp) / pl.maxHp.engine))}%` : 'atingido'; }
   if (m.kind === 'pilot') return pl.pilot === false ? 'morto' : pl.wounded ? 'ferido' : 'atingido';
   if (m.ripped) return 'arrancado';
-  if (m.dead) return m.kind === 'ctrl' || m.kind === 'flap' ? 'travado' : 'destruído';
+  if (m.dead) return m.kind === 'ctrl' || m.kind === 'flap' || m.kind === 'gear' ? 'travado' : 'destruído';
   return `${Math.round(clamp(m.hp / m.max, 0, 1) * 100)}%`;
 }
 // resumo dos acertos (de `by`, ou de todos): componentes mais castigados primeiro + munições usadas
@@ -243,6 +248,12 @@ export function applyMod(pl, m, dmg, by, am) {
       const g = pl.guns[m.g];
       if (g) { g.pts = m.sd ? g.pts.filter(q => Math.sign(q[0]) !== m.sd) : []; if (!g.pts.length) g.broken = true; }
       crit(`${m.label} inoperante`);
+    } break;
+    case 'gear': if (died && pl.jamLeg) {
+      // trava onde está; baixado e com explosiva (ou estrago muito acima do necessário), a perna é arrancada
+      const out = pl.legPos(m.leg) > 0.3;
+      if (out && (hev || m.hp < -m.max * 0.4)) { pl.ripLeg(m.leg); crit(`${m.label} arrancado`); }
+      else { pl.jamLeg(m.leg); crit(`${m.label} travado`); }
     } break;
     case 'ctrl': case 'flap': if (died) {
       // trava onde estava (cabo/haste cortado deixa a superfície meio solta: guarda parte da deflexão)
