@@ -90,10 +90,12 @@ const RAF_B = disks([[60, '#27345e'], [24, '#a82a22']]), RAF_C = disks([[60, '#2
 // faixas da deriva da RAF (vermelho na frente, branco, azul)
 const FIN_FLASH = decal512(g => { for (const [x, w, c] of [[4, 52, '#a82a22'], [56, 12, '#ece8dc'], [68, 56, '#27345e']]) { g.fillStyle = c; g.fillRect(x, 6, w, 116); } });
 // texto (número de série, número do nariz) no meio da textura, fundo transparente; px = altura da letra
+const textCache = new Map();
 const textTex = (txt, col, px, font, w = 1024, h = 256) => {
+  const key = [txt, col, px, font, w, h].join('|'); if (textCache.has(key)) return textCache.get(key);
   const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
   g.fillStyle = col; g.font = `bold ${px}px ${font}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, w / 2, h / 2 + px * 0.06);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; textCache.set(key, t); return t;
 };
 const decalMats = new Map();
 const decalMat = tex => { if (!decalMats.has(tex)) decalMats.set(tex, new THREE.MeshStandardMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, roughness: .62, metalness: .05 })); return decalMats.get(tex); };
