@@ -112,7 +112,7 @@ export function frameLighting(focus, camY, groundY, S, dt) {
   sun.position.copy(focus).addScaledVector(SUN_DIR, 400);
   sun.target.position.copy(focus);
   const agl = camY - groundY;
-  scene.fog.density = lerp(0.00075, 0.00018, clamp(agl / 700, 0, 1)) / Q.far * env.fogMul;
+  scene.fog.density = lerp(0.00075, 0.00012, clamp(agl / 900, 0, 1)) / Q.far * env.fogMul;
   sky.position.copy(camera.position);
   sky.material.uniforms.time.value += dt;
   if (S.flashT > 0) { S.flashT -= dt; if (S.flashT <= 0) flash.intensity = 0; }
