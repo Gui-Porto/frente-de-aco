@@ -48,6 +48,17 @@ describe('radar de busca', () => {
     run(0.2, dt => { now += dt; r.update(dt, me, [e], now); });
     expect(r.mode).toBe('SRCH'); expect(r.events.some(x => x.k === 'lost')).toBe(true);
   });
+  it('trocar alvo: próximo contato da esquerda p/ direita, dá a volta, pula aliado', () => {
+    const me = ac(0, 3000, 0), l = ac(3000, 3000, 8000, -1), m = ac(0, 3000, 8000, -1), rt = ac(-3000, 3000, 8000, -1), al = ac(-1500, 3000, 8000, 1);
+    const r = new Radar('apq120'); let now = 0;
+    run(3, dt => { now += dt; r.update(dt, me, [l, m, rt, al], now); });
+    expect(r.next(null)).toBe(l);
+    expect(r.next(l)).toBe(m);
+    expect(r.next(m)).toBe(rt);
+    expect(r.next(rt)).toBe(l);
+    r.contacts.delete(m); r.contacts.delete(rt);
+    expect(r.next(l)).toBe(null);
+  });
   it('não trava em quem não é contato', () => {
     const r = new Radar('apq120'); expect(r.lock(ac(0, 0, 5000, -1), 0)).toBe(false);
   });

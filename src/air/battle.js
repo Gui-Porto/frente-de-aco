@@ -80,7 +80,7 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
-    this.weapon = 1; this.marked = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.killCard = this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
+    this.weapon = 1; this.marked = null; this.radarPending = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.killCard = this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
@@ -213,7 +213,7 @@ export const B = {
   avionicsInput(p, c) {
     const rd = p.sys.radar;
     if (c.wsel && p.racks.length) { const r = p.cycleRack(); this.syncSeeker(); toast(r ? `${r.M.short} · ${r.M.seeker === 'sarh' ? 'semiativo (radar)' : 'infravermelho'} · ${r.n}` : 'Sem mísseis', 1400); }
-    if (!rd || rd.ranging) { if (c.rmode || c.rlock) toast(rd ? `${rd.R.name}: só telemétrico de mira` : 'Esta aeronave não tem radar', 1400); return; }
+    if (!rd || rd.ranging) { if (c.rmode || c.rlock || c.rnext) toast(rd ? `${rd.R.name}: só telemétrico de mira` : 'Esta aeronave não tem radar', 1400); return; }
     if (c.rmode) { const m = rd.cycleMode(); toast(`Radar: ${RADAR_MODE[m]}`, 1200); }
     if (c.rlock) {
       if (rd.mode === 'STT') rd.drop('unlock');
@@ -224,6 +224,18 @@ export const B = {
         if (!best || !rd.lock(best, S.now)) toast(rd.on ? 'Radar: nenhum contato para travar' : 'Radar desligado', 1200);
       }
     }
+    // trocar alvo (Y): procurando, marca o próximo contato (Caps trava nele); travado, solta e trava o próximo.
+    // Em rastreio a antena não varre: se o eco do próximo estiver velho, trava quando o feixe o reencontrar.
+    if (c.rnext) {
+      const stt = rd.mode === 'STT', e = rd.next(stt ? rd.target : this.marked);
+      if (!e) toast(rd.on ? 'Radar: nenhum outro contato' : 'Radar desligado', 1200);
+      else {
+        this.marked = e;
+        if (stt) { rd.drop('unlock'); if (!rd.lock(e, S.now)) this.radarPending = { e, until: S.now + rd.period * 2.2 + 0.5 }; }
+      }
+    }
+    const pd = this.radarPending;
+    if (pd && (rd.mode === 'STT' || !pd.e.alive || S.now > pd.until || rd.lock(pd.e, S.now))) this.radarPending = null;
   },
   fireMissile(p) {
     const r = p.rack, rd = p.sys.radar;

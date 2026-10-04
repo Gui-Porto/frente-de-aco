@@ -66,6 +66,12 @@ export class Radar {
     this.target = null; this.locked = false; this.lockT = 0;
     if (this.mode === 'STT') { this.mode = this.prevMode || 'SRCH'; this.beam = -this.azLim; }
   }
+  // troca de alvo: próximo contato não aliado em azimute (esquerda → direita) depois de `cur`, dando a volta; null se não há outro
+  next(cur) {
+    const L = [...this.contacts].filter(([e, k]) => e !== cur && e.alive && k.iff !== 'ally').sort((a, b) => a[1].az - b[1].az);
+    const c = cur && this.contacts.get(cur), ca = c ? c.az : -Infinity;
+    return (L.find(([, k]) => k.az > ca) || L[0] || [null])[0];
+  }
   get memory() { return this.ranging ? 0.3 : this.period * 2.2 + 0.5; }
   // alcance de detecção contra este alvo agora (RCS, clutter)
   detRange(owner, e, g) {
