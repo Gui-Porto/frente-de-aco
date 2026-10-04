@@ -9,4 +9,3 @@ Nenhum item no momento.
 ## Pendências menores
 
 - IA não decola do chão (só o jogador começa na pista).
-- Espaço está ligado a "bombas" e a "míssil" ao mesmo tempo nos controles padrão.
