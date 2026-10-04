@@ -18,7 +18,7 @@ import { nextId } from './tank.js';
 import { buildPlane } from './planeModel.js';
 import { tipBreak, tipArea, wingCfg, station } from './planeGeom.js';
 import { stepHeat } from './engineHeat.js';
-import { planeModules, fuelOf, ctrlAuthority, fuelLeak, fuelInit, fuelStep, applyMod, powered, modsOf } from './planeDamage.js';
+import { planeModules, fuelOf, ctrlAuthority, fuelLeak, fuelInit, fuelStep, applyMod, powered, modsOf, sparFrac } from './planeDamage.js';
 export { buildPlane };
 // =====================================================================
 // Aeronaves: dinâmica de voo 6DOF, instrutor de mira, armas, dano.
@@ -68,7 +68,7 @@ export class Plane {
     this.wingOn = { L: true, R: true }; this.tipOn = { L: true, R: true }; this.tailOn = true;
     // ponta da asa: onde se solta (x no corpo) e quanto da sustentação de uma asa ela carrega
     this.tipX = station(wingCfg(D, 1), tipBreak(D), 0)[0]; this.tipFrac = tipArea(D); this.hitLx = null; this.engineOn = true; this.pilot = true;
-    this.alive = true; this.gone = false; this.fire = 0; this.temp = 80; this.heat = { water: 85, oil: 70 }; this.eng = new EngineSet(D.engine, D.engines); this.cooling = ENGINES[D.engine].cooling || 'jet'; this.oil = 0; this.lastHitBy = null; this.lastHitT = -99;
+    this.alive = true; this.gone = false; this.fire = 0; this.temp = 80; this.heat = { water: 85, oil: 70 }; this.eng = new EngineSet(D.engine, D.engines); this.cooling = ENGINES[D.engine].cooling || 'jet'; this.oil = 0; this.water = 0; this.oilQ = 1; this.waterQ = 1; this.sparG = {}; // oil/water: vazamento (fração/s); oilQ/waterQ: quanto resta this.lastHitBy = null; this.lastHitT = -99;
     this.guns = [];
     D.guns.forEach((g, gi) => {
       const W = GUNS[g.w], mp = this.gunPts && this.gunPts[gi], pts = mp ? mp.map(q => q.slice()) : []; // boca do cano modelado
@@ -91,7 +91,7 @@ export class Plane {
     if (D.rwr) this.sys.rwr = new Rwr(D.rwr);
     if (D.maw) this.sys.maw = new Maw(D.maw);
     // componentes internos, combustível, contramedidas e extintor
-    this.mods = planeModules(D); this.fitPilot(); this.fuel = this.fuelMax = fuelOf(D); fuelInit(this, this.fuelMax); this.wounded = false;
+    this.mods = planeModules(D); this.fitPilot(); this.fitGuns(); this.fuel = this.fuelMax = fuelOf(D); fuelInit(this, this.fuelMax); this.wounded = false;
     // cada motor com a própria integridade (o F-4 volta com um só); hp.engine = média, para HUD/fumaça
     this.engs = Array.from({ length: D.engines || 1 }, (_, i) => ({ hp: D.hpParts.engine, on: true, x: this.mods['eng' + i] ? this.mods['eng' + i].c[0] : 0 }));
     this.flapP = { L: 0, R: 0 }; this.flapGone = { L: false, R: false }; this.brakeOn = false;
@@ -180,7 +180,7 @@ export class Plane {
       if (aa <= as) CL = D.cla * alpha;
       else { CL = Math.sign(alpha) * D.clmax * Math.max(0.42, 1 - (aa - as) * 2.2); CDs = 1.1 * Math.pow(Math.sin(aa), 2); }
       if (aa > Math.PI / 2) CL = -CL * 0.3;
-      const hpL = this.wingOn.L ? (0.6 + 0.4 * this.hp.wingL / this.maxHp.wingL) * (this.tipOn.L ? 1 : 1 - this.tipFrac) : 0, hpR = this.wingOn.R ? (0.6 + 0.4 * this.hp.wingR / this.maxHp.wingR) * (this.tipOn.R ? 1 : 1 - this.tipFrac) : 0;
+      const hpL = this.wingOn.L ? (0.6 + 0.4 * Math.max(0, this.hp.wingL) / this.maxHp.wingL) * (this.tipOn.L ? 1 : 1 - this.tipFrac) : 0, hpR = this.wingOn.R ? (0.6 + 0.4 * Math.max(0, this.hp.wingR) / this.maxHp.wingR) * (this.tipOn.R ? 1 : 1 - this.tipFrac) : 0;
       const kW = (hpL + hpR) / 2;
       const mach = V / _atm.a; this.mach = mach;
       CL += this.flaps * 0.38 * (aa <= as ? 1 : 0.5);
@@ -200,10 +200,11 @@ export class Plane {
       const ctrl = (this.pilot ? 1 : 0) * clamp(1 - (this.ias - (D.vctrl || 215)) / 75, 0.28, 1);
       const tE = this.tailOn ? 0.45 + 0.55 * clamp(this.hp.tail / this.maxHp.tail, 0, 1) : 0.06, Vd = Math.max(V, 20);
       const aE = clamp(alpha, -0.5, 0.5);
-      let Mp = qd * S * c * (D.kde * (this.elev * ctrl * A.elev + st('elev')) * tE -0.9 * aE * (this.tailOn ? 1 : 0.1)) - qd * S * c * c / (2 * Vd) * dmp[0] * this.pr * (this.tailOn ? 1 : 0.15);
+      let Mp = qd * S * c * (D.kde * (this.elev * ctrl * A.elev + (st('elevL') + st('elevR')) / 2) * tE -0.9 * aE * (this.tailOn ? 1 : 0.1)) - qd * S * c * c / (2 * Vd) * dmp[0] * this.pr * (this.tailOn ? 1 : 0.15);
       let Mr = qd * S * b * D.kda * (this.ail * A.ail + A.ailBias * 0.15) * ctrl * (this.wingOn.L && this.wingOn.R ? 1 : 0.5) - qd * S * b * b / (2 * Vd) * dmp[1] * this.rr * Math.max(kW, 0.3);
       Mr += qd * S * CL * (hpL - hpR) / 2 * b * 0.22;           // assimetria de sustentação
       Mr += qd * S * b * (0.03 * (this.flapP.L - this.flapP.R) + D.kda * 0.5 * (st('ailL') + st('ailR'))); // flap assimétrico / aileron travado
+      Mr += qd * S * c * D.kde * 0.25 * tE * (this.elev * ctrl * A.elevBias + (st('elevL') - st('elevR')) / 2) * (D.span * 0.18 / c); // profundor de um lado só também rola
       if (aa > as) Mr += qd * S * b * 0.02 * this.dropSign * Math.min(1, (aa - as) * 8); // queda de asa no estol
       if (!this.eng.jet) Mr -= this.eng.shaft * (this.eng.E.torque || 1) / 280 / Math.max(1, V / 60); // torque da hélice
       Mr += qd * S * b * 0.03 * beta;                             // efeito diedro
@@ -236,23 +237,32 @@ export class Plane {
       // asa quebrando por excesso de G só nos aviões a pistão; jato não quebra em curva (pedido do jogador)
       if (!this.eng.jet && Math.abs(this.n) > this.def.glim) this.overG += dt; else this.overG = 0;
       if (this.overG > 0.12) this.breakWing(Math.random() < .5 ? 'L' : 'R', 'g');
+      // longarina danificada aguenta menos G: puxar demais termina de quebrar (raiz → asa, externa → ponta)
+      for (const seg of ['L0', 'R0', 'L1', 'R1']) {
+        const k = sparFrac(this, seg); if (k >= 0.999) continue;
+        if (Math.abs(this.n) > this.def.glim * (0.3 + 0.7 * k)) { if ((this.sparG[seg] = (this.sparG[seg] || 0) + dt) > 0.15) this.cutSpar(seg, this.lastHitBy); } else this.sparG[seg] = 0;
+      }
       if (this.ias > this.def.vne * 1.07) { this.overG += dt * 2; if (this.overG > 0.4) this.breakWing('L', 'vne'); }
     }
     // temperatura do motor
     // água → óleo → desgaste (engineHeat.js). Antes um só número chegava a 142 °C no WEP e o motor morria em ~30 s.
-    const wear = stepHeat(this.heat, this.cooling, this.engineOn ? Math.min(1, this.spool) : 0, this.wep, this.ias, this.oil > 0, dt);
+    this.oilQ = Math.max(0, this.oilQ - this.oil * dt); this.waterQ = Math.max(0, this.waterQ - this.water * dt);
+    const wear = stepHeat(this.heat, this.cooling, this.engineOn ? Math.min(1, this.spool) : 0, this.wep, this.ias, { oil: 1 - this.oilQ, water: 1 - this.waterQ }, dt);
     this.temp = this.heat.oil;
     if (wear > 0 && this.engineOn) { this.engs.forEach((e, i) => { if (!e.on) return; e.hp -= wear * this.maxHp.engine; if (e.hp <= 0) { this.engineOut(i); } }); this.syncEng(); }
     if (this.fire > 0) {
       this.fire += dt;
       if (Math.random() < dt * 30) fxBurn(_pt.set(...this.fireAt).applyMatrix4(this.root.matrixWorld).clone(), 1.2);
-      if (this.fire > 4 && Math.random() < dt * 0.08) { const w = this.fireAt[0] > 1 ? 'wingL' : this.fireAt[0] < -1 ? 'wingR' : 'fuse'; this.damage(w, 6, this.lastHitBy, true); } // o fogo consome a estrutura
+      // o fogo consome a estrutura: longarina da asa que queima (ou o cone de cauda, se for na fuselagem)
+      if (this.fire > 4 && Math.random() < dt * 0.3) { const sd = this.fireAt[0] > 1 ? 'L' : this.fireAt[0] < -1 ? 'R' : null, M = Object.values(this.mods).filter(m => !m.lost && (sd ? m.kind === 'spar' && m.seg === sd + '0' : m.kind === 'boom')); if (M.length) applyMod(this, M[Math.floor(Math.random() * M.length)], 2.5, this.lastHitBy, null); }
       if (this.fire > 22 && this.alive) destroyVehicle(this, this.lastHitBy, 'fire');
-    } else if (this.hp.engine < this.maxHp.engine * 0.5 || this.oil > 0) {
-      if (Math.random() < dt * 14) fxTrail(this.pos.clone(), 0xb8b4ac, 1, 3);
+    } else if (this.hp.engine < this.maxHp.engine * 0.5 || (this.engineOn && this.heat.oil > 125)) {
+      if (Math.random() < dt * 14) fxTrail(this.pos.clone(), 0xb8b4ac, 1, 3); // motor danificado/fervendo: fumaça clara
     }
-    // óleo vazando do radiador/motor: rastro marrom fino e contínuo (marrom médio, nunca quase-preto)
-    if (this.oil > 0 && Math.random() < dt * 30) { const c = (modsOf(this, 'cool').find(m => m.hp < m.max) || this.mods.eng0 || {}).c; fxTrail((c ? _pt.set(...c).applyMatrix4(this.root.matrixWorld) : _pt.copy(this.pos)).clone(), 0x7a6650, 0.4, 3.5); }
+    // vazamentos saindo de onde furou: óleo = rastro marrom fino (marrom médio, nunca quase-preto); água = névoa branca
+    const at = m => (m ? _pt.set(...m.c).applyMatrix4(this.root.matrixWorld) : _pt.copy(this.pos)).clone(), hurt = k => modsOf(this, k).find(m => m.hp < m.max);
+    if (this.oil > 0 && this.oilQ > 0 && Math.random() < dt * 30) fxTrail(at(hurt('oil') || hurt('cool') || this.mods.eng0 || this.mods.engine), 0x7a6650, 0.4, 3.5);
+    if (this.water > 0 && this.waterQ > 0 && Math.random() < dt * 30) fxTrail(at(hurt('cool')), 0xf4f4f2, 0.5, 2.2);
     this.prop.rotation.z += (this.engineOn ? 60 : Math.min(this.ias / 4, 20)) * dt;
     this.prop.children[this.prop.children.length - 1].visible = this.engineOn;
     // colisão com o solo
@@ -445,6 +455,22 @@ export class Plane {
     this.syncEng();
   }
   syncEng() { this.hp.engine = Math.max(0, this.engs.reduce((a, e) => a + e.hp, 0) / this.engs.length); this.engineOn = this.engs.some(e => e.on); }
+  // armas e munição onde os canos foram modelados (def.guns[i].mount → gunPts): culatra ~1,2 m atrás da boca,
+  // cofre de munição logo atrás da arma — acertar ali é acertar a arma de verdade
+  fitGuns() {
+    const set = (m, c, h) => Object.assign(m, { c, h, mn: [c[0] - h[0], c[1] - h[1], c[2] - h[2]], mx: [c[0] + h[0], c[1] + h[1], c[2] + h[2]] });
+    (this.gunPts || []).forEach((pts, gi) => {
+      if (!pts) return;
+      for (const tag of ['L', 'R', '']) {
+        const g = this.mods[`gun${gi}${tag}`], a = this.mods[`ammo${gi}${tag}`]; if (!g) continue;
+        const sd = g.sd, P = pts.filter(q => (sd ? Math.sign(q[0]) === sd : true)); if (!P.length) continue;
+        const x0 = Math.min(...P.map(q => q[0])), x1 = Math.max(...P.map(q => q[0])), y0 = Math.min(...P.map(q => q[1])), y1 = Math.max(...P.map(q => q[1])), z = Math.max(...P.map(q => q[2]));
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hx = (x1 - x0) / 2 + 0.1, hy = (y1 - y0) / 2 + 0.1;
+        set(g, [cx, cy, z - 1.0], [hx, hy, 0.7]);
+        if (a) set(a, [cx, cy, z - 2.2], [hx + 0.08, hy + 0.06, 0.45]);
+      }
+    });
+  }
   // hitbox do piloto exatamente onde o boneco está sentado (cabeça + tronco)
   fitPilot() {
     const m = this.mods.pilot, P = this.pilotMesh; if (!m || !P) return;
@@ -457,9 +483,9 @@ export class Plane {
     if (this.brakes) { this.brakeK = clamp((this.brakeK || 0) + (this.brakeOn ? 1 : -1) / 96, 0, 1); for (const b of this.brakes) b.pivot.quaternion.setFromAxisAngle(b.axis, b.max * this.brakeK); }
     const M = this.mods, sv = this.surf; if (!sv) return;
     const cmd = n => (M[n].dead ? M[n].stuck || 0 : null);
-    const ang = { ailL: -(cmd('ailL') ?? this.ail), ailR: cmd('ailR') ?? this.ail, flapL: -this.flapP.L, flapR: -this.flapP.R, elevL: cmd('elev') ?? this.elev, elevR: cmd('elev') ?? this.elev, rud: -(cmd('rud') ?? this.rud) };
+    const ang = { ailL: -(cmd('ailL') ?? this.ail), ailR: cmd('ailR') ?? this.ail, flapL: -this.flapP.L, flapR: -this.flapP.R, elevL: cmd('elevL') ?? this.elev, elevR: cmd('elevR') ?? this.elev, rud: -(cmd('rud') ?? this.rud) };
     for (const n in sv) {
-      const s = sv[n], m = M[n.startsWith('elev') ? 'elev' : n];
+      const s = sv[n], m = M[n];
       _pq.setFromAxisAngle(s.axis, ang[n] * s.max); s.pivot.quaternion.copy(s.base).multiply(_pq);
     }
   }
@@ -476,23 +502,23 @@ export class Plane {
     if (part === 'pilot') return;
     if (part === 'engine') {
       const i = idx ?? Math.floor(Math.random() * this.engs.length), e = this.engs[i];
-      e.hp -= dmg; if (Math.random() < 0.05 * dmg) this.oil = 1;
+      e.hp -= dmg;
+      // linhas de óleo e (motor a líquido) camisa d'água: um tiro no bloco costuma vazar
+      if (Math.random() < 0.08 * dmg) this.oil = Math.min(0.06, this.oil + 0.006 + dmg * 0.004);
+      if (this.cooling === 'liquid' && Math.random() < 0.1 * dmg) this.water = Math.min(0.08, this.water + 0.008 + dmg * 0.005);
       if (Math.random() < 0.035 * dmg && this.fire <= 0) this.ignite(this.mods['eng' + i] ? this.mods['eng' + i].c : this.fireAt);
       if (e.hp <= 0 && e.on) this.engineOut(i); else this.syncEng();
       if (this.isPlayer && !isBlast && Math.random() < .4) flashVign();
       return;
     }
     if (part === 'fuel') { const T = modsOf(this, 'fuel'), t = T[Math.floor(Math.random() * T.length)]; if (t) applyMod(this, t, dmg, by, isBlast ? { tnt: 1 } : null); return; }
-    this.hp[part] -= dmg;
-    // asa muito castigada perde a PONTA (sem derrubar o avião), como no WT; mais provável se o tiro foi lá fora
-    if ((part === 'wingL' || part === 'wingR') && this.hp[part] > 0 && this.hp[part] < this.maxHp[part] * 0.5) {
-      const sd = part === 'wingL' ? 'L' : 'R', out = this.hitLx != null && Math.abs(this.hitLx) > this.tipX * 0.8;
-      if (this.tipOn[sd] && Math.random() < (out ? 0.45 : 0.1) * Math.min(1, 0.3 + dmg / 3)) this.breakTip(sd, by);
-    }
+    // revestimento (casca): furado tira sustentação/efetividade; NÃO derruba sozinho — quem segura a peça são
+    // as longarinas (módulos 'spar'/'boom'). Só um estrago enorme (explosões seguidas) arranca a peça inteira.
+    this.hp[part] = Math.max(this.hp[part] - dmg, -this.maxHp[part]);
     this.hitLx = null;
-    if ((part === 'wingL' || part === 'wingR') && this.hp[part] <= 0) this.breakWing(part === 'wingL' ? 'L' : 'R', 'wing');
-    if (part === 'tail' && this.hp.tail <= 0 && this.tailOn) { this.tailOn = false; for (const n of ['elev', 'rud']) Object.assign(this.mods[n], { lost: true, dead: true, stuck: 0 }); this.dropSurfIn(this.tail); this.detach(this.tail, 90); this.boxes[3].off = this.boxes[4].off = true; this.doom(by || this.lastHitBy, 'tail'); }
-    if (part === 'fuse' && this.hp.fuse <= 0 && this.alive) destroyVehicle(this, by || this.lastHitBy, 'structure');
+    if ((part === 'wingL' || part === 'wingR') && isBlast && this.hp[part] <= -this.maxHp[part] * 0.7) this.breakWing(part === 'wingL' ? 'L' : 'R', 'wing');
+    if (part === 'tail' && isBlast && this.hp.tail <= -this.maxHp.tail * 0.8) this.loseTail(by);
+    if (part === 'fuse' && this.hp.fuse <= -this.maxHp.fuse * 0.95 && this.alive) destroyVehicle(this, by || this.lastHitBy, 'structure');
     if (this.isPlayer && !isBlast && Math.random() < .4) { flashVign(); }
   }
   // acerto: o piloto ouve cada impacto na chapa; lascas saem do ponto de entrada (granada arranca mais)
@@ -519,11 +545,21 @@ export class Plane {
   // aileron/flap/profundor/leme arrancado
   ripSurface(m) {
     if (m.ripped || !this.surf) return; m.ripped = true; m.stuck = 0;
-    const names = m.name === 'elev' ? ['elevL', 'elevR'].filter(n => this.surf[n]) : [m.name].filter(n => this.surf[n]);
+    const names = [m.name].filter(n => this.surf[n]);
     if (!names.length) return;
     const n = names[Math.floor(Math.random() * names.length)], piv = this.surf[n].pivot; delete this.surf[n];
     fxSmallFlash(piv.getWorldPosition(new V3()), _pf.set(0, 1, 0));
     this.detach(piv, 15);
+  }
+  // longarina cortada: segmento da raiz leva a asa inteira; o externo, só a ponta
+  cutSpar(seg, by) { if (seg[1] === '0') this.breakWing(seg[0], 'wing'); else this.breakTip(seg[0], by); }
+  // cone de cauda cortado: a empenagem inteira se solta (estabilizador, profundor e leme)
+  loseTail(by) {
+    if (!this.tailOn) return;
+    this.tailOn = false;
+    for (const n of ['elevL', 'elevR', 'rud', 'boom']) if (this.mods[n]) Object.assign(this.mods[n], { lost: true, dead: true, stuck: 0 });
+    this.dropSurfIn(this.tail); this.detach(this.tail, 90); this.boxes[3].off = this.boxes[4].off = true;
+    this.doom(by || this.lastHitBy, 'tail');
   }
   // ponta da asa: perde sustentação daquele lado (e o aileron, se estava nela) mas o avião continua voando
   breakTip(side, by) {

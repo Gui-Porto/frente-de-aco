@@ -3,7 +3,7 @@ import { clamp } from '../../core/util.js';
 import { H } from '../../world/terrain.js';
 import { settings, keyName } from '../../core/settings.js';
 import { HEAT_LIMITS } from '../../vehicles/engineHeat.js';
-import { modFrac, fuelLeak } from '../../vehicles/planeDamage.js';
+import { modFrac, fuelLeak, sparFrac, partState } from '../../vehicles/planeDamage.js';
 import { wingCfg, tailCfg, finCfg, station, finStation, tipBreak, SURF } from '../../vehicles/planeGeom.js';
 import { RADAR_MODE } from '../battle.js';
 import { g, V, C, MONO, UI, ptxt, plate, dec } from './kit.js';
@@ -144,6 +144,85 @@ function fuel(p, x, y, w) {
   num(`≈ ${mins > 99 ? '99+' : Math.floor(mins)} min`, x + w, y + 56, 11, T.dim);
 }
 
+// ---------- raio-X da aeronave (segurar a tecla): silhueta grande + cada componente e seu estado ----------
+const XG = [
+  ['ESTRUTURA', ['skin', 'spar', 'boom']], ['MOTOR', ['engine', 'oil', 'cool', 'turbo']], ['COMBUSTÍVEL', ['fuel']],
+  ['COMANDOS', ['ctrl', 'flap', 'act']], ['ARMAS E SISTEMAS', ['gun', 'ammo', 'radar', 'pilot']],
+];
+export function xrayPanel(p, theme) {
+  T = theme;
+  const w = 700, h = 470, x0 = 16, y0 = 70;
+  g.save(); g.translate(x0, y0);
+  plate(0, 0, w, h, T);
+  ptxt(`RAIO-X · ${p.def.short}`, 22, 26, 16, T.fg, 'left', UI, 700);
+  ptxt(`solte ${kb('a_xray')} para fechar`, w - 16, 26, 11, T.dim, 'right', UI, 600);
+  silhouette(p, 10, 44, 230, 410);
+  // linhas: [rótulo, estado]; estruturas agregadas (4 longarinas, 4 revestimentos), o resto componente a componente
+  const M = p.mods, lines = [];
+  for (const [title, kinds] of XG) {
+    const L = [];
+    for (const k of kinds) {
+      if (k === 'skin') for (const [n, lab] of [['wingL', 'Asa esq.'], ['wingR', 'Asa dir.'], ['fuse', 'Fuselagem'], ['tail', 'Empenagem']]) {
+        const lost = n === 'tail' ? !p.tailOn : n.startsWith('wing') ? !p.wingOn[n.slice(4)] : false;
+        L.push([lab + ' (revestimento)', lost ? 'perdida' : `${Math.round(clamp(p.hp[n] / p.maxHp[n], 0, 1) * 100)}%`]);
+      } else if (k === 'spar') for (const seg of ['L0', 'L1', 'R0', 'R1']) {
+        const lost = !p.wingOn[seg[0]] || (seg[1] === '1' && !p.tipOn[seg[0]]), f = sparFrac(p, seg);
+        L.push([`Longarina ${seg[0] === 'L' ? 'esq.' : 'dir.'} (${seg[1] === '0' ? 'raiz' : 'externa'})`, lost ? 'perdida' : f <= 0 ? 'cortada' : `${Math.round(f * 100)}%`]);
+      } else for (const m of Object.values(M)) if (m.kind === k) L.push([m.label, partState(p, { name: m.name, kind: m.kind })]);
+      if (k === 'oil') L.push(['Óleo', `${Math.round(p.oilQ * 100)}% · ${Math.round(p.heat.oil)} °C${p.oil > 0 ? ' · vazando' : ''}`]);
+      if (k === 'cool' && p.cooling === 'liquid') L.push(['Água', `${Math.round(p.waterQ * 100)}% · ${Math.round(p.heat.water)} °C${p.water > 0 ? ' · vazando' : ''}`]);
+    }
+    // tanques: quanto resta em cada um junto do estado
+    if (kinds[0] === 'fuel') for (const r of L) { const m = Object.values(M).find(q => q.label === r[0]); if (m && m.cap) r[1] = `${Math.round(m.left)} kg · ${r[1]}`; }
+    lines.push([title, L]);
+  }
+  // duas colunas de grupos
+  let col = 0, x = 256, y = 56; const cw = 205, maxY = h - 16;
+  for (const [title, L] of lines) {
+    if (y + 20 + L.length * 15 > maxY && col === 0) { col = 1; x = 256 + cw + 16; y = 56; }
+    lbl(title, x, y); y += 16;
+    for (const [a, b] of L) {
+      const bad = /perdid|cortad|destru|arrancad|parad|mort|vazio|travad/.test(b), warn = /vazando|ferido/.test(b) || (/^\d+%$/.test(b) && parseInt(b) < 70);
+      ptxt(a, x, y, 11.5, T.fg, 'left', UI, 500); ptxt(b, x + cw, y, 10.5, bad ? C.enemy : warn ? C.amber : T.dim, 'right', MONO, 500); y += 15;
+    }
+    y += 8;
+  }
+  g.restore();
+}
+// registro de avarias como no WT: um aviso por problema que EXISTE agora (some quando deixa de existir)
+const UP = t => t.toUpperCase(), SD = { L: 'ESQ.', R: 'DIR.' };
+export function damageList(p) {
+  const M = p.mods, out = [], E = p.eng;
+  if (p.fire > 0) out.push([`INCÊNDIO · ${kb('a_ext')} ${p.ext ? 'extintor' : 'sem extintor'}`, C.enemy]);
+  // combustível: cada tanque furado (com o que ainda resta)
+  for (const m of Object.values(M)) if (m.kind === 'fuel' && m.leak > 0 && m.left > 0) out.push([`${UP(m.label)} VAZANDO · ${dec(m.leak)} kg/s`, C.amber]);
+  if (p.oil > 0) out.push([p.oilQ <= 0 ? 'SEM ÓLEO · MOTOR ENGRIPANDO' : `VAZAMENTO DE ÓLEO · ${Math.round(p.oilQ * 100)}%`, p.oilQ < 0.3 ? C.enemy : C.amber]);
+  if (p.water > 0) out.push([p.waterQ <= 0 ? 'SEM ÁGUA · MOTOR FERVENDO' : `VAZAMENTO DE ÁGUA · ${Math.round(p.waterQ * 100)}%`, p.waterQ < 0.3 ? C.enemy : C.amber]);
+  if (p.engineOn && (p.heat.oil > 120 || p.heat.water > 118)) out.push(['MOTOR SUPERAQUECENDO', C.enemy]);
+  p.engs.forEach((e, i) => { const nm = p.engs.length > 1 ? `MOTOR ${i ? 'DIR.' : 'ESQ.'}` : 'MOTOR'; if (!e.on) out.push([`${nm} PAROU`, C.enemy]); else if (e.hp < p.maxHp.engine * 0.7) out.push([`${nm} ${Math.round(100 * (0.35 + 0.65 * e.hp / p.maxHp.engine))}%`, C.amber]); });
+  if (!p.pilot) out.push(['PILOTO ABATIDO', C.enemy]); else if (p.wounded) out.push(['PILOTO FERIDO', C.amber]);
+  // estrutura
+  for (const sd of ['L', 'R']) {
+    if (!p.wingOn[sd]) { out.push([`ASA ${SD[sd]} PERDIDA`, C.enemy]); continue; }
+    if (!p.tipOn[sd]) out.push([`PONTA DA ASA ${SD[sd]} PERDIDA`, C.enemy]);
+    const k = Math.min(sparFrac(p, sd + '0'), p.tipOn[sd] ? sparFrac(p, sd + '1') : 1);
+    if (k < 0.95) out.push([`LONGARINA ${SD[sd]} ${Math.round(k * 100)}% · LIMITE ${dec(D_G(p) * (0.3 + 0.7 * k), 1)} G`, k < 0.5 ? C.enemy : C.amber]);
+  }
+  if (!p.tailOn) out.push(['CAUDA PERDIDA', C.enemy]); else if (M.boom && M.boom.hp < M.boom.max * 0.6) out.push(['CONE DE CAUDA DANIFICADO', C.amber]);
+  // comandos: flaps desalinhados (um lado travado ou perdido), superfícies e cabos
+  const fl = M.flapL, fr = M.flapR;
+  if ((fl.dead || fr.dead) && !(fl.dead && fr.dead) || Math.abs(p.flapP.L - p.flapP.R) > 0.15) out.push(['FLAPS DESALINHADOS', C.enemy]);
+  for (const m of Object.values(M)) {
+    if (m.kind === 'ctrl' && m.dead && !m.lost) out.push([`${UP(m.label)} ${m.ripped ? 'ARRANCADO' : m.name === 'cables' ? (m.label.startsWith('Hastes') ? 'CORTADAS' : 'CORTADOS') : 'TRAVADO'}`, C.enemy]);
+    else if (m.kind === 'flap' && m.dead && !m.lost && (fl.dead && fr.dead)) out.push([`${UP(m.label)} ${m.ripped ? 'ARRANCADO' : 'TRAVADO'}`, C.amber]);
+    else if (m.kind === 'act' && m.dead) out.push([`${UP(m.label)} AVARIADO`, C.amber]);
+    else if (m.kind === 'radar' && m.dead) out.push(['RADAR INOPERANTE', C.amber]);
+    else if (m.kind === 'turbo' && m.dead) out.push(['TURBO AVARIADO', C.amber]);
+    else if (m.kind === 'gun' && m.dead && !m.lost) out.push([`${UP(m.label)} INOPERANTE`, C.amber]);
+  }
+  return out;
+}
+const D_G = p => p.def.glim;
 // etiquetas acima da placa: configuração (flaps/trem/freio), radar e avarias
 function chips(p) {
   const list = [];
@@ -152,13 +231,7 @@ function chips(p) {
   if (p.brakeOn) list.push(['FREIO', C.amber]);
   const rd = p.sys.radar;
   if (rd && !rd.ranging) list.push([`RADAR ${RADAR_MODE[rd.mode].toUpperCase()}`, rd.on ? T.accent : T.dim]);
-  if (p.fire > 0) list.push([`INCÊNDIO · ${kb('a_ext')} ${p.ext ? 'extintor' : 'sem extintor'}`, C.enemy]);
-  const leak = fuelLeak(p); if (leak > 0 && p.fuel > 0) list.push([`VAZAMENTO ${dec(leak)} kg/s`, C.amber]);
-  if (p.engineOn && p.hp.engine < p.maxHp.engine * 0.7) list.push([`MOTOR ${Math.round(100 * (0.35 + 0.65 * p.hp.engine / p.maxHp.engine))}%`, C.amber]);
-  if (p.oil) list.push([p.eng.jet ? 'ÓLEO VAZANDO' : 'RADIADOR VAZANDO', C.amber]);
-  if (p.wounded) list.push(['PILOTO FERIDO', C.amber]);
-  const dead = Object.values(p.mods).filter(m => m.dead && ['ctrl', 'flap', 'act', 'turbo', 'radar'].includes(m.kind)).map(m => m.label.toUpperCase());
-  if (dead.length) list.push([dead.join(' · ') + ' INOP.', C.enemy]);
+  for (const [t, col] of damageList(p)) list.push([t, col]);
   let x = PW, y = -10;
   g.font = `600 11px ${UI}`; g.letterSpacing = '1px';
   for (const [t, col] of list) {
@@ -201,7 +274,7 @@ function silhouette(p, x, y, w, sh) {
   }
   // empenagem: estabilizador (todo móvel ou com profundor) e deriva com o leme
   for (const side of [1, -1]) {
-    const o = tailCfg(D, side), m = M.elev;
+    const o = tailCfg(D, side), m = M[side > 0 ? 'elevL' : 'elevR'];
     draw(strip(o, 0, 1, 0, 1), sf('tail'), !p.tailOn);
     const gone = m.ripped && !(p.surf && p.surf[side > 0 ? 'elevL' : 'elevR']);
     if (p.tailOn) draw(strip(o, 0.04, 0.95, D.stab === 'all' ? 0.05 : 0.68, 1), gone ? 0 : modFrac(m), gone, hot(m));

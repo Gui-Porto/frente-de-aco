@@ -4,20 +4,8 @@ Lista viva dos pedidos, na ordem em que serão feitos. Cada item vira uma branch
 
 ## Em andamento / próximos
 
-1. **Física de dano real nos aviões** (estilo War Thunder)
-   - O projétil (bala, granada, foguete) segue a trajetória real dentro do avião e danifica só o que está no caminho e em volta da explosão.
-   - Acerto não crítico não derruba: o avião segue voando com o que sobrou. Asa inteira só sai com estrago crítico na longarina.
-   - Superfícies independentes por lado: flap/aileron/profundor de um lado travado ou perdido → assimetria real (rolagem/guinada) e aviso "flap desalinhado".
-   - Vazamentos visíveis e informados: combustível (por tanque), óleo, água/refrigerante (motores a pistão).
-   - Arma atingida para de atirar; munição atingida pode detonar; radar atingido apaga; piloto pode ser ferido.
-   - Avisos no HUD de integridade (registro de dano, como no WT), não popup no meio da tela.
-   - Pesquisar como o WT modela isso e avaliar se o navegador dá conta (ou se vale app desktop).
-2. **Dano detalhado na interface**: silhueta/raio-X com cada componente e estado; cartão pós-abate dizendo o que acertou o quê.
-3. **Mísseis detalhados**: modelo 3D melhor (cabeça de busca, aletas, canards, asas do Sparrow), ficha completa no hangar, motor/fumaça mais fiéis.
-4. **Modelos dos jatos mais detalhados e arredondados** (manter F-86F, MiG-15bis, MiG-21MF, F-4E): antenas, luzes, assento ejetável, cabine, bocais e entradas de ar fiéis, tanques externos.
+Nenhum item no momento.
 
 ## Pendências menores
 
-- IA não decola do chão (só o jogador começa na pista).
-- Placa divisória da entrada de ar do MiG-15 grande demais (sai pela frente do nariz).
-- Espaço está ligado a "bombas" e a "míssil" ao mesmo tempo nos controles padrão.
+Nenhuma no momento.

@@ -11,7 +11,7 @@ const alive = team => planes.filter(p => p.alive && p.team === team);
 
 function elimination(b, { allies }) {
   return {
-    setup() { b.spawnTeam(1, allies ? b.cfg.allies : 0); b.spawnTeam(-1, b.cfg.enemies); },
+    setup() { b.spawnTeam(1, allies ? b.cfg.allies : 0, { ground: true }); b.spawnTeam(-1, b.cfg.enemies, { ground: true }); },
     update() {
       if (!alive(-1).length) return { win: true, why: 'Todas as aeronaves inimigas foram derrubadas.' };
       if (!alive(1).length) return { win: false, why: allies ? 'Sua esquadrilha foi destruída.' : 'Você foi abatido.' };
@@ -26,7 +26,7 @@ function zone(b) {
   let acc = 0;
   return {
     zone: Z, pts,
-    setup() { b.spawnTeam(1, b.cfg.allies); b.spawnTeam(-1, b.cfg.enemies); },
+    setup() { b.spawnTeam(1, b.cfg.allies, { ground: true }); b.spawnTeam(-1, b.cfg.enemies, { ground: true }); },
     update(_, dt) {
       if ((acc += dt) >= 1) {
         acc = 0;
