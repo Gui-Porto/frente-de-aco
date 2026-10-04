@@ -7,7 +7,7 @@ import { hasModel, gltfPlane } from './modelLibrary.js';
 import { buildPlaneFx } from './planeFx.js';
 import * as DT from './planeDetail.js';
 import { buildCockpit } from './planeCockpit.js';
-import { gearBays, buildBays, bayColor, fuseBottom } from './planeBays.js';
+import { gearBays, buildBays, bayColor, fuseBottom, wingY } from './planeBays.js';
 import { wingCfg as wingPlan, tailCfg, finCfg, finStation, station, chordAt, tipBreak, SURF, gearPlan } from './planeGeom.js';
 // =====================================================================
 // Modelo 3D procedural das aeronaves (só visual; física e caixas de
@@ -400,7 +400,7 @@ export function buildPlane(D) {
     hw: z => { const P = [0, 0, 0]; canopyPoint(C.len, C.w, C.h, Math.min(1, Math.max(0, (czc + C.len / 2 - z) / C.len)), 0, P, C.flat, null); return Math.abs(P[0]) * 0.9; } };
   // alojamentos do trem: a fuselagem sai uma vez sem eles só para dar a seção (onde a asa encontra o ventre)
   const GP = gearPlan(D), BAY = gearBays(D, GP, wingPlan(D, 1), fuselage(D, hole).userData.sec);
-  const fuseG = fuselage(D, hole, BAY.fuse); add(fuseG, [paint, under, ductM, DM.soot]);
+  const fuseG = fuselage(D, hole, BAY.fuse), fuseMesh = add(fuseG, [paint, under, ductM, DM.soot]);
   const sideIn = jet && D.intakes === 'side', duct = fuseG.userData.duct;
   if (jet) {
     if (duct) {
@@ -432,12 +432,14 @@ export function buildPlane(D) {
         // duto: do lábio para trás e para dentro (centro do motor), seção ficando redonda; os primeiros 40% claros
         const ex = s * (fr * 0.36 * 1.05), ey = -fr * 0.15, R = fr * 0.33, duct = [];
         for (let k = 0; k <= 12; k++) {
-          const t = k / 12, e = t * t * (3 - 2 * t), hw = (hw0 - th) * (1 - e) + R * e, hh = (hh0 - th) * (1 - e) + R * e;
-          duct.push([z0 - t * 3.0, cx0 + (ex - cx0) * e, cy0 + (ey - cy0) * e, hw, hh, 0.38 + 0.62 * e]);
+          const t = k / 12, e = t * t * (3 - 2 * t), hw = (hw0 - th) * (1 - e) + R * e, hh = (hh0 - th) * (1 - e) + R * e, z = z0 - t * 3.0;
+          // o duto vai para o eixo do motor, mas sem entrar na fuselagem: dentro dele a chapa clara de fora aparecia
+          const cx = s * Math.max(Math.abs(cx0 + (ex - cx0) * e), at(z / L).hw + hw + 0.012);
+          duct.push([z, cx, cy0 + (ey - cy0) * e, hw, hh, 0.38 + 0.62 * e]);
         }
         const dl = (a, b) => flipLoft(tubeLoftV(duct.slice(a, b)));
         add(dl(0, 6), ductM, root); add(dl(5, 13), soot, root);
-        const fz = z0 - 3.0, fc = new THREE.Vector3(ex, ey, fz);
+        const fz = z0 - 3.0, fc = new THREE.Vector3(duct[12][1], duct[12][2], fz);
         add(new THREE.CircleGeometry(R * 1.02, 24), soot, root, fc.x, fc.y, fz - 0.05);
         add(new THREE.ConeGeometry(R * 0.32, R * 0.6, 18).rotateX(Math.PI / 2), fanM, root, fc.x, fc.y, fz + R * 0.2);
         const bl = [];
@@ -597,8 +599,8 @@ export function buildPlane(D) {
     const o = wingCfg(side), sd = side > 0 ? 'L' : 'R', A = D.ail || SURF.ail, F = D.flap || SURF.flap;
     const mv = [['ail' + sd, A[0], A[1], 20], ['flap' + sd, Math.max(F[0], clearS(o, SURF.cf)), F[1], 40]], inner = m => (m[1] + m[2]) / 2 < sB;
     // a raiz leva o alojamento do trem (furo no intradorso; o pedaço tirado é a porta presa à perna)
-    const m = BAY.main; cutSurface(Object.assign({}, o, { bay: { xi: m.wxi, xo: m.xo, za: m.za, zb: m.zb } }), SURF.cf, mv.filter(inner), grp, false, 0, sB);
-    cutSurface(o, SURF.cf, mv.filter(m => !inner(m)), tip, false, sB, 1);
+    const m = BAY.main, skin0 = cutSurface(Object.assign({}, o, { bay: { xi: m.wxi, xo: m.xo, za: m.za, zb: m.zb } }), SURF.cf, mv.filter(inner), grp, false, 0, sB);
+    grp.userData.skins = [skin0, cutSurface(o, SURF.cf, mv.filter(m => !inner(m)), tip, false, sB, 1)]; // chapa da raiz e da ponta (insígnias)
     if (D.stripes) for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.3, 0.02, D.chord * 0.86), i % 2 ? black : white, grp, side * (fr + 1.0 + i * 0.3), -fr * 0.25 - 0.17 + (1 + i * 0.3) * Math.tan(dih), D.wingZ - D.chord * 0.2);
     if (D.key === 'mig15') for (const k of [0.38, 0.7]) { const p = station(o, k, 0.5); add(new THREE.BoxGeometry(0.03, 0.18, chordAt(o, k) * 0.9), paint, k < sB ? grp : tip, p[0], p[1] + 0.1, p[2]); } // cercas aerodinâmicas
     if (D.key === 'spit9') add(new THREE.BoxGeometry(0.45, 0.22, 1.1), paint, grp, side * (fr + 1.0), -fr * 0.25 - 0.22, D.wingZ - 0.4); // radiadores sob a asa
@@ -727,7 +729,7 @@ export function buildPlane(D) {
       surf['elev' + sd] = { pivot, axis: new THREE.Vector3(1, 0, 0), max: 12 * deg, base: new THREE.Quaternion() };
     } else cutSurface(o, 0.68, [['elev' + sd, Math.max(0.04, clearS(o, 0.68)), 0.95, 25]], tail);
   }
-  const fc = finCfg(D); cutSurface(fc, 0.7, [['rud', Math.max(0.1, clearS(fc, 0.7, true)), 0.95, 25]], tail, true);
+  const fc = finCfg(D), finMesh = cutSurface(fc, 0.7, [['rud', Math.max(0.1, clearS(fc, 0.7, true)), 0.95, 25]], tail, true);
   add(new THREE.BoxGeometry(0.06, finH * 0.32, 0.04), accent, tail, 0, fr * 0.6 + finH * 0.82, -L * 0.43 - finH * Math.tan((jet ? 45 : 18) * deg) * 0.85); // faixa da deriva
   // hélice / entrada de ar (a física gira este grupo; o último filho some com o motor parado)
   const prop = new THREE.Group(); prop.position.set(0, duct ? duct.yc : 0, duct ? duct.z + 0.04 : L * 0.45 + (jet ? 0.05 : 0.3)); root.add(prop);
@@ -798,10 +800,12 @@ export function buildPlane(D) {
   const pit = new THREE.CylinderGeometry(0.015, 0.02, 0.9, 5).rotateX(Math.PI / 2);
   if (D.shockCone) { const a = fuseG.userData.at(0.44); add(new THREE.CylinderGeometry(0.022, 0.04, 1.5, 6).rotateX(Math.PI / 2), paint, root, 0, a.top - 0.1, L * 0.46 + 0.55); }
   else if (!sideIn) { const sd = jet ? -1 : 1, q = station(wingCfg(sd), 0.97, 0); add(pit, dark, (sd > 0 ? wingL : wingR).userData.tip, q[0], q[1], q[2] + 0.35); }
-  // insígnias assentadas no extradorso (estação da asa + meia espessura), no pedaço da asa onde caem
-  const ws = 0.68, oL = wingCfg(1), cw = chordAt(oL, ws), wp = station(oL, ws, 0.45), wt = (oL.t0 + (oL.t1 - oL.t0) * ws) * cw;
-  const wg = ws > sB ? [wingL.userData.tip, wingR.userData.tip] : [wingL, wingR];
-  planeDecals(D, root, wg[0], wg[1], { y: wp[1] + wt * 0.5 + 0.012 * cw + 0.012, x: wp[0], z: wp[2], size: Math.min(cw * 0.62, 1.6), fuseAt: fuseG.userData.at });
+  // insígnias projetadas na chapa (paint.js): asa na estação 0,68 (no pedaço onde cai: raiz ou ponta), fuselagem, deriva
+  const ws = 0.68, oL = wingCfg(1), cw = chordAt(oL, ws), wp = station(oL, ws, 0.45), wdih = oL.brk && ws > oL.brk.at ? oL.brk.dih : oL.dih;
+  const wi = { x: wp[0], z: wp[2], y: wingY(oL, wp[0], wp[2], 1), yl: wingY(oL, wp[0], wp[2], -1), size: Math.min(cw * 0.62, 1.6), dih: wdih, th: 0.5 };
+  const fp = finStation(fc, 0.5, 0.3), mk = D.marks || {};
+  planeDecals(D, { fuse: fuseMesh, fuseAt: fuseG.userData.at, wings: [wingL, wingR].map((g, i) => [g.userData.skins[ws > sB ? 1 : 0], wi, i ? -1 : 1]),
+    fin: { mesh: finMesh, p: { y: fp[1], z: fp[2], size: chordAt(fc, 0.5) * 0.62 } }, serial: mk.serial || String(40000 + (D.key.charCodeAt(0) * 97) % 9999), nose: mk.nose && { zf: 0.36, n: mk.nose }, buzz: mk.buzz && { zf: 0.2, txt: mk.buzz }, decalZ: mk.decalZ });
   // trem de pouso (aparece com o trem baixado; o hangar também usa)
   // detalhes por dados (planeDetail.js): luz da cauda, anticolisão, antenas, tanques externos, gancho
   DT.tailLight(add, DM, tail, D); DT.beacons(add, DM, root, D, at); DT.antennas(add, DM, root, tail, D, at);
