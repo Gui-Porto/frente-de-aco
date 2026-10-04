@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { camera } from '../core/render.js';
+import { camera, scene } from '../core/render.js';
 import { clamp, rand } from '../core/util.js';
 import { fxTrail } from '../fx/particles.js';
 // =====================================================================
@@ -10,9 +10,9 @@ import { fxTrail } from '../fx/particles.js';
 //  - fumaça de motor (def.smoke; o J79 do F-4 era famoso por ela), que some
 //    com a PC acesa;
 //  - cone de vapor perto de Mach 1.
-// Materiais ÚNICOS e compartilhados, criados no carregamento; as malhas ficam
-// sempre "visíveis" com escala ~0 quando apagadas — assim o renderer.compile
-// da decolagem já compila tudo e a primeira ignição não trava (CLAUDE.md).
+// Materiais ÚNICOS e compartilhados, criados no carregamento; apagadas, as malhas
+// ficam invisíveis. Uma semente de cada material fica sempre desenhada (escala ~0) na
+// cena, então o shader já existe e a primeira ignição não trava (CLAUDE.md).
 // =====================================================================
 function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
 // eixo vertical da textura = comprimento da chama (topo = bocal)
@@ -57,7 +57,7 @@ export function buildPlaneFx(D, root, nozzles, stacks) {
   const fx = { flames: [], stacks: [], vapor: null };
   for (const n of nozzles) fx.flames.push({ out: mk(OUTER, FLAME, root, n.x, n.y, n.z), inn: mk(INNER, DIAMOND, root, n.x, n.y, n.z), glow: mk(DISC, GLOW, root, n.x, n.y, n.z + 0.05), r: n.r });
   for (const s of stacks) { const m = mk(STACK, FLAME, root, s.x, s.y, s.z); m.rotation.y = s.dir || 0; fx.stacks.push(m); }
-  mk(HOLEGEO, HOLE, root, 0, 0, 0); // marca de bala: material na cena desde o início (compila no carregamento)
+  mk(HOLEGEO, HOLE, root, 0, 0, 0).visible = false; // marca de bala (o shader vem da semente)
   if (D.jet) fx.vapor = mk(new THREE.CylinderGeometry(D.fuseR * 1.15, D.fuseR * 2.6, 1, 24, 1, true).translate(0, -0.5, 0).rotateX(Math.PI / 2), VAPOR, root, 0, 0, D.wingZ + D.chord * 0.4);
   return fx;
 }
@@ -102,6 +102,10 @@ export function updatePlaneFx(p, dt) {
     if (k > 0.02) { const s = 0.75 + 0.25 * k; fx.vapor.scale.set(s * rand(0.97, 1.03), s * rand(0.97, 1.03), p.def.L * 0.22 * k); }
     else fx.vapor.scale.setScalar(HIDE);
   }
+  // apagado = fora do desenho (antes ia 1 draw call por chama/escapamento por avião, todo quadro)
+  for (const f of fx.flames) { f.glow.visible = f.glow.scale.x > HIDE; f.out.visible = f.out.scale.x > HIDE; f.inn.visible = f.inn.scale.x > HIDE; }
+  for (const m of fx.stacks) m.visible = m.scale.x > HIDE;
+  if (fx.vapor) fx.vapor.visible = fx.vapor.scale.z > HIDE;
 }
 
 // ---------- lascas de chapa arrancadas pelos acertos ----------
@@ -141,6 +145,7 @@ const holeTex = canvasTex(64, 64, (g, w) => {
 });
 const HOLE = new THREE.MeshBasicMaterial({ map: holeTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
 const HOLEGEO = new THREE.PlaneGeometry(1, 1);
+for (const [g, m] of [[OUTER, FLAME], [INNER, DIAMOND], [DISC, GLOW], [OUTER, VAPOR], [HOLEGEO, HOLE]]) mk(g, m, scene, 0, -1e4, 0); // sementes dos shaders
 const _rc = new THREE.Raycaster(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _n = new THREE.Vector3();
 const solid = h => { const m = Array.isArray(h.object.material) ? h.object.material[0] : h.object.material; return h.face && !h.object.userData.fx && !m.transparent; };
 // back: quanto o raio recua antes do ponto de entrada (tiro); 0 = parte do ponto (explosão). Devolve o ponto no mundo.

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { scene } from '../core/render.js';
+import { scene, camera } from '../core/render.js';
 import { S, S as ST, planes } from '../core/state.js'; // ST: em physics() `S` é a área da asa
 import { V3, QUAT, UP, clamp, lerp, rand, rv } from '../core/util.js';
 import { H, AIRLIMIT, AIRFIELDS } from '../world/terrain.js';
@@ -43,6 +43,9 @@ const waveDrag = (D, M) => {
 };
 const flapLim = (D, st) => st ? (D.flapV || FLAP_V)[st - 1] / 3.6 : Infinity;
 const _gM = [0, 0, 0], _gw = new V3(), _gf = new V3(), _gr = new V3(), _gv = new V3(), _gh = new V3(), _gl = new V3(), _gt = new V3();
+// níveis de detalhe: além de d m, piloto e peças com raio < r saem dos passes de desenho (camada 1).
+// ~200 malhas por avião × (cor + sombra + AO) era o que derrubava o quadro com muitos aviões
+const LOD = [[150, 0.3], [600, 1.0]], _ls = new V3();
 const _pe = new THREE.Euler(), G0 = 9.81, _pm = new THREE.Matrix4(), _pfx = new V3(), _pu = new V3(), _pl = new V3(), _pv = new V3(), _pF = new V3(), _pw = new V3(), _pq = new QUAT();
 export class Plane {
   constructor(key, team, who, pos, yaw, speed, opts = {}) {
@@ -109,7 +112,7 @@ export class Plane {
   // reparo + rearme (parado na própria pista): modelo novo (as peças arrancadas voltam) e estado de fábrica
   refit() {
     const keep = { gear: this.gear, gearCmd: this.gearCmd, throttle: this.throttle, flapStage: this.flapStage };
-    scene.remove(this.root); Object.assign(this, buildPlane(this.def)); scene.add(this.root);
+    scene.remove(this.root); Object.assign(this, buildPlane(this.def)); scene.add(this.root); this._det = null; this._far = undefined;
     this.outfit(); Object.assign(this, keep); this.doomed = null;
     if (this.onGround) this.gear = this.gearCmd = 1; // pousou de barriga: a equipe de solo baixa o trem
     this.applyTransform();
@@ -130,6 +133,27 @@ export class Plane {
     if (this.gearMesh) { if (this.gearMesh.userData.anim) this.gearMesh.userData.anim(this.gear, this._legK || (this._legK = n => this.legPos(n))); if (this.gearMesh.userData.squash) this.gearMesh.userData.squash(this.gc || 0); }
     this.animSurfaces();
     this.root.updateMatrixWorld(true); this.inv.copy(this.root.matrixWorld).invert();
+    this.lodStep();
+  }
+  lodStep() {
+    const d = this.pos.distanceTo(camera.position), lv = d > LOD[1][0] ? 2 : d > LOD[0][0] ? 1 : 0;
+    if (lv === this._far) return; this._far = lv;
+    if (!this._det) {
+      // fora: hélice, trem (tem a própria regra), efeitos, armamento (visibilidade controlada em outro lugar)
+      const skip = new Set([this.prop, this.gearMesh, ...this.bombMeshes, ...this.rocketMeshes, ...this.missileMeshes]), det = this._det = [];
+      const walk = (o, all) => {
+        if (skip.has(o)) return;
+        if (o === this.pilotMesh) all = true;
+        if (o.isMesh && (all || !o.userData.fx && !o.userData.door)) {
+          const g = o.geometry; g.boundingSphere || g.computeBoundingSphere(); o.getWorldScale(_ls);
+          const r = all ? 0 : g.boundingSphere.radius * Math.max(_ls.x, _ls.y, _ls.z);
+          if (r < LOD[1][1]) det.push([o, r < LOD[0][1] ? 1 : 2]);
+        }
+        for (const c of o.children) walk(c, all);
+      };
+      walk(this.root, false);
+    }
+    for (const [o, k] of this._det) o.layers.set(lv >= k ? 1 : 0);
   }
   // desmaiado: sem comando nenhum (manche solto, sem disparar); 0..1 para escurecer a tela
   get blackout() { return this.koT > 0 ? Math.min(1, this.koAge / 0.3, this.koT / 1.2) : 0; }
