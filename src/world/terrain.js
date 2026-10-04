@@ -10,12 +10,28 @@ export const POINTS = [{ id: 'A', x: -190, z: 25 }, { id: 'B', x: 0, z: 0 }, { i
 export const SPAWN = { 1: { x: 0, z: 300, yaw: Math.PI }, '-1': { x: 0, z: -300, yaw: 0 } };
 export const AIRSPAWN = { 1: { x: 0, z: 2400, y: 1300, yaw: Math.PI }, '-1': { x: 0, z: -2400, y: 1300, yaw: 0 } };
 
+// ruído de valor suave (hash nos cantos, interpolação quíntica) e somas fractais: relevo sem a cara periódica dos senos
+function vnoise(x, z) {
+  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
+  const u = fx * fx * fx * (fx * (fx * 6 - 15) + 10), v = fz * fz * fz * (fz * (fz * 6 - 15) + 10);
+  const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+  return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1;
+}
+function fbm(x, z, n) { let s = 0, a = 1, t = 0; for (let k = 0; k < n; k++) { s += a * vnoise(x, z); t += a; a *= 0.5; const nx = x * 1.97 + z * 0.31, nz = z * 1.97 - x * 0.31; x = nx + 17.3; z = nz + 9.1; } return s / t; }
+// cristas: 1 − |ruído|, ao quadrado, com cada oitava pesada pela anterior (serras com vales em V)
+function ridged(x, z, n) { let s = 0, a = 1, w = 1, t = 0; for (let k = 0; k < n; k++) { let r = 1 - Math.abs(vnoise(x, z)); r *= r * w; w = clamp(r * 1.6, 0, 1); s += r * a; t += a; a *= 0.5; const nx = x * 2.03 + z * 0.27, nz = z * 2.03 - x * 0.27; x = nx + 5.7; z = nz + 31.3; } return s / t; }
 function baseH(x, z) {
   let h = 9 * Math.sin(x * 0.009 + 0.5) * Math.cos(z * 0.011) + 4 * Math.sin(x * 0.023 + 1.3) * Math.sin(z * 0.027 + 0.7)
     + 1.3 * Math.sin(x * 0.061 + z * 0.047) + 0.6 * Math.sin(x * 0.13 - z * 0.11)
     + 22 * Math.sin(x * 0.0019 + 1.1) * Math.cos(z * 0.0023 + 0.4) + 10 * Math.sin(x * 0.0041 + z * 0.0033);
+  // o campo dos tanques (até 700 m) fica como era; fora dele, colinas e vales de verdade na arena aérea e, depois
+  // de ~5 km, serras que fecham o horizonte (dão escala e profundidade vistas de cima)
   const r = Math.max(Math.abs(x), Math.abs(z)) - 700;
-  if (r > 0) h += Math.min(r * 0.05, 110) * (0.55 + 0.45 * Math.sin(x * 0.0031) * Math.cos(z * 0.0027 + 1));
+  if (r > 0) {
+    const k = sstep(0, 900, r), R = Math.hypot(x, z);
+    h += k * (85 * fbm(x / 1400, z / 1400, 5) + 40 * (fbm(x / 520 + 3.1, z / 520, 3) * 0.5 + 0.5) - 25 * Math.max(0, 1 - Math.abs(fbm(x / 2600 - 7, z / 2600, 3)) * 6));
+    h += sstep(4200, 13000, R) * (1300 * ridged(x / 5200, z / 5200, 6) + 300 * fbm(x / 9000 + 11, z / 9000, 3) + 120);
+  }
   return h;
 }
 const FLATS = [...POINTS.map(p => ({ x: p.x, z: p.z, r: 48 })), { x: 0, z: 300, r: 55 }, { x: 0, z: -300, r: 55 }];
@@ -60,14 +76,16 @@ export const roadDist = (x, z) => { let d = 1e9; for (const r of ROADS) d = Math
 export const FW = 64, FD = 52;
 export const fieldCell = (x, z) => [Math.floor((x + 13) / FW), Math.floor((z + 7) / FD)];
 const CROPS = [[0.085, 0.13, 0.04], [0.30, 0.24, 0.10], [0.15, 0.105, 0.06], [0.12, 0.165, 0.05], [0.22, 0.21, 0.085]];
+const CROP_AVG = [0, 1, 2].map(k => CROPS.reduce((a, c) => a + c[k], 0) / CROPS.length);
 export function cropAt(x, z) { const [i, j] = fieldCell(x, z); return Math.floor(hash2(i, j) * CROPS.length); }
 // cor macro + pesos (grama, terra, rocha)
-export function groundSample(x, z, col, w) {
-  const ci = cropAt(x, z), c = CROPS[ci];
+// macro = true: sem o lote de lavoura (cor média) — fora do campo dos tanques o shader pinta lotes, cercas e mata por pixel
+export function groundSample(x, z, col, w, macro = false) {
+  const ci = macro ? 0 : cropAt(x, z), c = macro ? CROP_AVG : CROPS[ci];
   const n = 0.5 + 0.5 * (Math.sin(x * 0.045) * Math.sin(z * 0.038) * 0.6 + 0.4 * Math.sin(x * 0.11 + z * 0.083));
   let r = c[0] * (0.85 + n * 0.3), g = c[1] * (0.85 + n * 0.3), b = c[2] * (0.85 + n * 0.3);
-  let wg = ci === 2 ? 0.25 : 1, wd = ci === 2 ? 0.75 : 0, wr = 0;
-  if (ci === 2) { const s = 0.5 + 0.5 * Math.sin(x * 1.6); r *= 0.85 + s * 0.2; g *= 0.85 + s * 0.2; }
+  let wg = ci === 2 && !macro ? 0.25 : 1, wd = ci === 2 && !macro ? 0.75 : 0, wr = 0;
+  if (ci === 2 && !macro) { const s = 0.5 + 0.5 * Math.sin(x * 1.6); r *= 0.85 + s * 0.2; g *= 0.85 + s * 0.2; }
   const slope = Math.hypot(H(x + 1, z) - H(x - 1, z), H(x, z + 1) - H(x, z - 1)) / 2;
   if (slope > 0.3) { const k = clamp((slope - 0.3) * 3, 0, 0.85); r = lerp(r, 0.17, k); g = lerp(g, 0.155, k); b = lerp(b, 0.12, k); wr = k; wg *= 1 - k; }
   const rd = roadDist(x, z);
@@ -102,24 +120,56 @@ function terrainMaterial() {
       .replace('#include <common>', '#include <common>\nattribute vec3 splat; varying vec3 vSplat; varying vec3 vWP;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvSplat = splat; vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D tGrass; uniform sampler2D tDirt; uniform sampler2D tRock; varying vec3 vSplat; varying vec3 vWP;\nfloat det(sampler2D t, vec2 p){ return texture2D(t, p * 0.33).r * 0.6 + texture2D(t, p * 0.047).r * 0.4; }')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D tGrass; uniform sampler2D tDirt; uniform sampler2D tRock; varying vec3 vSplat; varying vec3 vWP;\nfloat det(sampler2D t, vec2 p){ return texture2D(t, p * 0.33).r * 0.6 + texture2D(t, p * 0.047).r * 0.4; }\nfloat hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(hsh(i), hsh(i + vec2(1.0, 0.0)), f.x), mix(hsh(i + vec2(0.0, 1.0)), hsh(i + 1.0), f.x), f.y); }\nfloat fb(vec2 p){ float s = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { s += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; } return s / 0.9375; }')
       .replace('#include <color_fragment>', `#include <color_fragment>
         float dg = det(tGrass, vWP.xz), dd = det(tDirt, vWP.xz), dr = det(tRock, vWP.xz * 0.6);
         float d = dg * vSplat.x + dd * vSplat.y + dr * vSplat.z;
         diffuseColor.rgb *= 0.45 + d * 1.15;
+        // ---- fora do campo dos tanques: paisagem por pixel (nítida de qualquer altura) ----
+        float mac = smoothstep(${(INNER / 2 - 40).toFixed(1)}, ${(INNER / 2 + 10).toFixed(1)}, max(abs(vWP.x), abs(vWP.z)));
+        if (mac > 0.0) {
+          vec2 q = vWP.xz + vec2(13.0, 7.0);
+          // lotes: fileiras deslocadas e larguras variando por quarteirão (não é grade perfeita)
+          float row = floor(q.y / ${FD.toFixed(1)});
+          q.x += hsh(vec2(row, 3.0)) * ${FW.toFixed(1)};
+          vec2 cell = floor(q / vec2(${FW.toFixed(1)}, ${FD.toFixed(1)}));
+          // alguns lotes divididos ao meio (tamanhos variados)
+          vec2 fq0 = fract(q / vec2(${FW.toFixed(1)}, ${FD.toFixed(1)}));
+          if (hsh(cell + 9.0) > 0.6) cell += vec2(0.5 * step(0.5, fq0.x), 0.0);
+          float hc = hsh(cell);
+          vec3 crop = hc < 0.2 ? vec3(0.085, 0.13, 0.04) : hc < 0.4 ? vec3(0.30, 0.24, 0.10) : hc < 0.6 ? vec3(0.15, 0.105, 0.06) : hc < 0.8 ? vec3(0.12, 0.165, 0.05) : vec3(0.22, 0.21, 0.085);
+          crop *= 0.85 + 0.3 * hsh(cell + 17.0);
+          // sulcos de arado/linhas de plantio dentro do lote, em direção sorteada; e a cor só puxa 60% (não vira tabuleiro)
+          float ang = hsh(cell + 23.0) * 3.14159, furrow = 0.94 + 0.06 * sin(dot(vWP.xz, vec2(cos(ang), sin(ang))) * 2.2);
+          vec3 cm = diffuseColor.rgb * crop / vec3(${CROP_AVG.map(v => v.toFixed(4)).join(', ')});
+          vec3 c = mix(diffuseColor.rgb, cm, 0.6) * mix(1.0, furrow, clamp(1.5 / max(fwidth(vWP.x), 0.01), 0.0, 1.0));
+          // cercas-vivas na divisa dos lotes (o bocage normando); afinam até sumir quando ficam menores que um pixel
+          vec2 fq = fract(q / vec2(${FW.toFixed(1)}, ${FD.toFixed(1)})) * vec2(${FW.toFixed(1)}, ${FD.toFixed(1)});
+          float e = min(min(fq.x, ${FW.toFixed(1)} - fq.x), min(fq.y, ${FD.toFixed(1)} - fq.y)), px = max(fwidth(vWP.x), fwidth(vWP.z));
+          float hedge = (1.0 - smoothstep(1.6, 1.6 + px, e)) * clamp(3.0 / max(px, 0.001), 0.25, 1.0) * step(0.18, hsh(cell + 5.0));
+          c = mix(c, vec3(0.045, 0.075, 0.03) * (0.6 + dg * 0.8), hedge * 0.85);
+          // matas (mesma máscara das árvores distantes de scenery.js) com copa irregular
+          // matas: ruído fractal em duas escalas (bosques grandes com borda recortada e capões espalhados)
+          float fo = fb(vWP.xz / 900.0) * 0.75 + fb(vWP.xz / 160.0 + 3.7) * 0.35;
+          c = mix(c, vec3(0.04, 0.065, 0.028) * (0.55 + dg * 0.9), smoothstep(0.66, 0.7, fo));
+          // encosta forte e altitude: rocha e capim ralo nas serras
+          float hi = smoothstep(260.0, 700.0, vWP.y);
+          c = mix(c, diffuseColor.rgb * vec3(0.95, 0.92, 0.85), hi * 0.7);
+          diffuseColor.rgb = mix(diffuseColor.rgb, c, mac);
+        }
         float fade = smoothstep(80.0, 600.0, length(vWP - cameraPosition));
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.97, fade);`);
   };
   return m;
 }
-function terrainMesh(size, seg, drop, holeR) {
+function terrainMesh(size, seg, drop, holeR, macro = false) {
   const g = new THREE.PlaneGeometry(size, size, seg, seg); g.rotateX(-Math.PI / 2);
   const pos = g.attributes.position, col = new Float32Array(pos.count * 3), sp = new Float32Array(pos.count * 3), c = new THREE.Color(), w = [0, 0, 0];
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const ed = holeR ? 0 : sstep(INNER / 2 - 50, INNER / 2, Math.max(Math.abs(x), Math.abs(z))) * 1.4;
     pos.setY(i, H(x, z) - drop - ed);
-    groundSample(x, z, c, w);
+    groundSample(x, z, c, w, macro);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; sp[i * 3] = w[0]; sp[i * 3 + 1] = w[1]; sp[i * 3 + 2] = w[2];
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('splat', new THREE.BufferAttribute(sp, 3));
@@ -137,7 +187,10 @@ function terrainMesh(size, seg, drop, holeR) {
   return m;
 }
 terrainMesh(INNER, 300, 0, 0);
-terrainMesh(OUTER, 260, 1.4, INNER / 2 - 24);
+terrainMesh(OUTER, 260, 1.4, INNER / 2 - 24, true);
+// anel distante até o horizonte (56 km, 200 m por quadrado): as serras fecham a vista e não há mais borda nem vazio
+// no fim do mapa; afundado e por baixo da malha externa na emenda
+terrainMesh(56000, 280, 6, OUTER / 2 - 250, true);
 
 // Mapa de altura + densidade de grama em textura (usado pela grama instanciada na GPU)
 export const HMAP = (() => {

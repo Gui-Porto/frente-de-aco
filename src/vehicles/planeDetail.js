@@ -35,32 +35,6 @@ export function nozzle(add, M, par, x, y, ze, r, n = {}) {
   }
 }
 
-// Cabine: painel de instrumentos com mostradores, capota antirreflexo (coaming), mira refletora
-// e assento ejetável (encosto, apoio de cabeça, alças amarelas). Origem = cabeça do tripulante.
-export function seat(add, M, par, opts = {}) {
-  add(new THREE.BoxGeometry(0.4, 0.72, 0.07), M.dark, par, 0, -0.36, -0.22);                          // encosto
-  add(new THREE.BoxGeometry(0.3, 0.24, 0.14), M.dark, par, 0, -0.01, -0.22);                          // apoio de cabeça / paraquedas
-  add(new THREE.BoxGeometry(0.42, 0.07, 0.42), M.dark, par, 0, -0.7, -0.02);                          // assento
-  for (const s of [1, -1]) {
-    add(new THREE.BoxGeometry(0.035, 0.7, 0.06), M.steel, par, s * 0.17, -0.33, -0.27);               // trilhos do canhão ejetor
-    add(new THREE.BoxGeometry(0.05, 0.05, 0.22), M.yellow, par, s * 0.22, -0.55, 0.05);               // alças laterais
-  }
-  // alça de face (Martin-Baker/KM-1) no topo; F-86: só as laterais
-  if (opts.face !== false) add(new THREE.TorusGeometry(0.06, 0.011, 6, 12, Math.PI), M.yellow, par, 0, 0.1, -0.14);
-  add(new THREE.BoxGeometry(0.08, 0.05, 0.05), M.yellow, par, 0, -0.66, 0.2);                         // alça entre as pernas
-}
-export function panel(add, M, par, z, y, w) {
-  const p = add(new THREE.BoxGeometry(w, 0.28, 0.05), M.dark, par, 0, y - 0.43, z);                     // painel
-  add(new THREE.BoxGeometry(w * 0.9, 0.03, 0.22), M.dark, par, 0, y - 0.28, z + 0.08);                // capota do painel
-  // mostradores voltados para o tripulante (−z)
-  for (let i = 0; i < 6; i++) add(new THREE.CircleGeometry(0.035, 12).rotateY(Math.PI), M.dial, par, (i % 3 - 1) * w * 0.28, y - 0.37 - Math.floor(i / 3) * 0.1, z - 0.027);
-  return p;
-}
-export function gunsight(add, M, par, z, y) {
-  add(new THREE.BoxGeometry(0.08, 0.07, 0.12), M.dark, par, 0, y - 0.23, z);
-  const g = add(new THREE.PlaneGeometry(0.1, 0.09), M.glass, par, 0, y - 0.15, z + 0.02); g.rotation.x = -0.6;
-}
-
 // Luzes: navegação (vermelha à esquerda = +x, verde à direita), branca na deriva, anticolisão vermelha
 export function navLight(add, M, par, p, side) { const o = add(new THREE.SphereGeometry(0.06, 10, 6), side > 0 ? M.red : M.green, par, p[0] + side * 0.02, p[1], p[2]); o.scale.set(0.8, 0.8, 1.6); }
 export function tailLight(add, M, tail, D) { const p = finStation(finCfg(D), 0.98, 1); add(new THREE.SphereGeometry(0.05, 8, 6), M.white, tail, p[0], p[1] - 0.05, p[2] - 0.04); }

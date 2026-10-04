@@ -114,6 +114,8 @@ export function updateAirCamera(dt) {
     const as = v.def.clmax / v.def.cla; if (Math.abs(v.alpha) > as * 0.85) sh += 0.25;
     if (ias > v.def.vne * 0.92) sh += 0.3;
     sh += speedK * 0.04;
+    sh += (v.brakeK || 0) * Math.min(1, ias / 200) * 0.35; // freio aerodinâmico aberto: buffet dos painéis
+    if (v.onGround) sh += Math.min(1, Math.hypot(v.vel.x, v.vel.z) / 60) * 0.18; // rolando na pista: juntas das placas
   }
   if (sh > 0 && !REDUCED) { const a = sh * 0.006 * (1 - acam.aimK * 0.7); camera.rotateX(rand(-1, 1) * a); camera.rotateY(rand(-1, 1) * a); camera.rotateZ(rand(-1, 1) * a * 0.5); }
   S.shake = Math.max(0, S.shake - dt * 1.5); acam.hit = Math.max(0, acam.hit - dt * 2.5);
