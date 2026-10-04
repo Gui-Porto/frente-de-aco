@@ -103,7 +103,8 @@ function fuselage(D) {
     for (const [k, sc] of [[0.4, 0.985], [0.2, 0.95], [-0.15, 0.92], [-1, 0.9], [-3, 0.87], [-7, 0.84], [-14, 0.82], [-30, 0.8]])
       rings.push([z + k * dz, e[1] * sc, e[2] * sc, e[3] * sc, e[4]]);
   }
-  const NR = 32, ex = 2 / 2.4, pos = [], uv = [], top = [], bot = [], duct = [];
+  // jatos: seção elíptica (chapa lisa, arredondada) e mais segmentos; pistão: superelipse de cantos vivos
+  const NR = D.jet ? 44 : 32, ex = D.jet ? 1 : 2 / 2.4, pos = [], uv = [], top = [], bot = [], duct = [];
   const z0 = rings[0][0], z1 = rings[nOut - 1][0];
   for (const [z, hw, tp, bt, yc] of rings) for (let k = 0; k <= NR; k++) {
     const a = k / NR * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
@@ -124,7 +125,7 @@ function fuselage(D) {
   g.setIndex([...top, ...bot, ...duct]); g.addGroup(0, top.length, 0); g.addGroup(top.length, bot.length, 1); if (duct.length) g.addGroup(top.length + bot.length, duct.length, 2);
   g.computeVertexNormals();
   // fundo do duto (onde fica a face do compressor), em z e meia-largura
-  if (noseIn) { const r = rings[rings.length - 1]; g.userData.duct = { z: r[0] * L, hw: r[1] * fr, h: Math.max(r[2], r[3]) * fr, yc: r[4] * fr }; }
+  if (noseIn) { const r = rings[rings.length - 1]; g.userData.duct = { z: r[0] * L, hw: r[1] * fr, h: Math.max(r[2], r[3]) * fr, yc: r[4] * fr, lip: rings[nOut - 1][0] * L }; }
   // amostra da seção numa fração z (para insígnias e acessórios encostarem na chapa)
   g.userData.at = zf => { let r = rings[0]; for (const q of rings.slice(0, nOut)) if (q[0] <= zf) r = q; return { hw: r[1] * fr, h: Math.min(r[2], r[3]) * fr, top: (r[2] + r[4]) * fr, yc: r[4] * fr }; };
   return g;
@@ -212,7 +213,7 @@ export function buildPlane(D) {
     if (duct) {
       // fundo do duto: face do compressor (as pás giram no grupo `prop`), divisória do MiG-15, radar telemétrico do F-86
       add(new THREE.CircleGeometry(duct.hw * 1.04, 24), ductM, root, 0, duct.yc, duct.z + 0.01);
-      if (D.key === 'mig15') add(new THREE.BoxGeometry(0.035, duct.h * 1.75, 1.6), paint, root, 0, duct.yc, duct.z + 0.95);
+      if (D.key === 'mig15') { const sl = duct.lip - 0.12 - duct.z; add(new THREE.BoxGeometry(0.03, duct.h * 1.9, sl), paint, root, 0, duct.yc, duct.z + sl / 2); }
       if (D.key === 'f86') { const r = add(new THREE.CapsuleGeometry(0.1, 0.35, 4, 10).rotateX(Math.PI / 2), paint, root, 0, duct.yc + duct.h * 0.72, duct.z + 0.75); r.scale.y = 0.8; }
     } else {
       // radome em ogiva (curto, como o do APQ-120) e entradas laterais em loft, com placa separadora da camada-limite
