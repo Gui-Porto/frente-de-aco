@@ -8,7 +8,7 @@ import { isDown, pressed, settings } from '../core/settings.js';
 export const cmd = {
   pitch: 0, roll: 0, yaw: 0, thr: 0,      // -1..1 (eixos; 0 = instrutor decide)
   fire: false, missile: false, aim: false, // gatilhos
-  cm: false, ext: false, cam: false, target: false, gear: false, flaps: false, brake: false, wsel: false, rmode: false, rlock: false,
+  cm: false, ext: false, cam: false, target: false, gear: false, flaps: false, brake: false, wsel: false, rmode: false, rlock: false, rnext: false,
   lookX: 0, lookY: 0,                     // olhar/mira pelo direcional analógico (rad/s)
   pad: false,
 };
@@ -22,7 +22,7 @@ export function readInput() {
   cmd.cm = pressed('a_cm'); cmd.ext = pressed('a_ext');
   cmd.cam = pressed('a_cam'); cmd.target = pressed('a_target');
   cmd.gear = pressed('a_gear'); cmd.flaps = pressed('a_flaps'); cmd.brake = pressed('a_airbrake');
-  cmd.wsel = pressed('a_wsel'); cmd.rmode = pressed('a_rmode'); cmd.rlock = pressed('a_rlock');
+  cmd.wsel = pressed('a_wsel'); cmd.rmode = pressed('a_rmode'); cmd.rlock = pressed('a_rlock'); cmd.rnext = pressed('a_rnext');
   cmd.lookX = cmd.lookY = 0; cmd.pad = false;
   // Gamepad padrão (Xbox/PS): esquerdo = rolagem/arfagem direta, direito = mira, gatilhos = potência
   const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(g => g && g.connected && g.mapping === 'standard') : null;

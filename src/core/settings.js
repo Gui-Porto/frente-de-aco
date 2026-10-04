@@ -39,6 +39,7 @@ export const ACTIONS = [
   ['a_wsel', 'Avião', 'Selecionar míssil', ['KeyZ']],
   ['a_rmode', 'Avião', 'Radar: trocar modo', ['KeyN']],
   ['a_rlock', 'Avião', 'Radar: travar / soltar alvo', ['CapsLock']],
+  ['a_rnext', 'Avião', 'Radar: trocar alvo', ['KeyY']],
   ['a_gear', 'Avião', 'Trem de pouso', ['KeyG']],
   ['a_ext', 'Avião', 'Extintor de incêndio', ['KeyK']],
   ['a_cam', 'Avião', 'Trocar câmera (cockpit / externa)', ['KeyV']],

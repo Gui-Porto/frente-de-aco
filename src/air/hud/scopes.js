@@ -86,7 +86,7 @@ function radarScope(p, rd, T) {
     return;
   } else if (!rd.on) ptxt('Radar desligado', 14, ty, 12, T.dim, 'left', UI, 600);
   else ptxt(`${rd.contacts.size} contato${rd.contacts.size === 1 ? '' : 's'}`, 14, ty, 12, T.dim, 'left', UI, 600);
-  ptxt(`${kb('a_rmode')} modo  ·  ${kb('a_rlock')} travar`, RW - 14, ty, 10.5, T.dim, 'right', UI, 600);
+  ptxt(`${kb('a_rmode')} modo · ${kb('a_rlock')} travar · ${kb('a_rnext')} trocar`, RW - 14, ty, 10.5, T.dim, 'right', UI, 600);
 }
 
 // ---------- RWR (+ MAW: o alerta de míssil aparece só aqui, não no centro da tela) ----------
