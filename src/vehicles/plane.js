@@ -430,7 +430,7 @@ export class Plane {
     this.ail = clamp(K * (3.1 * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
-    this.rud = clamp(K * 1.8 * yawErr * (1 - w * 0.7) - 0.5 * this.yr, -1, 1);
+    this.rud = clamp(K * 1.8 * yawErr * (1 - w * 0.7) - 1.6 * this.yr, -1, 1);
     const as = D.clmax / D.cla, aLim = as * (0.86 + this.flaps * 0.08);
     // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
     elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
