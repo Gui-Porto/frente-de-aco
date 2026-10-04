@@ -177,6 +177,17 @@ export function cockpitTone(f0, f1, dur, vol = 0.05, type = 'sine', delay = 0) {
   gg.gain.setValueAtTime(0.0001, t); gg.gain.exponentialRampToValueAtTime(vol, t + 0.008); gg.gain.setValueAtTime(vol, t + Math.max(0.01, dur - 0.02)); gg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(gg); gg.connect(sfx); o.start(t); o.stop(t + dur + 0.02);
 }
+// voz do aviônico: um canal só (fala nova corta a anterior; null cala); amostras mono a `rate` Hz com filtro de rádio
+let voiceSrc = null;
+export function cockpitVoice(pcm, rate) {
+  if (!AC) return;
+  if (voiceSrc) { voiceSrc.stop(); voiceSrc = null; }
+  if (!pcm) return;
+  const b = AC.createBuffer(1, pcm.length, rate); b.copyToChannel(pcm, 0);
+  const s = AC.createBufferSource(), hp = AC.createBiquadFilter(), lp = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = b; hp.type = 'highpass'; hp.frequency.value = 300; lp.type = 'lowpass'; lp.frequency.value = 3200; g.gain.value = 0.35;
+  s.connect(hp); hp.connect(lp); lp.connect(g); g.connect(sfx); s.start(); voiceSrc = s;
+}
 export function cockpitThump(vol = 0.5, f0 = 70, dur = 0.35) { if (AC) thump(AC.currentTime, vol, f0, dur); }
 // impacto no PRÓPRIO avião: "tinc" metálico de bala, "bang" seco de granada
 export function sndHit(big) {
