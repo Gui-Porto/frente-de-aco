@@ -126,7 +126,7 @@ export class Plane {
   eyePos(out) { return out.copy(this.pos); }
   applyTransform() {
     this.root.position.copy(this.pos); this.root.quaternion.copy(this.q);
-    if (this.gearMesh) { this.gearMesh.visible = this.gear > 0.01; if (this.gearMesh.userData.anim) this.gearMesh.userData.anim(this.gear); if (this.gearMesh.userData.squash) this.gearMesh.userData.squash(this.gc || 0); }
+    if (this.gearMesh) { if (this.gearMesh.userData.anim) this.gearMesh.userData.anim(this.gear, this._legK || (this._legK = n => this.legPos(n))); if (this.gearMesh.userData.squash) this.gearMesh.userData.squash(this.gc || 0); }
     this.animSurfaces();
     this.root.updateMatrixWorld(true); this.inv.copy(this.root.matrixWorld).invert();
   }
@@ -155,7 +155,10 @@ export class Plane {
     this.flaps = (this.flapP.L + this.flapP.R) / 2;
     // trem: comando (gearCmd) e posição real (gear 0..1), ~4 s para descer ou subir
     this.gear = clamp(this.gear + (this.gearCmd ? 1 : -1) * dt / (this.def.gearT || 4), 0, 1);
-    if (this.gearCmd && !this.onGround && this.ias > this.gearV * 1.12) { this.gearCmd = 0; if (this.isPlayer) showDmg('Trem recolhido: velocidade acima do limite', true); }
+    // trem baixado bem acima do limite: o vento arranca as pernas (não recolhe sozinho)
+    if (!this.onGround && this.gearOut > 0.3 && this.ias > this.gearV * 1.15) {
+      if ((this.overGear = (this.overGear || 0) + dt) > 0.8) { for (const n of ['L', 'R', 'N']) if (this.legPos(n) > 0.3) this.ripLeg(n); if (this.isPlayer) showDmg('Trem arrancado · velocidade acima do limite'); }
+    } else this.overGear = 0;
     // motor danificado rende menos; dinâmica de rotação/potência fica em EngineSet
     const ek = this.engs.map(e => (e.on ? 0.35 + 0.65 * clamp(e.hp / this.maxHp.engine, 0, 1) : 0)), ekSum = ek.reduce((a, b) => a + b, 0);
     const engK = ekSum / ek.length, thrX = ekSum > 0 ? this.engs.reduce((a, e, i) => a + e.x * ek[i], 0) / ekSum : 0;
@@ -185,7 +188,7 @@ export class Plane {
       const kW = (hpL + hpR) / 2;
       const mach = V / _atm.a; this.mach = mach;
       CL += this.flaps * 0.38 * (aa <= as ? 1 : 0.5);
-      const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.flaps * 0.028 + (this.brakeK || 0) * (D.brakeCd || 0.11) + this.gear * 0.035 + this.bombs.length * 0.0012 + this.rockets * 0.0004 + this.missiles * 0.0008 + waveDrag(D, mach) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
+      const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.flaps * 0.028 + (this.brakeK || 0) * (D.brakeCd || 0.11) + this.gearOut * 0.035 + this.bombs.length * 0.0012 + this.rockets * 0.0004 + this.missiles * 0.0008 + waveDrag(D, mach) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
       // forças
       _pF.set(0, -m * G, 0);
       _pt.crossVectors(_pv, _pl); const ln = _pt.length();
@@ -214,7 +217,7 @@ export class Plane {
       _pw.set(-this.pr, this.yr, this.rr).applyQuaternion(this.q);
       _pq.set(_pw.x * h * 0.5, _pw.y * h * 0.5, _pw.z * h * 0.5, 0).multiply(this.q);
       this.q.x += _pq.x; this.q.y += _pq.y; this.q.z += _pq.z; this.q.w += _pq.w; this.q.normalize();
-      if (this.gearMesh && (this.gear > 0.98 || this.onGround || this.pos.y < H(this.pos.x, this.pos.z) + this.def.fuseR) && this.groundStep(h, this.gear < 0.98)) return;
+      if (this.gearMesh && (this.gearDown || this.onGround || this.pos.y < H(this.pos.x, this.pos.z) + this.def.fuseR) && this.groundStep(h, !this.gearDown)) return;
     }
     if (Math.random() < dt * 0.3) this.dropSign = Math.random() < .5 ? 1 : -1;
     // fisiologia do piloto: nada abaixo de G muito alto; acima de 17 G (ou −3,5 G) SUSTENTADO a carga acumula
@@ -594,6 +597,7 @@ export class Plane {
     const w = side === 'L' ? this.wingL : this.wingR, sg = side === 'L' ? 1 : -1;
     for (const m of Object.values(this.mods)) if (Math.sign(m.c[0]) === sg && Math.abs(m.c[0]) > this.def.fuseR * 1.2) { m.lost = m.dead = true; m.stuck = 0; }
     this.dropSurfIn(w);
+    if (this.legPos(side) != null) { const m = this.mods['gear' + side]; if (this.legPos(side) > 0.03) this.ripLeg(side); else if (m) { m.lost = m.dead = true; const p = this.gearMesh && this.gearMesh.userData.legs[side]; if (p) p.removeFromParent(); } } // a perna vai com a asa
     this.detach(w, 180);
     this.boxes[side === 'L' ? 1 : 2].off = true;
     fxExplosion(this.pos.clone(), .4);
@@ -622,7 +626,21 @@ export class Plane {
     this.pos.y += 0.15; // o pedaço que bateu já foi; não re-toca no mesmo passo
   }
   // trem arrancado: as pernas viram destroço
-  collapseGear() { const g = this.gearMesh; if (!g || !g.visible) return; this.gearMesh = null; this.detach(g, 120); }
+  collapseGear() { for (const n of ['L', 'R', 'N']) if (this.legPos(n) > 0.3) this.ripLeg(n); }
+  // posição de cada perna do trem ('L', 'R', 'N'): a comandada; travada fica onde parou; arrancada = null
+  legPos(n) { const m = this.mods && this.mods['gear' + n]; return !m ? this.gear : m.lost ? null : m.dead ? m.stuck : this.gear; }
+  // extensão média (arrasto) e trem em condição de pouso (principais — e o do nariz no jato — todo baixados)
+  get gearOut() { let s = 0; for (const n of ['L', 'R', 'N']) s += this.legPos(n) || 0; return s / 3; }
+  get gearDown() { return ['L', 'R', ...(this.def.jet ? ['N'] : [])].every(n => (this.legPos(n) ?? 0) > 0.98); }
+  jamLeg(n) { const m = this.mods['gear' + n]; if (m) { m.dead = true; m.stuck = this.gear; } }
+  // perna arrancada: baixada, vira destroço; recolhida, fica presa no alojamento (só não desce mais)
+  ripLeg(n) {
+    const m = this.mods['gear' + n]; if (!m || m.lost) return;
+    const out = this.legPos(n) > 0.03, p = this.gearMesh && this.gearMesh.userData.legs[n];
+    if (!out) return this.jamLeg(n);
+    m.lost = m.dead = true;
+    if (p && p.parent) this.detach(p, n === 'N' ? 40 : 70);
+  }
   // fuselagem no chão: morto, mas o corpo continua inteiro na cena, deslizando, pegando fogo e soltando pedaços
   toWreck() {
     if (this.wreck || this.gone) return;

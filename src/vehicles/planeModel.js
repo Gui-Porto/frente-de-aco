@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { hasModel, gltfPlane } from './modelLibrary.js';
 import { buildPlaneFx } from './planeFx.js';
 import * as DT from './planeDetail.js';
-import { wingCfg as wingPlan, tailCfg, finCfg, station, chordAt, tipBreak, SURF } from './planeGeom.js';
+import { wingCfg as wingPlan, tailCfg, finCfg, station, chordAt, tipBreak, SURF, gearPlan } from './planeGeom.js';
 // =====================================================================
 // Modelo 3D procedural das aeronaves (só visual; física e caixas de
 // colisão vêm dos dados). Asas e empenagem são sólidos de perfil NACA
@@ -559,7 +559,7 @@ export function buildPlane(D) {
   // detalhes por dados (planeDetail.js): luz da cauda, anticolisão, antenas, tanques externos, gancho
   DT.tailLight(add, DM, tail, D); DT.beacons(add, DM, root, D, at); DT.antennas(add, DM, root, tail, D, at);
   DT.drops(add, DM, root, D, at, wingCfg, wingL, wingR, sB); DT.hook(add, DM, root, D, at);
-  const gear = buildGear(D, root, wingCfg, dark, under);
+  const gear = buildGear(D, root, wingCfg, dark, under, fuseG.userData.at);
   // efeitos presos ao avião (chama da PC, fogo do WEP, cone de vapor) — fora da fusão de malhas
   const fx = buildPlaneFx(D, root, nozzles, stacks);
   // une as peças estáticas por material (menos draw calls); superfícies que se soltam ou somem ficam à parte
@@ -570,9 +570,13 @@ export function buildPlane(D) {
 }
 // Trem de pouso: pernas principais na asa, bequilha (pistão) ou trem do nariz (jato). userData.lift = altura
 // do CG ao chão com o trem baixado; userData.pitch = atitude parado (cauda baixa no pistão).
-export function buildGear(D, root, wingCfg, mat, doorM = mat) {
-  const g = new THREE.Group(); g.visible = false; root.add(g);
-  const lift = D.fuseR + 1.35, tire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: .9 });
+// Cada perna tem portas: abertas (presas à perna) com o trem baixado e FECHADAS rentes à chapa com ele recolhido —
+// o trem não some, fica no alojamento (e pode ser atingido lá: módulos gearL/gearR/gearN em planeDamage.js).
+// userData.anim(k, legK): legK(nome) dá a posição de cada perna (travada/arrancada); userData.legs: os pivôs.
+// fa = seção da fuselagem (userData.at) para as portas do nariz/bequilha; sem ela (glTF) não há portas fechadas.
+export function buildGear(D, root, wingCfg, mat, doorM = mat, fa = null) {
+  const g = new THREE.Group(); root.add(g);
+  const GP = gearPlan(D), lift = GP.lift, tire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: .9 });
   // cada perna é um pivô no ponto de fixação: recolhe girando (principais para dentro, nariz para a frente,
   // bequilha para trás); userData.anim(k) põe o trem em k (0 recolhido, 1 baixado)
   const mk = (geo, m, par, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; par.add(o); return o; };
@@ -589,8 +593,8 @@ export function buildGear(D, root, wingCfg, mat, doorM = mat) {
   };
   // perna oleopneumática: cilindro fixo + haste cromada e roda num grupo que sobe quando o amortecedor comprime
   const slides = [];
-  const strut = (x, z, len, rad, r, w, door, fork) => {
-    const p = new THREE.Group(); p.position.set(x, 0, z); g.add(p);
+  const strut = (x, y0, z, len, rad, r, w, door, fork) => {
+    const p = new THREE.Group(); p.position.set(x, y0, z); g.add(p);
     const ol = len * 0.4, cyl = len - ol * 0.55, wy = -len - r * 0.9;
     mk(new THREE.CylinderGeometry(rad, rad * 1.15, cyl, 10), mat, p, 0, -cyl / 2, 0);                          // cilindro
     mk(new THREE.CylinderGeometry(rad * 1.35, rad * 1.35, 0.06, 10), mat, p, 0, -cyl + 0.03, 0);               // colar do retentor
@@ -608,11 +612,33 @@ export function buildGear(D, root, wingCfg, mat, doorM = mat) {
     if (door) mk(new THREE.BoxGeometry(0.025, len * 0.62, Math.max(0.5, r * 1.9)), doorM, p, door * (rad + 0.12), -len * 0.36, 0); // porta presa à perna (cor da barriga)
     return p;
   };
-  const mz = D.wingZ + 0.4, mx = D.span * 0.16, mr = D.jet ? 0.36 : 0.4, legs = [];
-  for (const s of [1, -1]) legs.push([strut(s * mx, mz, lift - mr * 1.9, 0.07, mr, 0.2, s), 'z', -s]);
-  const nz = D.jet ? D.L * 0.33 : -D.L * 0.46, nl = D.jet ? lift : lift * 0.45, nr = D.jet ? 0.28 : 0.17;
-  legs.push([strut(0, nz, nl - nr * 1.9, 0.06, nr, 0.14, 0, D.jet), 'x', D.jet ? -1 : 1]);
-  g.userData.anim = k => { const a = (1 - k) * Math.PI / 2; for (const [p, ax, sg] of legs) p.rotation[ax] = sg * a; };
+  const { mz, mx, mr, nz, nl, nr } = GP, legs = [];
+  // porta fechada: placa rente à chapa cobrindo o alojamento (com a fresta escura em volta)
+  const gap = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: .8 });
+  const shut = (cx, cy, cz, sx, sz) => { const d = new THREE.Group(); d.position.set(cx, cy, cz); g.add(d); mk(new THREE.BoxGeometry(sx, 0.012, sz), doorM, d, 0, -0.006, 0); mk(new THREE.BoxGeometry(sx + 0.03, 0.006, sz + 0.03), gap, d, 0, 0.002, 0); return d; };
+  for (const s of [1, -1]) {
+    // pivô na linha média da asa naquela estação: recolhida, a perna fica DENTRO da asa
+    const o = wingCfg && wingCfg(s), ws = o ? Math.min(0.9, Math.max(0, (mx - o.x0) / o.half)) : 0, st = o ? station(o, ws, 0.45) : [0, 0, 0];
+    const y0 = o ? st[1] : 0, len = lift - mr * 1.9 + y0;
+    const p = strut(s * mx, y0, mz, len, 0.07, mr, 0.2, s);
+    let d = null;
+    if (o) { const c = chordAt(o, ws), yl = y0 - 0.48 * (o.t0 + (o.t1 - o.t0) * ws) * c - len * 0.45 * Math.tan(o.dih); d = shut(s * (mx - len * 0.45), yl, mz, len * 0.95, mr * 2.3); d.rotation.z = s * o.dih; } // segue o diedro
+    legs.push({ name: s > 0 ? 'L' : 'R', p, ax: 'z', sg: -s, d });
+  }
+  const pn = strut(0, 0, nz, nl - nr * 1.9, 0.06, nr, 0.14, 0, D.jet);
+  let dn = null;
+  if (fa) { const zc = nz + (D.jet ? 1 : -1) * (nl - nr) * 0.5, a = fa(zc / D.L); dn = shut(0, a.yc - a.h + 0.004, zc, Math.max(0.3, nr * 1.4), (nl - nr) * 1.05); }
+  legs.push({ name: 'N', p: pn, ax: 'x', sg: D.jet ? -1 : 1, d: dn });
+  // k: posição comandada; legK(nome) → posição daquela perna (null = arrancada)
+  g.userData.anim = (k, legK) => {
+    for (const L of legs) {
+      const kk = legK ? legK(L.name, k) : k;
+      if (kk == null) { if (L.d) L.d.visible = false; continue; }
+      L.p.rotation[L.ax] = L.sg * (1 - kk) * Math.PI / 2;
+      L.p.visible = kk > 0.03; if (L.d) L.d.visible = kk <= 0.03;
+    }
+  };
+  g.userData.legs = Object.fromEntries(legs.map(L => [L.name, L.p]));
   // c: compressão do amortecedor 0..1 (peso parado ≈ 0,35; toque forte → 1)
   g.userData.squash = c => { for (const [s, t] of slides) s.position.y = c * t; };
   g.userData.travel = slides[0][1]; // curso do trem principal: o corpo desce isso com o amortecedor todo comprimido
