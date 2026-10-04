@@ -99,14 +99,25 @@ export function updateHangar(dt) {
   hv.yaw = lerp(hv.yaw, hv.ty, 1 - Math.exp(-dt * 5)); hv.pitch = lerp(hv.pitch, hv.tp, 1 - Math.exp(-dt * 5)); hv.dist = lerp(hv.dist, hv.td, 1 - Math.exp(-dt * 5));
   const wide = innerWidth > 900;
   camera.setViewOffset(innerWidth, innerHeight, wide ? innerWidth * 0.05 : 0, wide ? innerHeight * 0.04 : innerHeight * 0.12, innerWidth, innerHeight);
-  if (Math.abs(camera.fov - 40) > 0.01) { camera.fov = 40; camera.updateProjectionMatrix(); }
-  const cy = 2.2;
-  camera.position.set(Math.sin(hv.yaw) * Math.cos(hv.pitch) * hv.dist, cy + Math.sin(hv.pitch) * hv.dist, Math.cos(hv.yaw) * Math.cos(hv.pitch) * hv.dist);
+  const cy = 2.2, d = hangarDist(hv.yaw, hv.pitch, hv.dist, cy);
+  // câmera aproximada para não atravessar a parede: abre o campo de visão na mesma proporção (o avião cabe igual)
+  const fov = 2 * Math.atan(Math.tan(20 * Math.PI / 180) * hv.dist / d) * 180 / Math.PI;
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  camera.position.set(Math.sin(hv.yaw) * Math.cos(hv.pitch) * d, cy + Math.sin(hv.pitch) * d, Math.cos(hv.yaw) * Math.cos(hv.pitch) * d);
   camera.position.y = Math.max(0.6, camera.position.y);
   camera.lookAt(0, cy, 0);
   // poeira subindo devagar; luz principal com cintilação leve de lâmpada
   if (dust && !REDUCED) { const a = dust.geometry.attributes.position.array; for (let i = 1; i < a.length; i += 3) { a[i] += dt * 0.12; a[i - 1] += Math.sin(t * 0.4 + i) * dt * 0.05; if (a[i] > 15) a[i] = 0.3; } dust.geometry.attributes.position.needsUpdate = true; }
   keyL.intensity = 1400 * (0.97 + 0.03 * Math.sin(t * 17) * Math.sin(t * 5.3));
+}
+// distância da órbita limitada ao interior do galpão (paredes em x = ±30 e z = +30, porta em z = −40, treliças a ~13 m)
+export function hangarDist(yaw, pitch, dist, cy = 2.2) {
+  const dx = Math.sin(yaw) * Math.cos(pitch), dy = Math.sin(pitch), dz = Math.cos(yaw) * Math.cos(pitch);
+  let t = dist;
+  if (Math.abs(dx) > 1e-6) t = Math.min(t, 28 / Math.abs(dx));
+  if (dz > 1e-6) t = Math.min(t, 28 / dz); else if (dz < -1e-6) t = Math.min(t, 38 / -dz);
+  if (dy > 1e-6) t = Math.min(t, (12.5 - cy) / dy);
+  return t;
 }
 // arraste para orbitar, roda para aproximar
 export function hangarPointer(kind, e) {
