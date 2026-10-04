@@ -146,7 +146,7 @@ function fuel(p, x, y, w) {
 
 // ---------- raio-X da aeronave (segurar a tecla): silhueta grande + cada componente e seu estado ----------
 const XG = [
-  ['ESTRUTURA', ['skin', 'spar', 'boom']], ['MOTOR', ['engine', 'oil', 'cool', 'turbo']], ['COMBUSTÍVEL', ['fuel']],
+  ['ESTRUTURA', ['skin', 'spar', 'boom', 'gear']], ['MOTOR', ['engine', 'oil', 'cool', 'turbo']], ['COMBUSTÍVEL', ['fuel']],
   ['COMANDOS', ['ctrl', 'flap', 'act']], ['ARMAS E SISTEMAS', ['gun', 'ammo', 'radar', 'pilot']],
 ];
 export function xrayPanel(p, theme) {
@@ -216,6 +216,7 @@ export function damageList(p) {
     if (m.kind === 'ctrl' && m.dead && !m.lost) out.push([`${UP(m.label)} ${m.ripped ? 'ARRANCADO' : m.name === 'cables' ? (m.label.startsWith('Hastes') ? 'CORTADAS' : 'CORTADOS') : 'TRAVADO'}`, C.enemy]);
     else if (m.kind === 'flap' && m.dead && !m.lost && (fl.dead && fr.dead)) out.push([`${UP(m.label)} ${m.ripped ? 'ARRANCADO' : 'TRAVADO'}`, C.amber]);
     else if (m.kind === 'act' && m.dead) out.push([`${UP(m.label)} AVARIADO`, C.amber]);
+    else if (m.kind === 'gear' && m.dead) out.push([`${UP(m.label)} ${m.lost ? 'ARRANCADO' : 'TRAVADO'}`, m.lost ? C.enemy : C.amber]);
     else if (m.kind === 'radar' && m.dead) out.push(['RADAR INOPERANTE', C.amber]);
     else if (m.kind === 'turbo' && m.dead) out.push(['TURBO AVARIADO', C.amber]);
     else if (m.kind === 'gun' && m.dead && !m.lost) out.push([`${UP(m.label)} INOPERANTE`, C.amber]);
