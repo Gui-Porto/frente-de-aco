@@ -463,7 +463,8 @@ export function buildPlane(D) {
     if (D.cowl === 'radial') { add(new THREE.TorusGeometry(D.noseR * 0.93, 0.06, 8, 28), dark, root, 0, 0, L * 0.43); add(new THREE.CylinderGeometry(D.noseR * 0.92, D.noseR * 0.98, 0.25, 28, 1, true).rotateX(Math.PI / 2), dark, root, 0, 0, L * 0.22); }
     else for (const s of [1, -1]) for (let i = 0; i < 6; i++) { add(new THREE.BoxGeometry(0.12, 0.09, 0.2), dark, root, s * fr * 0.88, fr * 0.42, L * 0.36 - i * 0.24); stacks.push({ x: s * fr * 0.98, y: fr * 0.42, z: L * 0.36 - i * 0.24 - 0.08, dir: -s * 0.75 }); } // escapamentos
     if (D.cowl === 'radial') for (const s of [1, -1]) for (let i = 0; i < 4; i++) stacks.push({ x: s * fr * 0.9, y: -fr * 0.35 + i * 0.16, z: L * 0.2, dir: -s * 0.3 });
-    add(new THREE.CylinderGeometry(fr * 0.25, fr * 0.32, 0.6, 12).rotateX(Math.PI / 2), dark, root, 0, -fr * 0.95, D.key === 'p47' ? L * 0.2 : -L * 0.08); // radiador/tomada de ar ventral
+    // tomada de ar ventral: só P-47 (radiador de óleo/intercooler na frente) e Il-2 (radiador sob a fuselagem); Spitfire tem os da asa e o Fw 190 é radial
+    if (D.key === 'p47' || D.key === 'il2') add(new THREE.CylinderGeometry(fr * 0.25, fr * 0.32, 0.6, 12).rotateX(Math.PI / 2), dark, root, 0, -fr * 0.95, D.key === 'p47' ? L * 0.2 : -L * 0.08);
   }
   // cabine: bolha de vidro assentada na chapa, trilhos; por baixo, a cabine (planeCockpit.js)
   const fat = fuseG.userData.at, cAt = fat(C.z), cy = cAt.top - 0.06, fex = jet ? 1 : 2 / 2.4;
@@ -593,6 +594,26 @@ export function buildPlane(D) {
   };
   // asa = raiz (grupo da asa) + ponta (filho dela: quebra sozinha ou vai junto com a asa inteira)
   const sB = tipBreak(D);
+  // radiador sob a asa (Spitfire): carenagem em loft colada ao intradorso — boca com lábio, colmeia escura recuada,
+  // corpo que engorda e a aba de saída articulada atrás (antes era uma caixa)
+  const radM = new THREE.MeshStandardMaterial({ color: 0x1d1e1c, roughness: .8, metalness: .4 });
+  const radiator = (o, x, zc, par) => {
+    const len = 1.35, secs = [];
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10, z = zc + len / 2 - t * len, hw = 0.2 + 0.06 * Math.sin(Math.PI * Math.min(1, t * 1.3)), hh = 0.09 + 0.07 * Math.sin(Math.PI * Math.min(1, t * 1.15)) - 0.05 * t * t;
+      secs.push([z, x, wingY(o, x, z, -1) - hh + 0.03, hw, Math.max(0.04, hh)]);
+    }
+    add(tubeLoft(secs, 0.45), under, par);
+    const [z0, , y0, hw0, hh0] = secs[0];
+    const lip = []; for (let k = 0; k <= 5; k++) { const a = Math.PI * k / 5, f = (1 - Math.cos(a)) / 2; lip.push([z0 + 0.025 * Math.sin(a), x, y0, hw0 - 0.03 * f, hh0 - 0.03 * f]); }
+    add(tubeLoft(lip, 0.45), under, par);
+    // colmeia: placa escura recuada com aletas finas
+    const core = add(new THREE.BoxGeometry(hw0 * 1.8, hh0 * 1.7, 0.04), radM, par, x, y0, z0 - 0.18);
+    for (let k = -4; k <= 4; k++) add(new THREE.BoxGeometry(0.008, hh0 * 1.7, 0.06), radM, par, x + k * hw0 * 0.2, y0, z0 - 0.15);
+    // aba de saída levemente aberta
+    const e = secs[10], flap = add(new THREE.BoxGeometry(e[3] * 2.1, 0.012, 0.28), under, par, x, e[2] - e[4] * 0.6, e[0] - 0.1); flap.rotation.x = 0.18;
+    return core;
+  };
   const wing = side => {
     const grp = new THREE.Group(); root.add(grp);
     const tip = new THREE.Group(); grp.add(tip); grp.userData.tip = tip;
@@ -603,7 +624,7 @@ export function buildPlane(D) {
     grp.userData.skins = [skin0, cutSurface(o, SURF.cf, mv.filter(m => !inner(m)), tip, false, sB, 1)]; // chapa da raiz e da ponta (insígnias)
     if (D.stripes) for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.3, 0.02, D.chord * 0.86), i % 2 ? black : white, grp, side * (fr + 1.0 + i * 0.3), -fr * 0.25 - 0.17 + (1 + i * 0.3) * Math.tan(dih), D.wingZ - D.chord * 0.2);
     if (D.key === 'mig15') for (const k of [0.38, 0.7]) { const p = station(o, k, 0.5); add(new THREE.BoxGeometry(0.03, 0.18, chordAt(o, k) * 0.9), paint, k < sB ? grp : tip, p[0], p[1] + 0.1, p[2]); } // cercas aerodinâmicas
-    if (D.key === 'spit9') add(new THREE.BoxGeometry(0.45, 0.22, 1.1), paint, grp, side * (fr + 1.0), -fr * 0.25 - 0.22, D.wingZ - 0.4); // radiadores sob a asa
+    if (D.key === 'spit9') radiator(o, side * (fr + 1.0), D.wingZ - 0.35, grp); // radiadores sob a asa
     DT.navLight(add, DM, tip, station(o, 1, 0.3), side); // luz de navegação (vermelha à esquerda, verde à direita)
     return grp;
   };
