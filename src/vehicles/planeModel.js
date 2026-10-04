@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { planeDecals, camoTexture } from './paint.js';
 import { MISSILES } from '../data/vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { hasModel, gltfPlane } from './modelLibrary.js';
 import { buildPlaneFx } from './planeFx.js';
 import * as DT from './planeDetail.js';
@@ -292,6 +293,7 @@ export function buildPlane(D) {
   const DM = { dark, glass, skin: paint, tank: paint, steel: new THREE.MeshStandardMaterial({ color: 0x5b5d5f, roughness: .35, metalness: .85 }),
     heat: new THREE.MeshStandardMaterial({ color: 0x6e6152, roughness: .42, metalness: .85 }), soot: new THREE.MeshStandardMaterial({ color: 0x141312, roughness: .9, metalness: .2 }),
     yellow: new THREE.MeshStandardMaterial({ color: 0xd8b21c, roughness: .55 }), dial: new THREE.MeshStandardMaterial({ color: 0xc9c9bd, roughness: .4 }),
+    seat: new THREE.MeshStandardMaterial({ color: 0x3b3e38, roughness: .7, metalness: .3 }), cushion: new THREE.MeshStandardMaterial({ color: 0x4d4536, roughness: .95 }),
     red: lamp(0xff3020, 0xc01008), green: lamp(0x30ff60, 0x08b030), white: lamp(0xffffff, 0x9a9a9a) };
   const nozzles = [], stacks = [];
   const add = (g, m, p = root, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; p.add(o); return o; };
@@ -303,7 +305,8 @@ export function buildPlane(D) {
     if (duct) {
       // fundo do duto: face do compressor (as pás giram no grupo `prop`), divisória do MiG-15, radar telemétrico do F-86
       add(new THREE.CircleGeometry(duct.hw * 1.04, 24), ductM, root, 0, duct.yc, duct.z + 0.01);
-      if (D.key === 'mig15') { const sl = duct.lip - 0.12 - duct.z; add(new THREE.BoxGeometry(0.03, duct.h * 1.9, sl), paint, root, 0, duct.yc, duct.z + sl / 2); }
+      // MiG-15: divisória vertical do duto (real: separa o ar dos dois lados da cabine) — recuada da boca, fina, na cor do duto
+      if (D.key === 'mig15') { const z1 = duct.lip - 0.45, sl = z1 - duct.z, hh = duct.h * 1.86; add(new THREE.BoxGeometry(0.022, hh, sl), ductM, root, 0, duct.yc, duct.z + sl / 2); add(new THREE.CylinderGeometry(0.016, 0.016, hh, 8), ductM, root, 0, duct.yc, z1); }
       if (D.key === 'f86') { const r = add(new THREE.CapsuleGeometry(0.1, 0.35, 4, 10).rotateX(Math.PI / 2), paint, root, 0, duct.yc + duct.h * 0.72, duct.z + 0.75); r.scale.y = 0.8; }
     } else {
       // radome em ogiva (curto, como o do APQ-120) e entradas laterais em loft, com placa separadora da camada-limite
@@ -337,28 +340,59 @@ export function buildPlane(D) {
     if (D.cowl === 'radial') for (const s of [1, -1]) for (let i = 0; i < 4; i++) stacks.push({ x: s * fr * 0.9, y: -fr * 0.35 + i * 0.16, z: L * 0.2, dir: -s * 0.3 });
     add(new THREE.CylinderGeometry(fr * 0.25, fr * 0.32, 0.6, 12).rotateX(Math.PI / 2), dark, root, 0, -fr * 0.95, D.key === 'p47' ? L * 0.2 : -L * 0.08); // radiador/tomada de ar ventral
   }
-  // cabine: bolha de vidro com montantes
+  // cabine: bolha de vidro assentada na chapa, trilhos, interior pintado, painel sob a capota antirreflexo
   const cz = jet ? L * 0.24 : D.key === 'il2' ? L * 0.08 : -L * 0.02;
   // capota em gota (perfil próprio por aeronave em def.canopy), assentada no dorso da fuselagem
   const C = Object.assign({ z: cz / L, len: jet ? 2.6 : 2.3, w: 0.5, h: jet ? 0.55 : 0.42, frames: jet ? [0.24] : [0.24, 0.62] }, D.canopy);
-  const cAt = fuseG.userData.at(C.z), cy = cAt.top - 0.06, czc = C.z * L;
-  add(canopyGeometry(C.len, C.w, C.h, C.flat), glass, root, 0, cy, czc);
-  for (const t of C.frames) add(canopyFrame(C.len, C.w, C.h, t, jet ? 0.014 : 0.02, C.flat), jet ? paint : dark, root, 0, cy, czc); // montantes finos, da cor da chapa no jato
-  add(new THREE.BoxGeometry(C.w * 1.9, 0.035, 0.04), dark, root, 0, cy + 0.01, czc - C.len / 2 + 0.02); // trilho traseiro
+  const fat = fuseG.userData.at, cAt = fat(C.z), cy = cAt.top - 0.06, czc = C.z * L, fex = jet ? 1 : 2 / 2.4;
+  // altura da chapa (seção superelíptica da fuselagem) sob o ponto (x, z) da capota, no referencial dela
+  const sf = (x, z) => { const a = fat((czc + z) / L), c = Math.min(1, Math.abs(x) / a.hw) ** (1 / fex); return a.yc + (a.top - a.yc) * Math.sqrt(Math.max(0, 1 - c * c)) ** fex - cy - 0.012; };
+  add(canopyGeometry(C.len, C.w, C.h, C.flat, sf), glass, root, 0, cy, czc);
+  const frameM = jet ? paint : dark;
+  for (const t of C.frames) add(canopyFrame(C.len, C.w, C.h, t, jet ? 0.016 : 0.02, C.flat, sf), frameM, root, 0, cy, czc);
+  for (const sd of [1, -1]) add(canopySill(C.len, C.w, C.h, C.flat, sf, sd, jet ? 0.022 : 0.026), frameM, root, 0, cy, czc);
+  // interior: verde-cinza escuro (EUA/Reino Unido/Alemanha), turquesa nos soviéticos
+  const cockM = new THREE.MeshStandardMaterial({ color: D.nation === 'URSS' ? 0x4d7f79 : D.nation === 'Alemanha' ? 0x3a3d3c : 0x35392f, roughness: .85, metalness: .1 });
+  add(cockpitFloor(C.len, C.w, C.h, C.flat, sf), cockM, root, 0, cy, czc);
   // piloto sob a capota (capacete branco no jato, de couro no pistão); a hitbox 'pilot' é alinhada a ele (plane.js)
   const pilot = new THREE.Group(), suit = new THREE.MeshStandardMaterial({ color: jet ? 0x5b5f45 : 0x6b5a3e, roughness: .9 });
-  const helm = new THREE.MeshStandardMaterial({ color: jet ? 0xd9d8d0 : 0x4a3424, roughness: jet ? .35 : .8 });
+  const helm = new THREE.MeshStandardMaterial({ color: jet ? 0xdedcd2 : 0x4a3424, roughness: jet ? .3 : .8 });
+  const vest = new THREE.MeshStandardMaterial({ color: jet ? (D.nation === 'URSS' ? 0x4b3a2a : 0x6f6a3a) : 0x5a4630, roughness: .85 });
+  const glove = new THREE.MeshStandardMaterial({ color: 0x2b241d, roughness: .8 });
+  const visor = new THREE.MeshStandardMaterial({ color: 0x1d2a33, roughness: .08, metalness: .9 });
+  const rb = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 3, r);
+  // membro (braço) como cápsula entre dois pontos
+  const limb = (g, a, b, r, m) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), l = d.length(); const o = add(new THREE.CapsuleGeometry(r, Math.max(0.01, l - 2 * r), 4, 10), m, g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return o; };
   // C.seats: posição de cada tripulante (fração do comprimento da capota, da frente); o primeiro é o piloto
-  const visor = jet ? new THREE.MeshStandardMaterial({ color: 0x2e3a40, roughness: .2, metalness: .6 }) : dark;
   const crew = (g, t, dy = 0) => {
     const y = cy + C.h * 0.62 + dy, z = czc + C.len / 2 - t * C.len; g.position.set(0, y, z); root.add(g);
-    add(new THREE.SphereGeometry(0.135, 16, 12), helm, g, 0, 0, 0);                                         // capacete
-    add(new THREE.BoxGeometry(0.2, 0.06, 0.03), visor, g, 0, 0.0, 0.125);                                   // viseira / óculos
-    if (jet) add(new THREE.CylinderGeometry(0.035, 0.05, 0.1, 8).rotateX(Math.PI / 2), black, g, 0, -0.09, 0.12); // máscara de oxigênio
-    add(new THREE.CapsuleGeometry(0.17, 0.32, 4, 10), suit, g, 0, -0.42, -0.04);                           // tronco
-    // jato: assento ejetável, painel com mostradores e mira; pistão: encosto blindado simples
-    if (jet) { DT.seat(add, DM, g, { face: C.face !== false }); DT.panel(add, DM, g, 0.78, 0, C.w * 1.5); if (g === pilot) DT.gunsight(add, DM, g, 0.7, 0); }
-    else add(new THREE.BoxGeometry(0.36, 0.55, 0.06), dark, g, 0, -0.2, -0.24);
+    // capacete
+    const hm = add(new THREE.SphereGeometry(0.128, 22, 16), helm, g, 0, 0.012, -0.012); hm.scale.set(1, 1.07, 1.13);
+    if (jet) {
+      // viseira (calota escura na frente, na altura dos olhos), máscara de oxigênio e mangueira até o peito
+      const vz = add(new THREE.SphereGeometry(0.134, 22, 10, Math.PI / 2 - 0.95, 1.9, Math.PI * 0.34, Math.PI * 0.24), visor, g, 0, 0.012, -0.012); vz.scale.set(1, 1.07, 1.13);
+      add(new THREE.BoxGeometry(0.03, 0.03, 0.05), helm, g, 0, 0.13, 0.1);                                      // trilho da viseira
+      const mk2 = add(new THREE.CapsuleGeometry(0.042, 0.04, 4, 12).rotateX(Math.PI / 2), black, g, 0, -0.085, 0.11); mk2.scale.set(1, 0.9, 1);
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0.01, -0.11, 0.15), new THREE.Vector3(0.06, -0.2, 0.17), new THREE.Vector3(0.11, -0.3, 0.11)]), 10, 0.016, 6), black, g);
+    } else {
+      // capacete de couro: óculos (aros e lentes) com a tira
+      for (const sx of [1, -1]) { add(new THREE.CylinderGeometry(0.034, 0.034, 0.03, 14).rotateX(Math.PI / 2), black, g, sx * 0.046, 0.03, 0.118); add(new THREE.CircleGeometry(0.028, 14), visor, g, sx * 0.046, 0.03, 0.134); }
+      const st = add(new THREE.TorusGeometry(0.13, 0.008, 4, 24), black, g, 0, 0.03, -0.01); st.rotation.x = Math.PI / 2; st.scale.set(1, 1.13, 1);
+    }
+    // pescoço, tronco de ombros largos, colete/arreios e braços indo ao manche e à manete
+    add(new THREE.CylinderGeometry(0.052, 0.06, 0.1, 12), suit, g, 0, -0.15, -0.025);
+    add(rb(0.44, 0.5, 0.26, 0.09), suit, g, 0, -0.43, -0.05);
+    add(rb(0.46, 0.26, 0.29, 0.08), vest, g, 0, -0.32, -0.04);
+    for (const sx of [1, -1]) add(new THREE.BoxGeometry(0.045, 0.3, 0.02), black, g, sx * 0.1, -0.33, 0.105); // arreios
+    limb(g, [0.2, -0.27, -0.03], [0.22, -0.48, 0.12], 0.055, suit); limb(g, [0.22, -0.48, 0.12], [0.16, -0.52, 0.32], 0.048, suit);
+    limb(g, [-0.2, -0.27, -0.03], [-0.07, -0.5, 0.14], 0.055, suit); limb(g, [-0.07, -0.5, 0.14], [-0.02, -0.56, 0.32], 0.048, suit);
+    add(new THREE.SphereGeometry(0.045, 10, 8), glove, g, 0.16, -0.53, 0.35); add(new THREE.SphereGeometry(0.045, 10, 8), glove, g, -0.02, -0.57, 0.35);
+    // painel na largura que cabe sob o para-brisa naquela estação
+    const zl = z + 0.78 - czc, P = [0, 0, 0]; canopyPoint(C.len, C.w, C.h, Math.min(0.98, Math.max(0.02, (C.len / 2 - zl) / C.len)), 0, P, C.flat, sf);
+    const pw = Math.max(0.3, Math.min(C.w * 1.5, Math.abs(P[0]) * 1.7));
+    // jato: assento ejetável, painel com mostradores e mira; pistão: encosto blindado
+    if (jet) { DT.seat(add, DM, g, { face: C.face !== false }); DT.panel(add, DM, g, 0.78, 0, pw); if (g === pilot) DT.gunsight(add, DM, g, 0.7, 0); }
+    else { add(rb(0.4, 0.62, 0.07, 0.025), DM.seat, g, 0, -0.24, -0.25); add(rb(0.3, 0.2, 0.08, 0.03), DM.cushion, g, 0, 0.0, -0.22); DT.panel(add, DM, g, 0.72, 0, pw); }
     for (const o of g.children) o.userData.fx = true; // marcas de bala não grudam no piloto
     return g;
   };
@@ -366,14 +400,11 @@ export function buildPlane(D) {
   crew(pilot, seats[0]);
   for (let i = 1; i < seats.length; i++) crew(new THREE.Group(), seats[i], C.rearDy || 0);
   if (jet) {
-    const at = fuseG.userData.at, olive = new THREE.MeshStandardMaterial({ color: 0x3d4130, roughness: .8 });
+    const at = fuseG.userData.at;
     // carenagem dorsal só para quem não tem perfil próprio (o perfil def.fuse já desenha o dorso)
     if (!D.fuse) {
       const z0 = cz - 1.25, z1 = -L * 0.36, zm = (z0 + z1) / 2, spine = add(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), paint, root, 0, at(zm / L).top - 0.08, zm);
       spine.scale.set(0.2, 0.26, (z0 - z1) / 2);
-    }
-    if (D.key === 'f86') {
-      add(new THREE.BoxGeometry(0.62, 0.02, 1.5), olive, root, 0, at((cz + 1.6) / L).top + 0.005, cz + 1.6); // painel antirreflexo
     }
   }
   // asas (grupos separados para poder perdê-las)
@@ -426,46 +457,93 @@ export function buildPlane(D) {
   const wingL = wing(1), wingR = wing(-1);
   // carenagem da raiz (fica na fuselagem: a asa que cai deixa a carenagem)
   for (const sd of [1, -1]) add(filletGeometry(wingCfg(sd), fuseG.userData.at, L, Math.min(0.55, Math.max(0.18, D.chord * (jet ? 0.1 : 0.14)))), pair, root);
-  // ---- canhões (def.guns[i].mount): canos, carenagens, casulos, calhas; a boca é o ponto de tiro (gunPts) ----
+  // ---- canhões (def.guns[i].mount): canos, carenagens, casulos, fendas; a boca é o ponto de tiro (gunPts) ----
   const at = fuseG.userData.at, steel = new THREE.MeshStandardMaterial({ color: 0x2b2c2d, roughness: .4, metalness: .8 });
   const secY = (a, ay) => (ay >= 0 ? a.yc + ay * (a.top - a.yc) : a.yc + ay * a.h);
-  const tube = (r0, r1, len, m, x, y, zTip) => add(new THREE.CylinderGeometry(r1, r0, len, 12).rotateX(Math.PI / 2), m, root, x, y, zTip - len / 2); // r1 = ponta
+  // ponto da chapa (seção elíptica) na altura y e a normal ali
+  const hullX = (a, y) => { const hh = y >= a.yc ? a.top - a.yc : a.h; return a.hw * Math.sqrt(Math.max(0, 1 - ((y - a.yc) / hh) ** 2)); };
+  const hullN = (a, x, y) => { const hh = y >= a.yc ? a.top - a.yc : a.h; return new THREE.Vector3(x / (a.hw * a.hw), (y - a.yc) / (hh * hh), 0).normalize(); };
+  // peça rente à chapa: eixo y local = normal, z local = ao longo da fuselagem
+  const _bm = new THREE.Matrix4(), _zA = new THREE.Vector3(0, 0, 1);
+  const flush = (geo, m, x, y, z, n) => { const o = add(geo, m, root, x + n.x * 0.004, y + n.y * 0.004, z); const r = new THREE.Vector3().crossVectors(n, _zA).normalize(); o.quaternion.setFromRotationMatrix(_bm.makeBasis(r, n, _zA)); return o; };
+  const slotG = (w, len) => new THREE.CapsuleGeometry(w / 2, len, 4, 12).rotateX(Math.PI / 2).scale(1, 0.12, 1);
+  const sootM = new THREE.MeshStandardMaterial({ color: 0x1c1a18, roughness: .95, transparent: true, opacity: .45, depthWrite: false });
+  const tube = (r0, r1, len, m, x, y, zTip) => add(new THREE.CylinderGeometry(r1, r0, len, 14).rotateX(Math.PI / 2), m, root, x, y, zTip - len / 2); // r1 = ponta
+  // carenagem torneada: cauda afinando, corpo, frente arredondada até a boca (raio rf) em zf; comprimento len
+  const fairing = (R, len, rf, x, y, zf, m) => { const P = [], z0 = zf - len; for (let i = 0; i <= 16; i++) { const t = i / 16, z = z0 + t * len; const r = t < 0.3 ? R * Math.sin(t / 0.3 * Math.PI / 2) ** 0.7 : t > 0.85 ? R - (R - rf) * ((t - 0.85) / 0.15) ** 1.6 : R; P.push(V2(Math.max(r, 0.004), z)); } return add(DT.latheZ(P, 20), m, root, x, y, 0); };
   const gunPts = (D.guns || []).map(g => {
     const M = g.mount; if (!M) return null;
     const a = at(M.zf), z = M.zf * L;
     return M.b.map(([ax, ay]) => {
       let x = ax * a.hw, y = secY(a, ay);
-      if (M.pod) { // casulo sob a fuselagem: corpo, ponta afinando e boca escura
-        y = a.yc - a.h - M.pod.r * 0.55;
-        tube(M.pod.r * 0.85, M.pod.r, M.pod.len, paint, x, y, z - 0.25);
-        tube(M.pod.r, M.pod.r * 0.7, 0.25, paint, x, y, z);
-        add(new THREE.CircleGeometry(M.pod.r * 0.66, 16), black, root, x, y, z + 0.002);
-        add(new THREE.BoxGeometry(0.06, a.yc - a.h - y + 0.05, M.pod.len * 0.7), paint, root, x, (y + a.yc - a.h) / 2 + 0.02, z - M.pod.len * 0.55); // pilone
+      if (M.pod) {
+        // gôndola/carenagem do canhão: corpo torneado; M.pod.blend = integrada ao ventre (queixo do F-4E), senão com pilone
+        const R = M.pod.r; y = a.yc - a.h - R * (M.pod.blend ? 0.25 : 0.62);
+        fairing(R, M.pod.len + 0.25, R * 0.72, x, y, z, paint);
+        add(new THREE.CircleGeometry(R * 0.66, 18), black, root, x, y, z - 0.03);                         // boca escura
+        if (!M.pod.blend) add(new RoundedBoxGeometry(0.07, a.yc - a.h - y + 0.05, M.pod.len * 0.6, 2, 0.02), paint, root, x, (y + a.yc - a.h) / 2 + 0.02, z - M.pod.len * 0.55); // pilone
+        for (let k = 0; k < 3; k++) add(new THREE.BoxGeometry(R * 0.5, 0.012, 0.05), black, root, x, y - R * 0.98, z - 0.6 - k * 0.12); // fendas de ventilação
       }
-      if (M.fair) tube(M.fair.r * 0.9, M.fair.r * 0.7, M.fair.len, paint, x, y, z);       // carenagem do cano
-      if (M.port) add(new THREE.BoxGeometry(0.07, 0.09, 0.5), black, root, x - Math.sign(x) * 0.02, y, z - 0.2); // calha escura
+      if (M.fair) {
+        // carenagem do canhão sob o nariz: encostada na chapa (antes um tubo solto abaixo dela)
+        y = a.yc - a.h * Math.sqrt(Math.max(0, 1 - (x / a.hw) ** 2)) - M.fair.r * 0.4;
+        fairing(M.fair.r, M.fair.len, M.r * 1.6, x, y, z, paint);
+      }
+      if (M.port) {
+        // calha do F-86: fenda escura rente à chapa, cano lá dentro e fuligem dos disparos para trás
+        x = Math.sign(ax) * hullX(a, y) * Math.abs(ax); const n = hullN(a, x, y);
+        flush(slotG(0.085, 0.34), black, x, y, z - 0.14, n);
+        flush(slotG(0.11, 0.9), sootM, x, y, z - 0.75, n).position.addScaledVector(n, 0.002);
+        x -= n.x * 0.02; y -= n.y * 0.02;
+      }
       const tip = z + M.len, bl = Math.max(M.len, 0) + 0.45;
       if (M.cluster) for (let i = 0; i < M.cluster; i++) { const t = i / M.cluster * Math.PI * 2; tube(M.r, M.r, bl, steel, x + Math.cos(t) * M.rr, y + Math.sin(t) * M.rr, tip); }
       else for (const dx of M.twin ? [-M.twin / 2, M.twin / 2] : [0]) {
         tube(M.r * 1.25, M.r, bl, steel, x + dx, y, tip);
-        if (M.brake) tube(M.r * 1.5, M.r * 1.5, 0.2, steel, x + dx, y, tip);           // freio de boca
+        if (M.brake) { tube(M.r * 1.7, M.r * 1.7, 0.22, steel, x + dx, y, tip); for (const yy of [-1, 1]) add(new THREE.BoxGeometry(M.r * 3.6, 0.02, 0.05), black, root, x + dx, y + yy * M.r * 0.6, tip - 0.08); } // freio de boca com janelas
         add(new THREE.CircleGeometry(M.r * 0.6, 10), black, root, x + dx, y, tip + 0.002);
       }
-      if (M.blast) add(new THREE.BoxGeometry(0.012, 0.62, 1.1), steel, root, x - Math.sign(x) * 0.03, a.yc + 0.05, z - 0.45); // painel anti-sopro
       return [x, y, tip + 0.1];
     });
   });
-  // ---- freios aerodinâmicos (def.brake): painel articulado na borda dianteira + vão escuro por baixo ----
+  // ---- freios aerodinâmicos (def.brake) ----
+  // Na fuselagem: casca curva recortada da própria chapa (acompanha a seção), por dentro nervuras e o atuador; o
+  // vão escuro fica no lugar. Na asa: placa com nervuras. Articulados no bordo dianteiro.
+  const hullPatch = (th0, th1, z0, z1, off) => { // pedaço da chapa entre os ângulos th0..th1 e z0..z1, afastado `off` da chapa
+    const NU = 8, NV = 6, pos = [], idx = [];
+    for (let v = 0; v <= NV; v++) { const z = z0 + (z1 - z0) * v / NV, a = at(z / L); for (let u = 0; u <= NU; u++) { const th = th0 + (th1 - th0) * u / NU, c = Math.cos(th), sn = Math.sin(th), hh = sn >= 0 ? a.top - a.yc : a.h; const px = a.hw * c, py = a.yc + hh * sn, n = hullN(a, px, py); pos.push(px + n.x * off, py + n.y * off, z); } }
+    for (let v = 0; v < NV; v++) for (let u = 0; u < NU; u++) { const p0 = v * (NU + 1) + u, p1 = p0 + 1, p2 = p0 + NU + 1, p3 = p2 + 1; idx.push(p0, p1, p2, p1, p3, p2); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
+  };
+  const flipG = g => { const ix = g.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; } g.computeVertexNormals(); return g; };
   const brakes = [];
   for (const b of D.brake || []) {
-    const sd = Math.sign(b.ax) || 0, side = b.open === 'side';
-    let x, y, z, par = root;
-    if (b.ws != null) { const o = wingCfg(sd), p = station(o, b.ws, b.cf), c = chordAt(o, b.ws); x = p[0]; z = p[2] + b.len / 2; y = p[1] - (o.t0 + (o.t1 - o.t0) * b.ws) * c * 0.5 - 0.02; par = sd > 0 ? wingL : wingR; }
-    else { const a = at(b.zf); x = b.ax * a.hw; y = secY(a, b.ay); z = b.zf * L + b.len / 2; }
-    const piv = new THREE.Group(); piv.position.set(x, y, z); par.add(piv);
-    const dims = side ? [0.03, b.w, b.len] : [b.w, 0.03, b.len];
-    add(new THREE.BoxGeometry(...dims).translate(0, 0, -b.len / 2), side ? paint : under, piv);
-    add(new THREE.BoxGeometry(...dims), ductM, par, x - (side ? sd * 0.03 : 0), y + (side ? 0 : 0.03), z - b.len / 2); // vão
+    const sd = Math.sign(b.ax) || 0, side = b.open === 'side', piv = new THREE.Group();
+    if (b.ws != null) {
+      // asa (F-4E): placa sob o intradorso, nervuras e atuador
+      const o = wingCfg(sd), p = station(o, b.ws, b.cf), c = chordAt(o, b.ws), x = p[0], z = p[2] + b.len / 2, y = p[1] - (o.t0 + (o.t1 - o.t0) * b.ws) * c * 0.5 - 0.02, par = sd > 0 ? wingL : wingR;
+      piv.position.set(x, y, z); par.add(piv);
+      add(new RoundedBoxGeometry(b.w, 0.03, b.len, 2, 0.01).translate(0, 0, -b.len / 2), under, piv);
+      for (const k of [-0.3, 0, 0.3]) add(new THREE.BoxGeometry(0.02, 0.05, b.len * 0.9), ductM, piv, k * b.w, 0.035, -b.len / 2);
+      add(new THREE.CylinderGeometry(0.018, 0.018, 0.3, 6), steel, piv, 0, 0.15, -b.len * 0.55);
+      add(new THREE.BoxGeometry(b.w, 0.01, b.len), ductM, par, x, y + 0.025, z - b.len / 2);                 // vão
+      brakes.push({ pivot: piv, axis: new THREE.Vector3(1, 0, 0), max: -b.deg * deg });
+      continue;
+    }
+    // fuselagem: ângulo do centro do painel na seção (lado: ±x com ay de altura; ventre: −90° deslocado por ax)
+    const a = at(b.zf), dth = b.w / (2 * Math.max(a.hw, 0.3)), z0 = b.zf * L + b.len / 2, z1 = b.zf * L - b.len / 2;
+    const thM = side ? (b.ax > 0 ? Math.atan2(b.ay, 1) : Math.PI - Math.atan2(b.ay, 1)) : -Math.PI / 2 + b.ax * 0.9;
+    const t0 = thM - dth, t1 = thM + dth, cth = Math.cos(thM), sth = Math.sin(thM), hhM = sth >= 0 ? a.top - a.yc : a.h;
+    const P0 = new THREE.Vector3(a.hw * cth, a.yc + hhM * sth, z0);
+    piv.position.copy(P0); root.add(piv);
+    const outer = flipG(hullPatch(t0, t1, z0, z1, 0.012)), inner = hullPatch(t0, t1, z0, z1, -0.008); // o loft sai com a face para dentro
+    for (const g of [outer, inner]) g.translate(-P0.x, -P0.y, -P0.z);
+    add(outer, side ? paint : under, piv); add(inner, ductM, piv);
+    // nervuras por dentro e o atuador (gira com o painel: aparece entre a chapa e o painel aberto)
+    const nI = hullN(a, P0.x, P0.y);
+    for (const k of [-0.5, 0, 0.5]) { const th = thM + k * dth, sn = Math.sin(th), qx = a.hw * Math.cos(th), qy = a.yc + (sn >= 0 ? a.top - a.yc : a.h) * sn; add(new THREE.BoxGeometry(0.02, 0.02, b.len * 0.9), steel, piv, qx - P0.x - nI.x * 0.03, qy - P0.y - nI.y * 0.03, -b.len / 2); }
+    const act = add(new THREE.CylinderGeometry(0.02, 0.02, 0.32, 6), steel, piv, -nI.x * 0.17, -nI.y * 0.17, -b.len * 0.6); act.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), nI);
+    add(flipG(hullPatch(t0, t1, z0, z1, -0.02)), ductM, root);                                                 // vão
     brakes.push({ pivot: piv, axis: side ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0), max: -(side ? sd : 1) * b.deg * deg });
   }
   // empenagem: estabilizador e deriva também com perfil
@@ -627,8 +705,8 @@ export function buildGear(D, root, wingCfg, mat, doorM = mat, fa = null) {
   }
   const pn = strut(0, 0, nz, nl - nr * 1.9, 0.06, nr, 0.14, 0, D.jet);
   let dn = null;
-  if (fa) { const zc = nz + (D.jet ? 1 : -1) * (nl - nr) * 0.5, a = fa(zc / D.L); dn = shut(0, a.yc - a.h + 0.004, zc, Math.max(0.3, nr * 1.4), (nl - nr) * 1.05); }
-  legs.push({ name: 'N', p: pn, ax: 'x', sg: D.jet ? -1 : 1, d: dn });
+  if (fa) { const zc = nz - (nl - nr) * 0.5, a = fa(zc / D.L); dn = shut(0, a.yc - a.h + 0.004, zc, Math.max(0.3, nr * 1.4), (nl - nr) * 1.05); }
+  legs.push({ name: 'N', p: pn, ax: 'x', sg: 1, d: dn }); // nariz e bequilha recolhem para trás, para dentro da fuselagem
   // k: posição comandada; legK(nome) → posição daquela perna (null = arrancada)
   g.userData.anim = (k, legK) => {
     for (const L of legs) {
@@ -745,22 +823,45 @@ export const missileTail = M => M.len / 2 + (formOf(M).nozzle?.len || 0.05);
 // platô sobre o piloto e afina em gota até a traseira
 // f = fim do platô (0,55 na gota; capota longa de dois lugares vai mais longe)
 const canProf = (t, f = 0.55) => (t < 0.28 ? Math.sin(t / 0.28 * Math.PI / 2) ** 0.8 : t < f ? 1 : Math.cos((t - f) / (1 - f) * Math.PI / 2) ** 0.7);
-function canopyPoint(len, w, h, t, a, out, f) {
+// sf(x, z): altura da chapa da fuselagem sob a capota (no referencial da capota). Com ela, a borda de baixo da
+// bolha desce até a chapa em cada estação — antes a borda era reta e ficava uma fresta onde a fuselagem curva.
+function canopyPoint(len, w, h, t, a, out, f, sf) {
   const k = canProf(t, f), wk = Math.max(0.05, 0.55 + 0.45 * Math.min(1, k * 1.4)), c = Math.cos(a), s = Math.sin(a), ex = 0.75;
-  out[0] = Math.sign(c) * Math.abs(c) ** ex * w * wk; out[1] = Math.abs(s) ** ex * h * k; out[2] = len / 2 - t * len;
+  out[0] = Math.sign(c) * Math.abs(c) ** ex * w * wk; out[2] = len / 2 - t * len;
+  const yb = sf ? Math.min(0, sf(out[0], out[2])) : 0, sk = Math.abs(s) ** ex;
+  out[1] = yb + (h * k - yb) * sk;
   return out;
 }
-function canopyGeometry(len, w, h, f) {
-  const NL = 18, NA = 14, pos = [], idx = [], P = [0, 0, 0];
-  for (let i = 0; i <= NL; i++) for (let j = 0; j <= NA; j++) { canopyPoint(len, w, h, i / NL, j / NA * Math.PI, P, f); pos.push(...P); }
+function canopyGeometry(len, w, h, f, sf) {
+  const NL = 24, NA = 18, pos = [], idx = [], P = [0, 0, 0];
+  for (let i = 0; i <= NL; i++) for (let j = 0; j <= NA; j++) { canopyPoint(len, w, h, i / NL, j / NA * Math.PI, P, f, sf); pos.push(...P); }
   for (let i = 0; i < NL; i++) for (let j = 0; j < NA; j++) { const a = i * (NA + 1) + j, b = a + 1, c = a + NA + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
   g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.computeVertexNormals();
   return g;
 }
 // montante: tubo fino seguindo a seção da capota na fração t do comprimento
-function canopyFrame(len, w, h, t, r = 0.02, f) {
+function canopyFrame(len, w, h, t, r = 0.02, f, sf) {
   const pts = []; const P = [0, 0, 0];
-  for (let j = 0; j <= 12; j++) { canopyPoint(len, w * 1.006, h * 1.006, t, j / 12 * Math.PI, P, f); pts.push(new THREE.Vector3(...P)); }
-  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, r, 5, false);
+  for (let j = 0; j <= 14; j++) { canopyPoint(len, w * 1.006, h * 1.006, t, j / 14 * Math.PI, P, f, sf); pts.push(new THREE.Vector3(...P)); }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 18, r, 5, false);
+}
+// trilho da capota: tubo ao longo da borda de baixo (lado sd), assentado na chapa
+function canopySill(len, w, h, f, sf, sd, r) {
+  const pts = [], P = [0, 0, 0];
+  for (let i = 0; i <= 20; i++) { canopyPoint(len, w * 1.01, h, 0.02 + 0.96 * i / 20, sd > 0 ? 0 : Math.PI, P, f, sf); pts.push(new THREE.Vector3(P[0], P[1] + r * 0.5, P[2])); }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, r, 6, false);
+}
+// fundo da cabine visto pelo vidro: a planta da capota um pouco acima da chapa (cor do interior), no lugar da chapa
+// lisa que aparecia antes; o tronco do piloto fica abaixo dele (sentado DENTRO da cabine)
+function cockpitFloor(len, w, h, f, sf) {
+  const NL = 20, NU = 10, pos = [], idx = [], P = [0, 0, 0];
+  for (let i = 0; i <= NL; i++) {
+    const t = 0.03 + 0.94 * i / NL; canopyPoint(len, w, h, t, 0, P, f, sf); const xm = P[0] * 0.94, z = P[2];
+    for (let j = 0; j <= NU; j++) { const x = xm * (2 * j / NU - 1); pos.push(x, Math.min(0, sf(x, z)) + 0.012, z); }
+  }
+  for (let i = 0; i < NL; i++) for (let j = 0; j < NU; j++) { const a = i * (NU + 1) + j, b = a + 1, c = a + NU + 1, d = c + 1; idx.push(a, b, c, b, d, c); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.computeVertexNormals();
+  return g;
 }

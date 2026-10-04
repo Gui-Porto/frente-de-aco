@@ -94,7 +94,7 @@ export function planeModules(D) {
   // para dentro, a do nariz para a frente e a bequilha para trás
   const G = gearPlan(D);
   for (const sd of ['L', 'R']) put('gear' + sd, 'gear', 'Trem' + SIDE[sd][1], [SIDE[sd][0] * (G.mx - G.lift * 0.4), -fr * 0.3, G.mz], [G.lift * 0.42, 0.22, G.mr * 1.1], 8, { leg: sd });
-  put('gearN', 'gear', jet ? 'Trem do nariz' : 'Bequilha', [0, -fr * 0.45, G.nz + (jet ? 1 : -1) * G.nl * 0.4], [0.22, 0.25, G.nl * 0.42], 6, { leg: 'N' });
+  put('gearN', 'gear', jet ? 'Trem do nariz' : 'Bequilha', [0, -fr * 0.45, G.nz - G.nl * 0.4], [0.22, 0.25, G.nl * 0.42], 6, { leg: 'N' });
   put('cables', 'ctrl', D.boost ? 'Hastes de comando' : LABEL.cables, [0, 0, -L * 0.25], [0.18, 0.18, L * 0.14], 9);
   const out = {};
   for (const m of M) out[m.name] = Object.assign(m, { mn: [m.c[0] - m.h[0], m.c[1] - m.h[1], m.c[2] - m.h[2]], mx: [m.c[0] + m.h[0], m.c[1] + m.h[1], m.c[2] + m.h[2]], max: m.hp, hitT: -9, leak: 0, dead: false });
