@@ -59,7 +59,8 @@ export function tipArea(D) {
 // nbay = alojamento do nariz/bequilha (recolhe para trás): z ∈ [za, zb], meia-largura w.
 export function gearPlan(D) {
   const lift = D.fuseR + 1.35, mr = D.jet ? 0.36 : 0.4, nr = D.jet ? 0.28 : 0.17, G = D.gear || {};
-  const mx = (G.track || D.span * 0.32) / 2, mz = D.wingZ + 0.4, ret = G.ret || 'in';
+  // jatos (triciclo): principais atrás do CG, senão o avião senta na cauda; pistão (bequilha): à frente
+  const mx = (G.track || D.span * 0.32) / 2, mz = D.jet ? Math.min(D.wingZ + 0.4, -0.45) : D.wingZ + 0.4, ret = G.ret || 'in';
   const nz = D.jet ? D.L * 0.33 : -D.L * 0.46, nl = D.jet ? lift : lift * 0.45;
   const o = wingCfg(D, 1), ws = Math.min(0.9, Math.max(0, (mx - o.x0) / o.half)), y0 = station(o, ws, 0.45)[1];
   const len = lift - mr * 1.9 + y0;

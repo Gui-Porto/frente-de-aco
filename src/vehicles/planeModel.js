@@ -927,7 +927,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
   g.userData.squash = c => { sq = c; slide(); };
   g.userData.travel = slides[0][1]; // curso do trem principal: o corpo desce isso com o amortecedor todo comprimido
   g.userData.lift = lift; g.userData.pitch = D.jet ? 0 : Math.atan2(lift - nl, D.L * 0.46 + mz) * 0.9;
-  g.userData.mainZ = mz; g.userData.mainX = mx; g.userData.noseZ = nz;
+  g.userData.mainZ = mz; g.userData.mainX = mx; g.userData.noseZ = nz; g.userData.noseLift = nl; // nl: CG → chão pela roda do nariz/bequilha
   return g;
 }
 // Funde filhos diretos de `grp` que são malhas simples (sem filhos, material único, sem espelhamento)
