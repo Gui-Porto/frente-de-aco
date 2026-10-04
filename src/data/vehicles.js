@@ -139,7 +139,11 @@ export const PLANES = {
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
     fuseR: 0.72, noseR: 0.62, wingZ: 0.0, chord: 3.3, tipChord: 1.6, cowl: 'intake',
     fuse: [[-0.53, .4, .42, .4, .04], [-0.44, .5, .55, .5, .06], [-0.3, .7, .8, .72, .05], [-0.14, .9, 1.02, .92, .02], [0.02, 1, 1.1, 1, 0], [0.16, 1, 1.12, 1, 0], [0.28, .94, 1.02, .96, -.03], [0.38, 'n1.02', 'n.98', 'n1.04', -.05], [0.46, 'n.98', 'n.9', 'n1', -.06]],
-    canopy: { z: 0.22, len: 2.7, w: 0.44, h: 0.62, frames: [0.24] },
+    canopy: { z: 0.22, len: 2.7, w: 0.44, h: 0.62, frames: [0.24], face: false },
+    // detalhes do modelo (vehicles/planeDetail.js): bocal sem pós-combustão, antenas UHF (lâmina ventral) e do rádio-compasso,
+    // dois tanques alijáveis de 120 gal sob as asas
+    nozzle: { len: 0.5 }, antennas: [{ k: 'blade', zf: -0.1, ay: -1, h: 0.26, len: 0.34 }, { k: 'whip', zf: 0.02, ay: 1, h: 0.42, rake: 0.55 }],
+    drops: [{ ws: 0.3, len: 3.2, d: 0.6 }],
     // tanques na fuselagem (dianteiro e central) e integrais nas asas; comandos hidráulicos (normal + alternativo) com profundor todo móvel
     stab: 'all', boost: { ch: ['elev', 'ail'], manual: 0.12 },
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque dianteiro', z: 0.1, s: [0.5, 0.45, 0.7] }, { id: 'fuelC', k: 'fuel', n: 'Tanque central', z: -0.03, y: 0.15, s: [0.5, 0.4, 0.55] },
@@ -160,7 +164,10 @@ export const PLANES = {
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1', maw: 'pd',
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
     fuse: [[-0.53, .42, .46, .44, .08], [-0.45, .56, .62, .58, .08], [-0.32, .78, .86, .82, .05], [-0.16, .96, 1.04, 1, .02], [0, 1.04, 1.1, 1.06, 0], [0.14, 1.04, 1.1, 1.06, 0], [0.27, .98, 1.02, 1, -.01], [0.37, 'n1.06', 'n1.06', 'n1.06', -.02], [0.46, 'n1', 'n1', 'n1', -.02]],
-    canopy: { z: 0.22, len: 2.3, w: 0.42, h: 0.55, frames: [0.24, 0.6] },
+    canopy: { z: 0.22, len: 2.3, w: 0.42, h: 0.55, frames: [0.24, 0.6], face: false },
+    // mastro da antena do rádio atrás da capota com fio até a deriva; tanques "chinelo" de 250 l rentes à asa
+    nozzle: { len: 0.5 }, antennas: [{ k: 'mast', zf: 0.08, ay: 1, h: 0.5, rake: 0.25, wire: 0.92 }, { k: 'whip', zf: -0.15, ay: -1, h: 0.4, rake: 0.6 }],
+    drops: [{ ws: 0.42, len: 2.6, d: 0.46, ph: 0.04 }],
     // tanque principal entre a cabine e o motor e tanque traseiro (sem tanque na asa); hidráulico único: flaps, freios e servo do aileron (bis)
     boost: { ch: ['ail'], manual: 0.55 },
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque principal', z: 0.08, s: [0.55, 0.55, 0.75] }, { id: 'fuelA', k: 'fuel', n: 'Tanque traseiro', z: -0.36, y: 0.3, s: [0.3, 0.2, 0.3] },
@@ -184,7 +191,10 @@ export const PLANES = {
     fuseR: 0.95, noseR: 0.5, wingZ: -1.2, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, intakes: 'side', nozzles: 2, gunPod: true, wingBreak: [0.66, 12], finish: 'camo', underColor: 0xc9ccc6,
     radar: 'apq120', rwr: 'apr36',
     fuse: [[-0.53, .72, .42, .5, -.1], [-0.46, .78, .5, .56, -.08], [-0.36, .86, .62, .66, -.04], [-0.2, .95, .86, .82, 0], [0, 1, 1, .95, 0], [0.14, .92, 1.02, .9, 0], [0.26, .7, .92, .78, .02], [0.36, .52, .7, .62, 0], [0.45, 'n1', 'n1', 'n1', 0]],
-    canopy: { z: 0.27, len: 5.0, w: 0.46, h: 0.62, frames: [0.2, 0.5, 0.76] }, smoke: 0.8,
+    canopy: { z: 0.27, len: 5.0, w: 0.46, h: 0.62, frames: [0.2, 0.5, 0.76], seats: [0.34, 0.74], flat: 0.8, rearDy: -0.03 }, smoke: 0.8,
+    // bocais com pétalas da pós-combustão, lâminas UHF/IFF, anticolisão em cima e embaixo, gancho e tanques de 370 gal nos pilones externos
+    nozzle: { len: 0.7, petals: 18, petalLen: 0.5 }, antennas: [{ k: 'blade', zf: 0.04, ay: 1, h: 0.3, len: 0.42 }, { k: 'blade', zf: 0.02, ay: -1, h: 0.24, len: 0.34 }],
+    beacons: [[-0.12, 1], [0.15, -1]], hook: true, drops: [{ ws: 0.8, len: 4.3, d: 0.66 }],
     // 7 células na fuselagem (em três blocos) + tanques integrais nas asas; dois J79; estabilizador todo móvel;
     // PC-1 e PC-2 movem os comandos, o utilitário move flaps e freios
     stab: 'all', boost: { ch: ['elev', 'ail', 'rud'], manual: 0.08 }, ail: [0.3, 0.6], flap: [0.04, 0.29],
@@ -209,6 +219,9 @@ export const PLANES = {
     radar: 'rp22', rwr: 'spo10', maw: 'pd',
     fuse: [[-0.53, .82, .84, .82, 0], [-0.44, .86, .9, .86, 0], [-0.3, .92, 1, .92, 0], [-0.1, .96, 1.18, .96, 0], [0.08, .98, 1.22, .98, 0], [0.2, .98, 1.18, .98, 0], [0.3, .94, 1, .94, 0], [0.39, 'n1.18', 'n1.18', 'n1.18', 0], [0.46, 'n1.1', 'n1.1', 'n1.1', 0]],
     canopy: { z: 0.26, len: 2.7, w: 0.38, h: 0.5, frames: [0.26, 0.62] },
+    // pétalas da pós-combustão, IFF "Odd Rods" sob o nariz, lâmina no dorso e tanque ventral de 490 l
+    nozzle: { len: 0.6, petals: 16, petalLen: 0.4 }, antennas: [{ k: 'rods', zf: 0.37, ay: -1, h: 0.22 }, { k: 'blade', zf: -0.12, ay: 1, h: 0.2, len: 0.3 }],
+    drops: [{ belly: -0.17, len: 3.1, d: 0.52, fins: 3 }],
     // tanques na fuselagem e nas asas; estabilizador todo móvel; dois hidráulicos (principal e de reforço) movem os comandos
     stab: 'all', boost: { ch: ['elev', 'ail'], manual: 0.1 }, flap: [0.04, 0.42], ail: [0.48, 0.9],
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque dianteiro', z: 0.12, y: 0.35, s: [0.4, 0.3, 1.0] }, { id: 'fuelC', k: 'fuel', n: 'Tanque central', z: -0.05, y: 0.35, s: [0.4, 0.3, 0.9] },
