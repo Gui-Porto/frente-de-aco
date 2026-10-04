@@ -2,7 +2,7 @@ import { heatLevel } from '../vehicles/engineHeat.js';
 import { S, planes } from '../core/state.js';
 import { V3, UP, clamp, rand } from '../core/util.js';
 import { H } from '../world/terrain.js';
-import { G } from '../data/vehicles.js';
+import { G, RHO } from '../data/vehicles.js';
 import { AIR } from './aircraft.js';
 import { Seeker, leadPoint, energyHeight, fwdOf } from './targeting.js';
 import { launchMissile, incomingTo, dropCM } from './missiles.js';
@@ -30,6 +30,27 @@ export class FighterBrain {
     this.irRack = p.racks.find(r => r.M.seeker !== 'sarh') || null; this.sarhRack = p.racks.find(r => r.M.seeker === 'sarh') || null;
     this.seeker = this.irRack ? new Seeker(this.irRack.M) : null;
     this.threat = null; this.missile = null;
+    // decolagem: parado na pista (opts.runway), espera a vez (delay), rola na própria faixa, roda em vr, recolhe o trem e sobe
+    this.runway = opts.runway || null; this.takeoff = !!(this.runway && p.onGround); this.toDelay = opts.delay || 0;
+    if (this.takeoff) {
+      const a = this.runway, D = p.def;
+      this.rx = Math.cos(a.yaw); this.rz = -Math.sin(a.yaw); this.lane = (p.pos.x - a.x) * this.rx + (p.pos.z - a.z) * this.rz;
+      this.vr = 1.1 * Math.sqrt(2 * D.mass * G / (RHO * D.S * D.clmax)); // ~10% acima do estol limpo
+    }
+  }
+  // fase de decolagem (sem combate): segue o eixo da faixa e só puxa o nariz com velocidade
+  takeoffStep(dt) {
+    const p = this.p, a = this.runway, fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), dir = _d;
+    p.firing = false; p.airbrake = false; p.flapStage = 0;
+    const off = (p.pos.x - a.x) * this.rx + (p.pos.z - a.z) * this.rz - this.lane;
+    dir.set(fx, 0, fz).addScaledVector(_a.set(this.rx, 0, this.rz), -clamp(off * 0.08, -0.3, 0.3));
+    if ((this.toDelay -= dt) > 0) { p.throttle = 0; p.wep = false; dir.y = -0.05; p.steerTo(dir.normalize(), dt, { glim: 3 }); return; }
+    p.throttle = 1; p.wep = true;
+    const agl = p.pos.y - H(p.pos.x, p.pos.z);
+    if (p.onGround) dir.y = p.ias > this.vr ? 0.17 : -0.05;
+    else { dir.y = 0.22; if (agl > 25) p.gearCmd = 0; }
+    p.steerTo(dir.normalize(), dt, { glim: 3 });
+    if ((!p.onGround && agl > 250) || this.stateT > 90) { this.takeoff = false; this.state = 'patrol'; this.stateT = 0; p.gearCmd = 0; }
   }
   // percepção e decisão (em frequência menor que a física)
   decide() {
@@ -90,6 +111,7 @@ export class FighterBrain {
     const p = this.p; if (!p.alive) { p.firing = false; return; }
     this.stateT += dt;
     if ((this.think -= dt) <= 0) { this.think = this.d.react * rand(0.8, 1.2); this.decide(); }
+    if (this.takeoff) { this.takeoffStep(dt); return; }
     p.axes(); fwdOf(p.q, _f);
     const d = this.d, dir = _d.set(0, 0, 0); let glim = d.glim, fire = false;
     // WEP só em combate e com o motor frio (acima de ~118 °C ele se degrada)

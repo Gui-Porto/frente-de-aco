@@ -8,4 +8,4 @@ Nenhum item no momento.
 
 ## Pendências menores
 
-- IA não decola do chão (só o jogador começa na pista).
+Nenhuma no momento.

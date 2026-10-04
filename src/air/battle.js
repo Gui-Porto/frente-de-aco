@@ -41,7 +41,10 @@ export const B = {
     const x = (i - (n - 1) / 2) * 130 + rand(-20, 20), yaw = side > 0 ? Math.PI : 0;
     const names = NAMES[team], who = mkWho(names[this.nameI[team]++ % names.length], team, false);
     const p = new Plane(key, team, who, new V3(x, y, z + Math.abs(i - (n - 1) / 2) * 60 * side), yaw, PLANE_V(key), { ord: !!o.ord });
-    p.brain = new FighterBrain(p, this.cfg.diff, o); p.dmgBy = new Map();
+    // o.ground: começa estacionado na própria pista e decola (como o jogador)
+    const field = o.ground && p.gearMesh ? AIRFIELDS.find(f => f.team === team) : null, k = field ? this.grid[team]++ : 0;
+    if (field) this.parkOnRunway(p, field, k, team === 1);
+    p.brain = new FighterBrain(p, this.cfg.diff, field ? Object.assign({ runway: field }, o) : o); p.dmgBy = new Map(); p.gridK = field ? k : -1;
     who.veh = key; who.v = p; who.assists = 0;
     return p;
   },
@@ -53,6 +56,9 @@ export const B = {
       const key = this.cfg.enemyPlane && team === -1 ? this.cfg.enemyPlane : pool[Math.floor(Math.random() * pool.length)];
       out.push(this.spawnOne(key, team, slot, team === 1 ? n + 1 : n, o));
     }
+    // decolagem em ordem: a fila mais à frente na pista sai primeiro (quem está atrás não alcança quem ainda está parado)
+    const rows = Math.max(0, ...out.map(p => p.gridK >> 1));
+    for (const p of out) if (p.gridK >= 0) p.brain.toDelay = (rows - (p.gridK >> 1)) * 1.6 + (p.gridK % 2) * 0.5;
     return out;
   },
   toast(t) { toast(t); },
@@ -66,7 +72,7 @@ export const B = {
   start(cfg) {
     clearWorld(); clearMissiles();
     this.cfg = cfg; this.arena = ARENA[AIR[cfg.plane].era] || ARENA.jato;
-    S.mode = 'air'; S.airLimit = this.arena.limit; S.air = this; this.mode = MODES[cfg.mode]; this.t = 0; this.phase = 'battle'; this.result = null; this.downT = 0; this.nameI = { 1: 0, '-1': 0 };
+    S.mode = 'air'; S.airLimit = this.arena.limit; S.air = this; this.mode = MODES[cfg.mode]; this.grid = { 1: 0, '-1': 0 }; this.t = 0; this.phase = 'battle'; this.result = null; this.downT = 0; this.nameI = { 1: 0, '-1': 0 };
     this.stats = { kills: 0, assists: 0, dmgDealt: 0, dmgTaken: 0, missiles: 0, deaths: 0 };
     applyEnv(cfg.weather, cfg.time);
     S.me = mkWho('Você', 1, true); S.me.assists = 0;
@@ -171,11 +177,19 @@ export const B = {
   },
   // avião parado na cabeceira da pista, trem baixado, motor em marcha lenta, pronto para decolar
   parkAtRunway(p, a) {
-    const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), x = a.x - fx * (a.len / 2 - 50), z = a.z - fz * (a.len / 2 - 50), G = p.gearMesh.userData;
+    this.parkOnRunway(p, a);
+    resetAirCam(a.yaw);
+    this.refit.done = true; // já sai reparado: não repara de novo parado na cabeceira
+  },
+  // vaga na pista: k = 0 é o eixo na cabeceira (jogador); a IA ocupa duas faixas a ±14 m do eixo, em fila,
+  // começando 40 m à frente da vaga do jogador quando ele está nesta pista (ahead)
+  parkOnRunway(p, a, k = -1, ahead = false) {
+    const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), G = p.gearMesh.userData;
+    const lat = k < 0 ? 0 : (k % 2 ? 1 : -1) * 14, along = k < 0 ? 50 : 50 + Math.floor(k / 2) * 60 + (ahead ? 40 : 0);
+    const x = a.x - fx * (a.len / 2 - along) + fz * lat, z = a.z - fz * (a.len / 2 - along) - fx * lat;
     p.pos.set(x, H(x, z) + G.lift, z); p.vel.set(0, 0, 0); p.q.setFromEuler(new Euler(-G.pitch, a.yaw, 0, 'YXZ'));
     p.pr = p.yr = p.rr = 0; p.ias = 0; p.onGround = true; p.gear = p.gearCmd = 1; p.throttle = 0; p.wep = false; p.airbrake = false;
-    p.applyTransform(); resetAirCam(a.yaw);
-    this.refit.done = true; // já sai reparado: não repara de novo parado na cabeceira
+    p.applyTransform();
   },
   // como no WT: depois do reparo a tela apaga e o avião reaparece parado na cabeceira, pronto para decolar
   fade: null,
