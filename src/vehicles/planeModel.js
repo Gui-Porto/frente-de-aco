@@ -107,10 +107,15 @@ function fuselage(D) {
   // jatos: seção elíptica (chapa lisa, arredondada) e mais segmentos; pistão: superelipse de cantos vivos
   const NR = D.jet ? 44 : 32, ex = D.jet ? 1 : 2 / 2.4, pos = [], uv = [], top = [], bot = [], duct = [];
   const z0 = rings[0][0], z1 = rings[nOut - 1][0];
-  for (const [z, hw, tp, bt, yc] of rings) for (let k = 0; k <= NR; k++) {
-    const a = k / NR * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
-    const x = Math.sign(c) * Math.abs(c) ** ex * Math.max(hw, 0.01), y = (s >= 0 ? tp : bt) * Math.sign(s) * Math.abs(s) ** ex;
-    pos.push(x * fr, (y + yc) * fr, z * L); uv.push(k / NR, (z - z0) / (z1 - z0));
+  // UV em metros (como a asa): v ao longo do eixo, u = arco a partir do ventre, espelhado dos dois lados — sem
+  // costura, e camuflagem/painéis na mesma escala da asa (antes um só quadro esticava na fuselagem inteira)
+  for (const [z, hw, tp, bt, yc] of rings) {
+    const per = Math.PI * (Math.max(hw, 0.01) + (tp + bt) / 2) * fr; // perímetro (aprox.) da seção
+    for (let k = 0; k <= NR; k++) {
+      const a = k / NR * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const x = Math.sign(c) * Math.abs(c) ** ex * Math.max(hw, 0.01), y = (s >= 0 ? tp : bt) * Math.sign(s) * Math.abs(s) ** ex;
+      pos.push(x * fr, (y + yc) * fr, z * L); uv.push(Math.acos(Math.max(-1, Math.min(1, -s))) / Math.PI * per * 0.5 * 0.22, z * L * 0.22);
+    }
   }
   const row = NR + 1;
   for (let j = 0; j < rings.length - 1; j++) for (let k = 0; k < NR; k++) {
@@ -131,6 +136,36 @@ function fuselage(D) {
   g.userData.at = zf => { let r = rings[0]; for (const q of rings.slice(0, nOut)) if (q[0] <= zf) r = q; return { hw: r[1] * fr, h: Math.min(r[2], r[3]) * fr, top: (r[2] + r[4]) * fr, yc: r[4] * fr }; };
   return g;
 }
+// Carenagem da raiz da asa: concordância côncava entre a fuselagem e o dorso (grupo 0) e o ventre (grupo 1) da
+// asa, ao longo da corda da raiz e um pouco além do bordo de fuga. o = planta da asa (wingCfg), fa = seção da
+// fuselagem (userData.at), R = raio máximo. Cada estação é uma Bézier quadrática fuselagem → canto → asa.
+function filletGeometry(o, fa, L, R) {
+  const c0 = o.c0, zle = o.zq0 + 0.25 * c0, z0 = zle + 0.06 * c0, z1 = zle - c0 * 1.22, NZ = 18, NU = 7, pos = [], uv = [], up = [], low = [], sd = o.side;
+  // meia-largura da fuselagem na altura y (seção ~elíptica)
+  const fx = (a, y) => { const hh = y >= a.yc ? a.top - a.yc : a.h; return a.hw * Math.sqrt(Math.max(0, 1 - ((y - a.yc) / Math.max(hh, 0.05)) ** 2)); };
+  for (const [g, sgn, kR] of [[up, 1, 1], [low, -1, 0.55]]) {
+    const base = pos.length / 3;
+    for (let i = 0; i <= NZ; i++) {
+      const z = z0 + (z1 - z0) * i / NZ, xc = Math.min(1, Math.max(0, (zle - z) / c0)), a = fa(z / L);
+      const t = i / NZ, r = R * kR * Math.sin(Math.PI * Math.min(1, t * 1.15)) ** 0.55 + 0.004; // cresce do bordo de ataque e some depois do de fuga
+      const yw = o.y0 + sgn * (yt(xc) * o.t0 * c0 + (sgn > 0 ? 0.012 * c0 * Math.sin(Math.PI * xc) : 0)) * (xc < 1 ? 1 : 0);
+      const xw = fx(a, yw), A = [fx(a, yw + sgn * r) - 0.02, yw + sgn * r], C = [xw, yw], B = [xw + r * 1.3, yw - sgn * 0.004];
+      for (let k = 0; k <= NU; k++) {
+        const u = k / NU, w0 = (1 - u) ** 2, w1 = 2 * u * (1 - u), w2 = u * u;
+        const x = w0 * A[0] + w1 * C[0] + w2 * B[0], y = w0 * A[1] + w1 * C[1] + w2 * B[1];
+        pos.push(sd * x, y, z); uv.push((y + x) * 0.22, z * 0.22);
+      }
+    }
+    for (let i = 0; i < NZ; i++) for (let k = 0; k < NU; k++) {
+      const a = base + i * (NU + 1) + k, b = a + 1, c = a + NU + 1, d = c + 1;
+      g.push(...((sd * sgn > 0) ? [a, b, c, b, d, c] : [a, c, b, b, c, d]));
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex([...up, ...low]); g.addGroup(0, up.length, 0); g.addGroup(up.length, low.length, 1); g.computeVertexNormals();
+  return g;
+}
 // tubo em loft de seções superelípticas: secs = [[z, cx, cy, hw, hh]]; ex < 1 deixa a seção "quadrada"
 // de cantos redondos (duto de entrada de ar). UV em metros, como o da asa (a camuflagem não estica).
 function tubeLoft(secs, ex) {
@@ -144,15 +179,25 @@ function tubeLoft(secs, ex) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
-// lâmina de hélice afinando para a ponta e torcida
-function bladeGeometry(len) {
-  const g = new THREE.BoxGeometry(0.26, len, 0.05, 1, 6, 1), p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i), t = (y + len / 2) / len, w = 1 - 0.45 * t, tw = (0.55 - 0.45 * t);
-    const x = p.getX(i) * w, z = p.getZ(i);
-    p.setXYZ(i, x * Math.cos(tw) - z * Math.sin(tw), y + len / 2, x * Math.sin(tw) + z * Math.cos(tw));
+// pá de hélice: haste redonda na raiz, corda máxima a ~40% (pá "remo" dos anos 40), ponta arredondada;
+// seção em perfil (NACA, bordo de ataque no sentido do giro) torcida de ~50° na raiz a ~15° na ponta. Raiz em y = 0.
+// t0: começa nessa fração do comprimento (a ponta pintada é o trecho 0,93..1, um pouco mais grossa)
+function bladeGeometry(len, cmax = 0.3, t0 = 0, grow = 1) {
+  const NS = 16, pos = [], idx = [], R = 2 * NP - 2;
+  for (let j = 0; j <= NS; j++) {
+    const t = t0 + (1 - t0) * j / NS, y = t * len;
+    const c = t < 0.1 ? 0.07 + (cmax * 0.55 - 0.07) * t / 0.1 : t < 0.4 ? cmax * (0.55 + 0.45 * Math.sin((t - 0.1) / 0.3 * Math.PI / 2)) : cmax * Math.sqrt(Math.max(0.02, 1 - ((t - 0.4) / 0.6) ** 2.4));
+    const th = t < 0.1 ? 1 : Math.max(0.09, 0.22 - 0.16 * t), tw = 0.9 - 0.65 * t, ct = Math.cos(tw), sn = Math.sin(tw);
+    for (let k = 0; k < R; k++) {
+      const up = k < NP, xc = up ? XS[k] : XS[R - k], sg = up ? 1 : -1;
+      const u = (xc - 0.3) * c, v = t < 0.1 ? sg * Math.sqrt(Math.max(0, 0.25 - (xc - 0.5) ** 2)) * c : sg * yt(xc) * th * c; // raiz: seção redonda
+      pos.push((u * ct + v * sn) * grow, y, (v * ct - u * sn) * grow); // bordo de ataque para −x (sentido do giro) e à frente (+z)
+    }
   }
-  g.computeVertexNormals(); return g;
+  for (let j = 0; j < NS; j++) for (let k = 0; k < R; k++) { const a = j * R + k, b = j * R + (k + 1) % R, c2 = a + R, d = b + R; idx.push(a, c2, b, b, c2, d); }
+  const tip = pos.length / 3; pos.push(0, len, 0); for (let k = 0; k < R; k++) idx.push(NS * R + k, tip, NS * R + (k + 1) % R);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
 }
 // chapa metálica com painéis e rebites (jatos sem pintura)
 let metalTex = null;
@@ -170,19 +215,58 @@ function metalTexture() {
       const w = 70 + Math.random() * 110, t = (Math.random() - 0.5) * 6 | 0, b = Math.random() < 0.15 ? 3 : 0;
       g.fillStyle = `rgb(${195 + t},${198 + t + b},${200 + t + b})`; g.fillRect(x, y * rh, w, rh);
       const rr = 78 + Math.random() * 22 | 0; q.fillStyle = `rgb(${rr},${rr},${rr})`; q.fillRect(x, y * rh, w, rh);
-      g.fillStyle = 'rgba(55,60,66,.32)'; g.fillRect(x, y * rh, 1, rh);          // junta vertical
-      g.fillStyle = 'rgba(70,74,78,.22)'; for (let k = 6; k < rh - 3; k += 9) g.fillRect(x + 4, y * rh + k, 1.6, 1.6); // rebites
       x += w;
     }
-    g.fillStyle = 'rgba(55,60,66,.28)'; g.fillRect(0, y * rh, N, 1);              // junta horizontal
   }
   for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(0,0,0,${Math.random() * .035})`; g.fillRect(Math.random() * N, Math.random() * N, 3, 1); }
+  drawPanels(g, N, 'rgba(50,55,60,.26)', 1.2, null); // juntas na mesma planta do relevo
   metalTex = new THREE.CanvasTexture(c); metalTex.colorSpace = THREE.SRGBColorSpace;
   metalRough = new THREE.CanvasTexture(r);
-  for (const t of [metalTex, metalRough]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; }
+  for (const t of [metalTex, metalRough]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.repeat.set(PANEL_REP, PANEL_REP); }
   return metalTex;
 }
-let metalRough = null;
+let metalRough = null, panelTex = null;
+// Painéis da chapa: um só desenho (frações 0..1 do quadro) usado no relevo (bumpMap) e nas juntas pintadas da
+// camuflagem, então sulco e linha escura coincidem. O quadro cobre o mesmo que a camuflagem (repeat 0,35 sobre
+// UV de 0,22/m ≈ 13 m): fiadas de ~0,55 m, painéis de 0,8–1,6 m, tampas de inspeção com parafusos.
+const PANEL_REP = 0.35;
+let panelPlan = null;
+function panels() {
+  if (panelPlan) return panelPlan;
+  const rows = 24, out = { rows, segs: [], hatch: [] };
+  for (let y = 0; y < rows; y++) {
+    let x = -Math.random() * 0.1;
+    while (x < 1) {
+      const w = 0.06 + Math.random() * 0.06; out.segs.push([x, y / rows]);
+      if (Math.random() < 0.16) { const hw = 0.012 + Math.random() * 0.016, hh = 0.25 / rows + Math.random() * 0.3 / rows; out.hatch.push([x + 0.01 + Math.random() * (w - hw - 0.02), y / rows + 0.15 / rows + Math.random() * (0.85 / rows - hh - 0.15 / rows), hw, hh]); }
+      x += w;
+    }
+  }
+  return (panelPlan = out);
+}
+// desenha as juntas num canvas de lado N: col = cor da linha, rivet = cor dos rebites (null = sem), lw = largura
+export function drawPanels(g, N, col, lw, rivet) {
+  const P = panels(), rh = N / P.rows;
+  g.fillStyle = col;
+  for (let y = 0; y < P.rows; y++) g.fillRect(0, y * rh, N, lw);
+  for (const [x, y] of P.segs) g.fillRect(x * N, y * N, lw, rh);
+  g.strokeStyle = col; g.lineWidth = lw;
+  for (const [x, y, w, h] of P.hatch) g.strokeRect(x * N, y * N, w * N, h * N);
+  if (!rivet) return;
+  g.fillStyle = rivet; const rs = Math.max(1.5, N / 900), st = N / 160;
+  for (let y = 0; y < P.rows; y++) for (let k = st / 2; k < N; k += st) g.fillRect(k, y * rh + lw * 2.5, rs, rs);
+  for (const [x, y] of P.segs) for (let k = st / 2; k < rh - 2; k += st) g.fillRect(x * N + lw * 2.5, y * N + k, rs, rs);
+  for (const [x, y, w, h] of P.hatch) for (const [a, b] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) g.fillRect(a * N - rs, b * N - rs, rs * 1.6, rs * 1.6);
+}
+// relevo (bumpMap): cinza médio = chapa, juntas em sulco, rebites em ressalto
+function panelBump() {
+  if (panelTex) return panelTex;
+  const N = 2048, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
+  g.fillStyle = '#808080'; g.fillRect(0, 0, N, N);
+  drawPanels(g, N, '#262626', 3, '#b4b4b4');
+  panelTex = new THREE.CanvasTexture(c); panelTex.wrapS = panelTex.wrapT = THREE.RepeatWrapping; panelTex.anisotropy = 8; panelTex.repeat.set(PANEL_REP, PANEL_REP);
+  return panelTex;
+}
 
 export function buildPlane(D) {
   // modelo glTF carregado para esta aeronave? (modelLibrary.js) — senão, procedural
@@ -194,9 +278,9 @@ export function buildPlane(D) {
   // jato sem pintura (metal) a menos que a ficha peça camuflagem (def.finish = 'camo')
   const metal = jet && D.finish !== 'camo';
   const paint = metal
-    ? new THREE.MeshStandardMaterial({ color: 0xffffff, map: metalTexture(), roughnessMap: metalRough, roughness: 0.7, metalness: 0.82 })
-    : new THREE.MeshStandardMaterial({ color: 0xffffff, map: camoTexture(D), roughness: 0.58, metalness: 0.18 });
-  const under = metal ? paint : D.underColor ? new THREE.MeshStandardMaterial({ color: D.underColor, roughness: .6, metalness: .2 }) : new THREE.MeshStandardMaterial({ color: D.key === 'il2' ? 0x6f8aa0 : D.key === 'fw190' ? 0x9aa3a6 : D.key === 'spit9' ? 0x9ea19a : 0x8d8c80, roughness: .6, metalness: .2 });
+    ? new THREE.MeshStandardMaterial({ color: 0xffffff, map: metalTexture(), roughnessMap: metalRough, bumpMap: panelBump(), bumpScale: 1.2, roughness: 0.7, metalness: 0.82 })
+    : new THREE.MeshStandardMaterial({ color: 0xffffff, map: camoTexture(D, (g, n) => drawPanels(g, n, 'rgba(20,18,12,.32)', 1, null)), bumpMap: panelBump(), bumpScale: 1.6, roughness: 0.58, metalness: 0.18 });
+  const under = metal ? paint : new THREE.MeshStandardMaterial({ color: D.underColor || (D.key === 'il2' ? 0x6f8aa0 : D.key === 'fw190' ? 0x9aa3a6 : D.key === 'spit9' ? 0x9ea19a : 0x8d8c80), bumpMap: panelBump(), bumpScale: 1.6, roughness: .6, metalness: .2 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1b1b1a, roughness: .45, metalness: .5 });
   const glass = new THREE.MeshStandardMaterial({ color: 0x3a4c58, roughness: .05, metalness: .9, transparent: true, opacity: .62 });
   const white = new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .7 });
@@ -340,6 +424,8 @@ export function buildPlane(D) {
     return grp;
   };
   const wingL = wing(1), wingR = wing(-1);
+  // carenagem da raiz (fica na fuselagem: a asa que cai deixa a carenagem)
+  for (const sd of [1, -1]) add(filletGeometry(wingCfg(sd), fuseG.userData.at, L, Math.min(0.55, Math.max(0.18, D.chord * (jet ? 0.1 : 0.14)))), pair, root);
   // ---- canhões (def.guns[i].mount): canos, carenagens, casulos, calhas; a boca é o ponto de tiro (gunPts) ----
   const at = fuseG.userData.at, steel = new THREE.MeshStandardMaterial({ color: 0x2b2c2d, roughness: .4, metalness: .8 });
   const secY = (a, ay) => (ay >= 0 ? a.yc + ay * (a.top - a.yc) : a.yc + ay * a.h);
@@ -414,9 +500,16 @@ export function buildPlane(D) {
     add(mergeGeometries(bl), fan, prop);
     prop.add(new THREE.Group());
   } else {
-    add(new THREE.ConeGeometry(fr * 0.36, 0.75, 20).rotateX(Math.PI / 2), D.nation === 'Alemanha' ? black : accent, prop, 0, 0, 0.12); // spinner
-    const nb = D.key === 'p47' ? 4 : D.key === 'spit9' ? 4 : 3, len = D.key === 'p47' ? 1.95 : 1.65;
-    for (let i = 0; i < nb; i++) { const b = add(bladeGeometry(len), dark, prop); b.rotation.z = i / nb * Math.PI * 2; add(new THREE.BoxGeometry(0.27, 0.12, 0.06), accent, b, 0, len - 0.06, 0); }
+    // spinner em ogiva com prato traseiro (antes um cone pequeno sumia dentro do capô)
+    const sr = Math.min(D.noseR * 0.62, fr * 0.5), sl = sr * 2.3, sp = [];
+    for (let i = 0; i <= 12; i++) { const t = i / 12; sp.push(V2(Math.max(sr * Math.cos(t * Math.PI / 2) ** 0.75, 0.001), t * sl)); }
+    const spin = D.nation === 'Alemanha' ? black : accent;
+    add(DT.latheZ(sp, 28), spin, prop, 0, 0, -0.05);
+    add(new THREE.CylinderGeometry(sr * 1.04, sr * 1.04, 0.07, 28).rotateX(Math.PI / 2), dark, prop, 0, 0, -0.07); // prato
+    const nb = D.key === 'p47' ? 4 : D.key === 'spit9' ? 4 : 3, len = D.key === 'p47' ? 1.95 : 1.65, cmax = D.key === 'p47' ? 0.36 : 0.3;
+    // pá preto-fosco com a ponta pintada (amarela; vermelha na URSS), que nasce dentro do spinner
+    const bl = len - sr * 0.4, bg = bladeGeometry(bl, cmax), tipG = bladeGeometry(bl, cmax, 0.93, 1.03);
+    for (let i = 0; i < nb; i++) { const b = add(bg, dark, prop); b.rotation.z = i / nb * Math.PI * 2; b.translateY(sr * 0.4); add(tipG, D.nation === 'URSS' ? accent : DM.yellow, b); }
     const disc = new THREE.Mesh(new THREE.CircleGeometry(len + 0.05, 32), new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
     prop.add(disc);
   }

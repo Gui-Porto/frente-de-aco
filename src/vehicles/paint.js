@@ -3,9 +3,10 @@ import { rand } from '../core/util.js';
 
 // Camuflagem procedural por nação, com desgaste e sujeira
 const cache = new Map();
-export function camoTexture(D) {
+// extra(g, size): desenho por cima (aviões: juntas dos painéis na mesma planta do relevo)
+export function camoTexture(D, extra) {
   if (cache.has(D.key)) return cache.get(D.key);
-  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  const c = document.createElement('canvas'); c.width = c.height = extra ? 1024 : 512; if (extra) c.getContext('2d').scale(2, 2); const g = c.getContext('2d');
   const base = '#' + new THREE.Color(D.color).getHexString();
   g.fillStyle = base; g.fillRect(0, 0, 512, 512);
   const blob = (col, n, rmin, rmax) => {
@@ -24,6 +25,7 @@ export function camoTexture(D) {
   for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '0,0,0'},${rand(0, .07)})`; g.fillRect(rand(0, 512), rand(0, 512), rand(1, 3), rand(1, 3)); }
   for (let i = 0; i < 60; i++) { g.strokeStyle = `rgba(30,25,18,${rand(.08, .2)})`; g.lineWidth = rand(1, 3); const x = rand(0, 512); g.beginPath(); g.moveTo(x, rand(0, 200)); g.lineTo(x + rand(-6, 6), rand(260, 512)); g.stroke(); }
   const gr = g.createLinearGradient(0, 512, 0, 300); gr.addColorStop(0, 'rgba(70,58,38,.55)'); gr.addColorStop(1, 'rgba(70,58,38,0)'); g.fillStyle = gr; g.fillRect(0, 0, 512, 512);
+  if (extra) { g.setTransform(1, 0, 0, 1, 0, 0); extra(g, 1024); }
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   t.repeat.set(0.35, 0.35);
   cache.set(D.key, t);
