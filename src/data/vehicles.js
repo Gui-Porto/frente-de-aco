@@ -287,11 +287,11 @@ export const MISSILES = {
     form: { nose: { kind: 'ir', len: 0.3, dome: 0.55 }, canards: { at: 0.3, root: 0.26, tip: 0.04, span: 0.45 }, wings: { at: 2.38, root: 0.4, tip: 0.14, span: 0.56, roller: 0.09 },
       bands: { warhead: { at: 0.72, w: 0.04 }, motor: { at: 1.25, w: 0.04 } }, nozzle: { len: 0.06, r: 0.8 } } },
   AIM9J: { name: 'AIM-9J Sidewinder', short: 'AIM-9J', mass: 78, d: 0.127, len: 3.02, thrust: 15500, burn: 3.0, cd: 0.42,
-    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 18, nav: 4, fuse: 9, warhead: 4.5, rearAspect: 110, flareRes: 0.45, seeker: 'ir',
+    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 18, nav: 4, fuse: 9, warhead: 4.5, rearAspect: 110, flareRes: 0.22, seeker: 'ir',
     form: { nose: { kind: 'ir', len: 0.28, dome: 0.6 }, canards: { at: 0.28, root: 0.3, tip: 0.06, span: 0.56 }, wings: { at: 2.55, root: 0.42, tip: 0.15, span: 0.64, roller: 0.09 },
       bands: { warhead: { at: 0.78, w: 0.04 }, motor: { at: 1.35, w: 0.04 } }, nozzle: { len: 0.06, r: 0.8 } } },
   R3S: { name: 'R-3S (K-13)', short: 'R-3S', mass: 75, d: 0.127, len: 2.84, thrust: 17000, burn: 2.2, cd: 0.45,
-    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 12, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 90, flareRes: 0.6, seeker: 'ir',
+    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 12, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 90, flareRes: 0.35, seeker: 'ir',
     form: { nose: { kind: 'ir', len: 0.33, dome: 0.5 }, canards: { at: 0.33, root: 0.24, tip: 0.05, span: 0.42 }, wings: { at: 2.4, root: 0.38, tip: 0.13, span: 0.53, roller: 0.09 },
       bands: { warhead: { at: 0.74, w: 0.04 }, motor: { at: 1.28, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } },
   // semiativos: não têm buscador próprio de aquisição — exigem o radar do lançador travado (STT) até o impacto
