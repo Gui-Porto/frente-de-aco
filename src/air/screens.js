@@ -3,7 +3,8 @@ import { renderer, scene, camera } from '../core/render.js';
 import { S } from '../core/state.js';
 import { settings, keyName, clearInput } from '../core/settings.js';
 import { $, clamp } from '../core/util.js';
-import { PLANES, ROUNDS, beltsOf } from '../data/vehicles.js';
+import { PLANES, ROUNDS, MISSILES, beltsOf } from '../data/vehicles.js';
+import { missileSheet } from './missileSpec.js';
 import { audioInit, sndUi } from '../fx/audio.js';
 import { lockPointer, exitPointer } from '../game/controls.js';
 import { AIR, AIR_ROSTER, NATION_TAG, armament, burstMass } from './aircraft.js';
@@ -66,7 +67,7 @@ function fillPlate(k) {
   $('#apSpecs').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
   // cinta de cada arma (como no WT): a escolha vale para a próxima partida (cfg.belts[avião][arma])
   const sel = (cfg.belts && cfg.belts[k]) || [];
-  $('#apArms').innerHTML = armament(k).map(w => w.missile ? `<li><b>${w.n}×</b> ${w.name}<small>${w.seeker === 'sarh' ? 'semiativo: radar travado até o impacto' : w.rear ? 'infravermelho · só pela cauda' : 'infravermelho'} · ${nf(w.range)} m</small></li>`
+  $('#apArms').innerHTML = armament(k).map(w => w.missile ? `<li class="msl"><b>${w.n}×</b> ${w.name}<dl>${missileSheet(MISSILES[w.w]).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></li>`
     : (() => {
       const B = beltsOf(w.W), cur = B[sel[w.gi]] ? sel[w.gi] : 'Padrão';
       return `<li><b>${w.n}×</b> ${w.name}<small>${nf(w.ammo)} tiros por arma · ${nf(w.rpm)} disp/min · ${nf(w.v)} m/s · perfura ${w.W.pen} mm</small>`
@@ -120,7 +121,7 @@ async function takeoff() {
   B.start(Object.assign({}, cfg));
   await step('Aeronaves na posição de decolagem', 0.6);
   // compila os programas de tudo que pode surgir na partida (aviões, míssil, nuvens, chuva)
-  const dummy = new Missile(B.player, null, { d: 0.12, len: 2.8 }, B.player.pos, new V3()); dummy.dead = true; dummy.trail.close(); dummy.flame.scale.setScalar(1e-4);
+  const dummy = new Missile(B.player, null, MISSILES.AIM9B, B.player.pos, new V3()); dummy.dead = true; dummy.trail.close(); dummy.flame.scale.setScalar(1e-4);
   try { renderer.compile(scene, camera); } catch (e) { /* opcional */ }
   scene.remove(dummy.mesh);
   await step('Armamento verificado', 0.85);

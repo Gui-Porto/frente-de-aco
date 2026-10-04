@@ -28,7 +28,7 @@ export const ACTIONS = [
   ['a_pitch_up', 'Avião', 'Cabrar (subir o nariz)', ['KeyS', 'ArrowDown']],
   ['a_pitch_dn', 'Avião', 'Picar (baixar o nariz)', ['KeyW', 'ArrowUp']],
   ['a_guns', 'Avião', 'Disparar armas', ['Mouse0']],
-  ['a_bomb', 'Avião', 'Lançar bombas', ['Space']],
+  ['a_bomb', 'Avião', 'Lançar bombas', ['KeyB']],
   ['a_rocket', 'Avião', 'Disparar foguetes', ['KeyR']],
   ['a_flaps', 'Avião', 'Flaps (alternar)', ['KeyF']],
   ['a_airbrake', 'Avião', 'Freio aerodinâmico / rodas (liga e desliga)', ['KeyH']],
@@ -43,6 +43,7 @@ export const ACTIONS = [
   ['a_ext', 'Avião', 'Extintor de incêndio', ['KeyK']],
   ['a_cam', 'Avião', 'Trocar câmera (cockpit / externa)', ['KeyV']],
   ['a_target', 'Avião', 'Marcar alvo na mira', ['Mouse1', 'KeyT']],
+  ['a_xray', 'Avião', 'Raio-X da aeronave (segurar)', ['KeyJ']],
   ['freelook', 'Geral', 'Olhar livre (segurar)', ['KeyC']],
   ['score', 'Geral', 'Placar (segurar)', ['Tab']],
   ['map', 'Geral', 'Mapa ampliado (segurar)', ['KeyM']],
@@ -64,7 +65,7 @@ export function defaults() {
     mouse: { tank: 1.0, sight: 1.0, plane: 1.0, invertY: false },
     graphics: { quality: 'alta' },
     audio: { master: 0.8, sfx: 1.0, engine: 0.8 },
-    bindsV: 3,
+    bindsV: 4,
     gameplay: { tankAssist: true, leadMarker: true, flightMode: 'instrutor', camSmooth: true, hitcam: true },
   };
 }
@@ -92,6 +93,11 @@ if (saved && saved.binds && (saved.bindsV || 1) < 3) {
   const d = defaults().binds;
   for (const id of ['a_rlock', 'a_target', 'a_missile']) settings.binds[id] = [...d[id]];
   settings.bindsV = 3;
+}
+// v4: bombas saem do Espaço (que é do míssil ar-ar) para o B; só se o jogador não tiver trocado
+if (saved && saved.binds && (saved.bindsV || 1) < 4) {
+  if (settings.binds.a_bomb.join() === 'Space' && settings.binds.a_missile.includes('Space')) settings.binds.a_bomb = [...defaults().binds.a_bomb];
+  settings.bindsV = 4;
 }
 const listeners = [];
 export function onSettings(fn) { listeners.push(fn); }

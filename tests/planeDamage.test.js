@@ -3,7 +3,7 @@ vi.mock('../src/combat/ballistics.js', () => ({ segBox: () => null }));
 vi.mock('../src/fx/particles.js', () => ({ fxExplosion() {} }));
 vi.mock('../src/ui/hud.js', () => ({ showDmg() {} }));
 vi.mock('../src/core/state.js', () => ({ S: { now: 0 } }));
-const { planeModules, applyMod, powered, ctrlAuthority, fuelInit, fuelStep, fuelLeak, modsOf, sparFrac } = await import('../src/vehicles/planeDamage.js');
+const { planeModules, applyMod, powered, ctrlAuthority, fuelInit, fuelStep, fuelLeak, modsOf, sparFrac, hitSummary } = await import('../src/vehicles/planeDamage.js');
 const { PLANES } = await import('../src/data/vehicles.js');
 const { tipBreak, tipArea } = await import('../src/vehicles/planeGeom.js');
 
@@ -113,5 +113,16 @@ describe('estrutura e sistemas (física de dano)', () => {
     kill(pl, 'elevL');
     const a1 = ctrlAuthority(pl);
     expect(a1.elev).toBeLessThan(a0.elev); expect(a1.elevBias).toBeLessThan(0);
+  });
+});
+
+describe('registro de acertos (cartões e raio-X)', () => {
+  it('soma acertos por componente, separa por atirador e lista as munições', () => {
+    const pl = mk('f86'), a = { name: 'A' }, b = { name: 'B' }, am = { name: '12,7 mm M3', round: 'API' };
+    applyMod(pl, pl.mods.fuelF, 2, a, am); applyMod(pl, pl.mods.fuelF, 2, a, am); applyMod(pl, pl.mods.rud, 99, b, { name: '23 mm NR-23', round: 'HEFI', he: 0.015 });
+    const sa = hitSummary(pl, a), all = hitSummary(pl);
+    expect(sa.parts).toHaveLength(1); expect(sa.parts[0].n).toBe(2); expect(sa.parts[0].state).toBe('vazando');
+    expect(sa.weapons).toEqual(['12,7 mm M3 (API)']);
+    expect(all.parts[0].label).toBe('Leme'); expect(all.parts[0].state).toBe('arrancado');
   });
 });

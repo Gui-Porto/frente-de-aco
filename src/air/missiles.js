@@ -11,7 +11,8 @@ import { blastPlaneModules } from '../vehicles/planeDamage.js';
 import { sndCm } from '../fx/audio.js';
 import { shakeAt } from '../ui/hud.js';
 import { pnAccel, fwdOf } from './targeting.js';
-import { missileGeometry } from '../vehicles/planeModel.js';
+import { missileMesh, missileTail } from '../vehicles/planeModel.js';
+import { smokeOf } from './missileSpec.js';
 import { Trail, updateTrails, clearTrails } from '../fx/trails.js';
 // chama do motor: sprite aditivo único (compilado na decolagem pelo míssil-fantasma)
 const glowC = document.createElement('canvas'); glowC.width = glowC.height = 64;
@@ -23,18 +24,18 @@ const FLARE = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(glowC), bl
 // O míssil perde o alvo se ele sair do cone do buscador; aí segue balístico.
 // =====================================================================
 export const missiles = [];
-// material com os mesmos parâmetros dos aviões: reaproveita o programa já compilado
-const mat = new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .7 });
 const _a = new V3(), _f = new V3(), _q = new V3(), _rel = new V3(), _cp = new V3();
 
 export class Missile {
   constructor(owner, target, M, pos, vel) {
     this.owner = owner; this.target = target; this.M = M;
     this.pos = pos.clone(); this.vel = vel.clone(); this.t = 0; this.tracking = !!target; this.dead = false; this.seen = new Set();
-    this.mesh = new THREE.Mesh(missileGeometry(M), [mat, mat]); scene.add(this.mesh);
+    this.mesh = missileMesh(M); scene.add(this.mesh);
     // chama na cauda e rastro de fumaça contínuo
-    this.flame = new THREE.Sprite(FLARE); this.flame.position.set(0, 0, -M.len * 0.62); this.flame.scale.setScalar(1e-4); this.mesh.add(this.flame);
-    this.trail = new Trail({ life: 14, w0: 1.8, w1: 14, alpha: 0.92, step: 4, color: 0xd6d2ca });
+    // chama no bocal e rastro do tamanho do motor (Sparrow deixa fumaça mais grossa que o Sidewinder)
+    this.sm = smokeOf(M); this.tailZ = missileTail(M);
+    this.flame = new THREE.Sprite(FLARE); this.flame.position.set(0, 0, -this.tailZ - this.sm.flame * 0.2); this.flame.scale.setScalar(1e-4); this.mesh.add(this.flame);
+    this.trail = new Trail({ life: this.sm.life, w0: this.sm.w0, w1: this.sm.w1, alpha: 0.92, step: 4, color: 0xd6d2ca });
     // semiativos (Sparrow/R-3R) são EJETADOS e acendem ~0,35 s depois; IR sai acesa do trilho
     this.ign = M.seeker === 'sarh' ? 0.35 : 0; this.burning = !this.ign; this.spin = Math.random() * 6;
     if (!this.ign && owner) for (let i = 0; i < 6; i++) spawnP({ pos: this.pos.clone().add(rv(0.4)), vel: owner.vel.clone().multiplyScalar(0.6).add(rv(4)), life: rand(1.2, 2.2), size: 1.2, size1: 4, color: 0xdedbd4, op: 0.5, drag: 2 });
@@ -98,8 +99,8 @@ export class Missile {
     _f.copy(this.vel).normalize();
     this.mesh.position.copy(this.pos); this.mesh.lookAt(_q.copy(this.pos).add(_f)); this.mesh.rotateZ(this.spin += dt * 3);
     if (this.burning) {
-      const k = 1 + (Math.random() - 0.5) * 0.35; this.flame.scale.setScalar(M.d * 14 * k);
-      this.trail.push(_q.copy(this.pos).addScaledVector(_f, -M.len * 0.7), S.now);
+      const k = 1 + (Math.random() - 0.5) * 0.35; this.flame.scale.setScalar(this.sm.flame * k);
+      this.trail.push(_q.copy(this.pos).addScaledVector(_f, -this.tailZ - 0.3), S.now);
     } else this.flame.scale.setScalar(1e-4);
   }
   detonate(at, miss, hitPlane) {
@@ -117,7 +118,7 @@ export class Missile {
       if (d > R) continue;
       const f = 1 - d / R, k = M.warhead * 14 * f * f;
       pl.damage(nearestPlanePart(pl, p), k, this.owner, true);
-      if (pl.mods && !pl.gone) { const l = p.clone().applyMatrix4(pl.inv); blastPlaneModules(pl, l.x, l.y, l.z, R * 0.7, k * 0.8, this.owner); }
+      if (pl.mods && !pl.gone) { const l = p.clone().applyMatrix4(pl.inv); blastPlaneModules(pl, l.x, l.y, l.z, R * 0.7, k * 0.8, this.owner, { name: M.name, tnt: M.warhead }); }
       for (let i = 0; i < 2; i++) if (Math.random() < f) pl.damage(['wingL', 'wingR', 'fuse', 'engine', 'tail', 'fuel'][Math.floor(Math.random() * 6)], k * 0.45, this.owner, true);
     }
   }
