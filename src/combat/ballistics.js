@@ -7,7 +7,7 @@ import { obstNear, HEDGES, addCrater } from '../world/scenery.js';
 import { RAPIER, world, COL } from '../world/physics.js';
 import { PLANES, prepAmmo, penAt, hePen, DEG, G } from '../data/vehicles.js';
 import { spawnP, TEX, fxDust, fxSparks, fxExplosion, fxBigBlast, fxTrail } from '../fx/particles.js';
-import { sndBoom, sndPing, sndClank } from '../fx/audio.js';
+import { sndBoom, sndPing, sndClank, sndSnap } from '../fx/audio.js';
 import { MODS } from '../vehicles/tank.js';
 import { hitPlaneModules, blastPlaneModules } from '../vehicles/planeDamage.js';
 import { showDmg, shakeCam, shakeAt, flashVign, hitMarker } from '../ui/hud.js';
@@ -177,6 +177,13 @@ export function updateProjs(dt) {
     // espoleta de proximidade/autodestruição das granadas AA no fim do traçante
     if (!dead && pr.am.type === 'HEF' && pr.kind === 'bullet' && pr.age > 3.2) { blast(pr.p, pr.am.tnt, pr.owner, { air: true }); dead = true; }
     if (dead) { if (pr.mesh) scene.remove(pr.mesh); projs.splice(i, 1); continue; }
+    // bala inimiga passando perto do jogador: estalo no ponto de maior aproximação
+    const me = S.player;
+    if (pr.kind === 'bullet' && me && me.alive && pr.owner !== me && !pr.snapped) {
+      const d = pr.p.distanceTo(me.pos);
+      if (pr.nearD !== undefined && d > pr.nearD && pr.nearD < 14) { pr.snapped = true; sndSnap(pr.p); }
+      pr.nearD = d;
+    }
     _n.copy(pr.v).normalize();
     if (pr.mesh) {
       if (pr.kind === 'shell') { pr.mesh.position.copy(pr.p).addScaledVector(_n, -3); pr.mesh.scale.set(1, 1, 6); }
@@ -452,9 +459,12 @@ export function spawnDebris(obj, vel, angVel, half, offset = [0, 0, 0], mass = 5
   return d;
 }
 export function updatePopped() {
-  for (const d of popped) {
+  for (let i = popped.length - 1; i >= 0; i--) {
+    const d = popped[i];
     if (!d.body) continue;
     const t = d.body.translation(), r = d.body.rotation();
+    // fora do heightfield (arena aérea) o destroço atravessa o chão: some ao passar dele
+    if (t.y < H(t.x, t.z) - 15) { scene.remove(d.obj); world.removeRigidBody(d.body); popped.splice(i, 1); continue; }
     _dq.set(r.x, r.y, r.z, r.w);
     d.obj.quaternion.copy(_dq);
     d.obj.position.set(t.x, t.y, t.z).sub(d.offset.clone().applyQuaternion(_dq));

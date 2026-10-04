@@ -65,9 +65,15 @@ describe('dados das aeronaves', () => {
     for (const k of ['f86', 'mig15']) { expect(PLANES[k].jet).toBe(true); expect(PLANES[k].thrust).toBeGreaterThan(20); }
     for (const k of ['spit9', 'p47', 'fw190']) expect(PLANES[k].hp).toBeGreaterThan(1000);
   });
-  it('só o F-86 leva mísseis', () => {
-    expect(PLANES.f86.missiles.w).toBe('AIM9B');
+  it('mísseis por estante: F-86 só IR; MiG-15 nenhum; F-4E e MiG-21 com semiativo + IR', () => {
+    expect(PLANES.f86.missiles.map(r => r.w)).toEqual(['AIM9B']);
     expect(PLANES.mig15.missiles).toBeUndefined();
+    for (const k of ['f4e', 'mig21']) expect(PLANES[k].missiles.map(r => MISSILES[r.w].seeker).sort()).toEqual(['ir', 'sarh']);
+  });
+  it('sistemas só onde existem historicamente', () => {
+    expect(PLANES.f86.rwr).toBeUndefined(); expect(PLANES.mig15.rwr).toBeUndefined();
+    expect(PLANES.f4e.rwr).toBe('apr36'); expect(PLANES.mig21.rwr).toBe('spo10');
+    expect(PLANES.spit9.radar).toBeUndefined();
   });
 });
 
@@ -80,6 +86,11 @@ describe('temperatura do motor (água → óleo → desgaste)', () => {
   });
   it('WEP nivelado rápido aguenta 2 min sem estragar o motor', () => {
     expect(run('liquid', 1, true, 120, 120).wear).toBeLessThan(0.05);
+  });
+  it('sem água o motor a líquido ferve; sem óleo qualquer motor engripa em menos de um minuto', () => {
+    const e = { water: 85, oil: 70 }; for (let t = 0; t < 60; t += 0.1) stepHeat(e, 'liquid', 0.8, false, 120, { water: 1, oil: 0 }, 0.1);
+    expect(heatLevel(e, 'liquid')).toBeGreaterThan(0);
+    for (const kind of ['liquid', 'radial', 'jet']) { const f = { water: 85, oil: 70 }; let w = 0; for (let t = 0; t < 55; t += 0.1) w += stepHeat(f, kind, 0.8, false, 120, { water: 0, oil: 1 }, 0.1); expect(w).toBeGreaterThan(1); }
   });
   it('WEP subindo devagar: água esquenta antes do óleo e o motor acaba danificado', () => {
     const a = run('liquid', 1, true, 65, 30);

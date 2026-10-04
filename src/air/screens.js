@@ -1,11 +1,15 @@
+import { preloadModels } from '../vehicles/modelLibrary.js';
 import { renderer, scene, camera } from '../core/render.js';
 import { S } from '../core/state.js';
 import { settings, keyName, clearInput } from '../core/settings.js';
 import { $, clamp } from '../core/util.js';
-import { PLANES } from '../data/vehicles.js';
+import { PLANES, ROUNDS, MISSILES, beltsOf } from '../data/vehicles.js';
+import { missileSheet } from './missileSpec.js';
 import { audioInit, sndUi } from '../fx/audio.js';
 import { lockPointer, exitPointer } from '../game/controls.js';
 import { AIR, AIR_ROSTER, NATION_TAG, armament, burstMass } from './aircraft.js';
+const ERA_LABEL = { helice: 'motor a pistão', jato: 'era do jato', radar: 'supersônico com radar' };
+const ERA_FOES = { helice: 'caças a pistão', jato: 'jatos (MiG-15 / F-86)', radar: 'supersônicos (MiG-21 / F-4)' };
 import { MODES } from './missions.js';
 import { DIFF } from './ai.js';
 import { TIMES, WEATHER, resetEnv } from './environment.js';
@@ -55,13 +59,25 @@ function fillPlate(k) {
   const D = PLANES[k], A = AIR[k];
   $('#apMaker').textContent = `${A.maker} · ${D.nation} · ${D.year}`;
   $('#apName').textContent = D.name;
-  $('#apRole').textContent = A.role + (A.era === 'jato' ? ' · era do jato' : ' · motor a pistão');
+  $('#apRole').textContent = A.role + ' · ' + ERA_LABEL[A.era];
   $('#apRates').innerHTML = Object.entries(RATE).map(([r, l]) => `<div class="rate"><span>${l}</span><i><em style="width:${A.rate[r] * 10}%"></em></i><b>${A.rate[r]}</b></div>`).join('');
   const rows = [['Velocidade máxima', `${nf(A.vmax)} km/h`], ['Cruzeiro', `${nf(A.cruise)} km/h`], ['Teto', `${nf(A.ceiling)} m`], ['Razão de subida', `${A.climb} m/s`],
     ['Peso de combate', `${(D.mass / 1000).toFixed(2).replace('.', ',')} t`], ['Carga alar', `${Math.round(D.mass / D.S)} kg/m²`], ['Motor', A.engine],
     ['Limite estrutural', `${D.glim} G`], ['Peso de fogo', `${burstMass(k).toFixed(1).replace('.', ',')} kg/s`]];
   $('#apSpecs').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
-  $('#apArms').innerHTML = armament(k).map(w => w.missile ? `<li><b>${w.n}×</b> ${w.name}<small>guiado IR · ${nf(w.range)} m · aspecto traseiro</small></li>` : `<li><b>${w.n}×</b> ${w.name}<small>${nf(w.ammo)} tiros por arma · ${nf(w.rpm)} disp/min</small></li>`).join('');
+  // cinta de cada arma (como no WT): a escolha vale para a próxima partida (cfg.belts[avião][arma])
+  const sel = (cfg.belts && cfg.belts[k]) || [];
+  $('#apArms').innerHTML = armament(k).map(w => w.missile ? `<li class="msl"><b>${w.n}×</b> ${w.name}<dl>${missileSheet(MISSILES[w.w]).map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></li>`
+    : (() => {
+      const B = beltsOf(w.W), cur = B[sel[w.gi]] ? sel[w.gi] : 'Padrão';
+      return `<li><b>${w.n}×</b> ${w.name}<small>${nf(w.ammo)} tiros por arma · ${nf(w.rpm)} disp/min · ${nf(w.v)} m/s · perfura ${w.W.pen} mm</small>`
+        + `<div class="segs belt" data-g="${w.gi}">${Object.keys(B).map(n => `<button type="button" data-v="${n}" aria-pressed="${n === cur}">${n}</button>`).join('')}</div>`
+        + `<small class="bseq">${B[cur].map(r => `<span title="${ROUNDS[r].n}">${ROUNDS[r].s}</span>`).join(' · ')}</small></li>`;
+    })()).join('');
+  $('#apArms').querySelectorAll('.belt button').forEach(b => (b.onclick = () => {
+    cfg.belts = cfg.belts || {}; const a = cfg.belts[k] = cfg.belts[k] || [];
+    a[+b.parentElement.dataset.g] = b.dataset.v; save(); sndUi(); fillPlate(k);
+  }));
   $('#apStrong').innerHTML = A.strong.map(s => `<li>${s}</li>`).join('');
   $('#apWeak').innerHTML = A.weak.map(s => `<li>${s}</li>`).join('');
 }
@@ -88,7 +104,7 @@ function renderCfg() {
     const id = b.parentElement.dataset.id, v = b.dataset.v; cfg[id] = isNaN(+v) ? v : +v; save(); sndUi(); renderCfg();
   }));
   const D = PLANES[cfg.plane], era = AIR[cfg.plane].era;
-  $('#cfgSum').innerHTML = `<dt>Aeronave</dt><dd>${D.short}</dd><dt>Adversários</dt><dd>${era === 'jato' ? 'jatos (MiG-15 / F-86)' : 'caças a pistão'}</dd><dt>Esquadrilha</dt><dd>${M.allies ? `você + ${cfg.allies}` : 'só você'}</dd><dt>Dificuldade</dt><dd>${DIFF[cfg.diff].label}</dd><dt>Condições</dt><dd>${WEATHER[cfg.weather].label} · ${TIMES[cfg.time].label}</dd>`;
+  $('#cfgSum').innerHTML = `<dt>Aeronave</dt><dd>${D.short}</dd><dt>Adversários</dt><dd>${ERA_FOES[era]}</dd><dt>Esquadrilha</dt><dd>${M.allies ? `você + ${cfg.allies}` : 'só você'}</dd><dt>Dificuldade</dt><dd>${DIFF[cfg.diff].label}</dd><dt>Condições</dt><dd>${WEATHER[cfg.weather].label} · ${TIMES[cfg.time].label}</dd>`;
 }
 
 // ---------- carregamento ----------
@@ -101,10 +117,11 @@ async function takeoff() {
   await step('Briefing da esquadrilha', 0.15);
   closeHangar();
   await step(`Meteorologia · ${WEATHER[cfg.weather].label.toLowerCase()}, ${TIMES[cfg.time].label.toLowerCase()}`, 0.35);
+  await preloadModels(Object.values(PLANES));
   B.start(Object.assign({}, cfg));
   await step('Aeronaves na posição de decolagem', 0.6);
   // compila os programas de tudo que pode surgir na partida (aviões, míssil, nuvens, chuva)
-  const dummy = new Missile(B.player, null, { d: 0.12, len: 2.8 }, B.player.pos, new V3()); dummy.dead = true;
+  const dummy = new Missile(B.player, null, MISSILES.AIM9B, B.player.pos, new V3()); dummy.dead = true; dummy.trail.close(); dummy.flame.scale.setScalar(1e-4);
   try { renderer.compile(scene, camera); } catch (e) { /* opcional */ }
   scene.remove(dummy.mesh);
   await step('Armamento verificado', 0.85);

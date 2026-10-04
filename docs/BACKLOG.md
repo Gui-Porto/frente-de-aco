@@ -1,0 +1,11 @@
+# Backlog — pedidos do jogador
+
+Lista viva dos pedidos, na ordem em que serão feitos. Cada item vira uma branch (`feature/…` ou `fix/…`) com commits e um PR para revisão. Ao concluir, o item sai daqui e vai para a descrição do PR.
+
+## Em andamento / próximos
+
+Nenhum item no momento.
+
+## Pendências menores
+
+Nenhuma no momento.

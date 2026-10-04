@@ -80,17 +80,10 @@ export function showcase(key) {
   if (!hv.built) build();
   if (show) hs.remove(show.root);
   const D = PLANES[key]; show = buildPlane(D); cur = key;
-  const gearM = new THREE.MeshStandardMaterial({ color: 0x1c1c1b, roughness: 0.5, metalness: 0.5 });
-  const lift = D.fuseR + 1.35, wh = r => new THREE.CylinderGeometry(r, r, 0.22, 18).rotateZ(Math.PI / 2);
-  for (const s of [1, -1]) {
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, lift, 8), gearM); st.position.set(s * D.span * 0.16, -lift / 2, D.wingZ + 0.4); show.root.add(st);
-    const w = new THREE.Mesh(wh(0.4), gearM); w.position.set(s * D.span * 0.16, -lift + 0.4, D.wingZ + 0.4); w.castShadow = true; show.root.add(w);
-  }
-  const nz = D.jet ? D.L * 0.33 : -D.L * 0.46, nl = D.jet ? lift : lift * 0.45;
-  const ns = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, nl, 8), gearM); ns.position.set(0, -nl / 2, nz); show.root.add(ns);
-  const nw = new THREE.Mesh(wh(D.jet ? 0.3 : 0.18), gearM); nw.position.set(0, -nl + (D.jet ? 0.3 : 0.18), nz); show.root.add(nw);
-  show.root.position.set(0, lift - 0.02, 0);
-  if (!D.jet) show.root.rotation.x = -Math.atan2(lift - nl, D.L * 0.46 + D.wingZ + 0.4) * 0.9; // pousado na bequilha
+  // trem de pouso do próprio modelo (o mesmo que desce em voo)
+  const G = show.gearMesh; G.visible = true;
+  show.root.position.set(0, G.userData.lift - 0.02, 0);
+  show.root.rotation.x = -G.userData.pitch; // pousado na bequilha
   show.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   hs.add(show.root);
   keyL.target.position.set(0, 1, 0); hv.td = VIEWS.tres[2] * sizeK(key);
@@ -106,14 +99,25 @@ export function updateHangar(dt) {
   hv.yaw = lerp(hv.yaw, hv.ty, 1 - Math.exp(-dt * 5)); hv.pitch = lerp(hv.pitch, hv.tp, 1 - Math.exp(-dt * 5)); hv.dist = lerp(hv.dist, hv.td, 1 - Math.exp(-dt * 5));
   const wide = innerWidth > 900;
   camera.setViewOffset(innerWidth, innerHeight, wide ? innerWidth * 0.05 : 0, wide ? innerHeight * 0.04 : innerHeight * 0.12, innerWidth, innerHeight);
-  if (Math.abs(camera.fov - 40) > 0.01) { camera.fov = 40; camera.updateProjectionMatrix(); }
-  const cy = 2.2;
-  camera.position.set(Math.sin(hv.yaw) * Math.cos(hv.pitch) * hv.dist, cy + Math.sin(hv.pitch) * hv.dist, Math.cos(hv.yaw) * Math.cos(hv.pitch) * hv.dist);
+  const cy = 2.2, d = hangarDist(hv.yaw, hv.pitch, hv.dist, cy);
+  // câmera aproximada para não atravessar a parede: abre o campo de visão na mesma proporção (o avião cabe igual)
+  const fov = 2 * Math.atan(Math.tan(20 * Math.PI / 180) * hv.dist / d) * 180 / Math.PI;
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  camera.position.set(Math.sin(hv.yaw) * Math.cos(hv.pitch) * d, cy + Math.sin(hv.pitch) * d, Math.cos(hv.yaw) * Math.cos(hv.pitch) * d);
   camera.position.y = Math.max(0.6, camera.position.y);
   camera.lookAt(0, cy, 0);
   // poeira subindo devagar; luz principal com cintilação leve de lâmpada
   if (dust && !REDUCED) { const a = dust.geometry.attributes.position.array; for (let i = 1; i < a.length; i += 3) { a[i] += dt * 0.12; a[i - 1] += Math.sin(t * 0.4 + i) * dt * 0.05; if (a[i] > 15) a[i] = 0.3; } dust.geometry.attributes.position.needsUpdate = true; }
   keyL.intensity = 1400 * (0.97 + 0.03 * Math.sin(t * 17) * Math.sin(t * 5.3));
+}
+// distância da órbita limitada ao interior do galpão (paredes em x = ±30 e z = +30, porta em z = −40, treliças a ~13 m)
+export function hangarDist(yaw, pitch, dist, cy = 2.2) {
+  const dx = Math.sin(yaw) * Math.cos(pitch), dy = Math.sin(pitch), dz = Math.cos(yaw) * Math.cos(pitch);
+  let t = dist;
+  if (Math.abs(dx) > 1e-6) t = Math.min(t, 28 / Math.abs(dx));
+  if (dz > 1e-6) t = Math.min(t, 28 / dz); else if (dz < -1e-6) t = Math.min(t, 38 / -dz);
+  if (dy > 1e-6) t = Math.min(t, (12.5 - cy) / dy);
+  return t;
 }
 // arraste para orbitar, roda para aproximar
 export function hangarPointer(kind, e) {

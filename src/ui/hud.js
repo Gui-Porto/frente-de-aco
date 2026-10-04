@@ -141,7 +141,7 @@ function updatePanels(v) {
     $('#weapons').querySelectorAll('[data-g]').forEach(el => (el.querySelector('b').textContent = v.guns[+el.dataset.g].ammo));
     const b = $('#weapons').querySelector('[data-b] b'); if (b) b.textContent = v.bombs.length;
     const r = $('#weapons').querySelector('[data-r] b'); if (r) r.textContent = v.rockets;
-    $('#gdark').style.opacity = clamp(v.gStress - 0.3, 0, 1) * 0.92;
+    $('#gdark').style.opacity = (v.blackout || 0) * 0.97;
     return;
   }
   drawTankStatus(v);

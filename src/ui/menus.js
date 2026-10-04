@@ -88,7 +88,7 @@ function begin() {
 }
 export function toMenu() {
   ['#end', '#hud', '#pause', '#spawn', '#air'].forEach(s => ($(s).hidden = true)); $('#menu').hidden = false; S.mode = 'ground';
-  if (eng.tank) eng.tank.g.gain.value = 0; if (eng.air) eng.air.g.gain.value = 0;
+  if (eng.tank) eng.tank.g.gain.value = eng.tank.track.g.gain.value = 0; if (eng.air) eng.air.g.gain.value = 0;
   clearWorld(); S.state = 'menu'; S.player = null; syncLineup();
 }
 

@@ -20,11 +20,27 @@ function baseH(x, z) {
 }
 const FLATS = [...POINTS.map(p => ({ x: p.x, z: p.z, r: 48 })), { x: 0, z: 300, r: 55 }, { x: 0, z: -300, r: 55 }];
 for (const f of FLATS) f.h = baseH(f.x, f.z);
+// Pistas da Batalha Aérea (uma por equipe, atrás do spawn): platô retangular com rampa até o relevo.
+// `pad` = largura extra plana ao lado da pista (pátio e hangares). Rumo de decolagem: yaw (0 = +z).
+export const AIRFIELDS = [
+  { team: 1, x: -260, z: 3450, len: 1700, w: 50, pad: 170, yaw: Math.PI },
+  { team: -1, x: 260, z: -3450, len: 1700, w: 50, pad: 170, yaw: 0 },
+];
+for (const a of AIRFIELDS) { let s = 0; for (let i = -4; i <= 4; i++) s += baseH(a.x, a.z + i * a.len / 8); a.h = s / 9; }
+const RAMP = 320;
+export const onAirfield = (a, x, z, m = 0) => Math.abs(x - a.x) < a.w / 2 + a.pad + m && Math.abs(z - a.z) < a.len / 2 + 60 + m;
 export function H(x, z) {
   let h = baseH(x, z);
   for (const f of FLATS) {
     const dx = x - f.x, dz = z - f.z, d2 = dx * dx + dz * dz;
     if (d2 < f.r * f.r) { const t = Math.sqrt(d2) / f.r, k = t * t * (3 - 2 * t); h = f.h * (1 - k) + h * k; }
+  }
+  for (const a of AIRFIELDS) {
+    const d = Math.hypot(Math.max(Math.abs(x - a.x) - a.w / 2 - a.pad, 0), Math.max(Math.abs(z - a.z) - a.len / 2 - 60, 0));
+    if (d < RAMP) { const t = d / RAMP, k = t * t * (3 - 2 * t); h = a.h * (1 - k) + h * k; }
+    // corredor de aproximação nas duas cabeceiras: o relevo não passa de uma rampa de ~2,3° (sem morro na reta final)
+    const out = Math.abs(z - a.z) - a.len / 2 - 60, lat = Math.abs(x - a.x);
+    if (out > 0 && out < 3000 && lat < 320) { const cap = a.h + out * 0.04; if (h > cap) { const t = Math.max(0, (lat - 200) / 120), k = t * t * (3 - 2 * t); h = cap * (1 - k) + h * k; } }
   }
   return h;
 }

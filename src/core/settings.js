@@ -28,18 +28,22 @@ export const ACTIONS = [
   ['a_pitch_up', 'Avião', 'Cabrar (subir o nariz)', ['KeyS', 'ArrowDown']],
   ['a_pitch_dn', 'Avião', 'Picar (baixar o nariz)', ['KeyW', 'ArrowUp']],
   ['a_guns', 'Avião', 'Disparar armas', ['Mouse0']],
-  ['a_bomb', 'Avião', 'Lançar bombas', ['Space']],
+  ['a_bomb', 'Avião', 'Lançar bombas', ['KeyB']],
   ['a_rocket', 'Avião', 'Disparar foguetes', ['KeyR']],
   ['a_flaps', 'Avião', 'Flaps (alternar)', ['KeyF']],
-  ['a_airbrake', 'Avião', 'Freio aerodinâmico', ['KeyH']],
+  ['a_airbrake', 'Avião', 'Freio aerodinâmico / rodas (liga e desliga)', ['KeyH']],
   ['a_zoom', 'Avião', 'Zoom / câmera de mira (segurar)', ['Mouse2']],
   // mesmos comandos nas batalhas terrestres e na Batalha Aérea (padrão do War Thunder com mouse aim)
-  ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Mouse1', 'Space']],
+  ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Space']],
   ['a_cm', 'Avião', 'Contramedidas (flares + chaff)', ['KeyX']],
+  ['a_wsel', 'Avião', 'Selecionar míssil', ['KeyZ']],
+  ['a_rmode', 'Avião', 'Radar: trocar modo', ['KeyN']],
+  ['a_rlock', 'Avião', 'Radar: travar / soltar alvo', ['CapsLock']],
   ['a_gear', 'Avião', 'Trem de pouso', ['KeyG']],
   ['a_ext', 'Avião', 'Extintor de incêndio', ['KeyK']],
   ['a_cam', 'Avião', 'Trocar câmera (cockpit / externa)', ['KeyV']],
-  ['a_target', 'Avião', 'Trocar alvo marcado', ['KeyT']],
+  ['a_target', 'Avião', 'Marcar alvo na mira', ['Mouse1', 'KeyT']],
+  ['a_xray', 'Avião', 'Raio-X da aeronave (segurar)', ['KeyJ']],
   ['freelook', 'Geral', 'Olhar livre (segurar)', ['KeyC']],
   ['score', 'Geral', 'Placar (segurar)', ['Tab']],
   ['map', 'Geral', 'Mapa ampliado (segurar)', ['KeyM']],
@@ -61,7 +65,7 @@ export function defaults() {
     mouse: { tank: 1.0, sight: 1.0, plane: 1.0, invertY: false },
     graphics: { quality: 'alta' },
     audio: { master: 0.8, sfx: 1.0, engine: 0.8 },
-    bindsV: 2,
+    bindsV: 4,
     gameplay: { tankAssist: true, leadMarker: true, flightMode: 'instrutor', camSmooth: true, hitcam: true },
   };
 }
@@ -83,6 +87,17 @@ if (saved && saved.binds && (saved.bindsV || 1) < 2) {
   const d = defaults().binds;
   for (const id of ['a_thr_up', 'a_thr_dn', 'a_pitch_up', 'a_pitch_dn', 'a_roll_l', 'a_roll_r', 'a_yaw_l', 'a_yaw_r', 'freelook']) settings.binds[id] = [...d[id]];
   settings.bindsV = 2;
+}
+// v3 (padrão WT): Caps trava o alvo no radar, botão do meio (scroll) marca o alvo; míssil fica no Espaço
+if (saved && saved.binds && (saved.bindsV || 1) < 3) {
+  const d = defaults().binds;
+  for (const id of ['a_rlock', 'a_target', 'a_missile']) settings.binds[id] = [...d[id]];
+  settings.bindsV = 3;
+}
+// v4: bombas saem do Espaço (que é do míssil ar-ar) para o B; só se o jogador não tiver trocado
+if (saved && saved.binds && (saved.bindsV || 1) < 4) {
+  if (settings.binds.a_bomb.join() === 'Space' && settings.binds.a_missile.includes('Space')) settings.binds.a_bomb = [...defaults().binds.a_bomb];
+  settings.bindsV = 4;
 }
 const listeners = [];
 export function onSettings(fn) { listeners.push(fn); }
