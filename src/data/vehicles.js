@@ -185,7 +185,7 @@ export const PLANES = {
   f4e: {
     key: 'f4e', type: 'plane', marks: { serial: 'AF 67-270', decalZ: -0.33 }, gear: { track: 5.45, ret: 'in' }, name: 'F-4E Phantom II', short: 'F-4E', nation: 'EUA', year: 1967, color: 0x7a7d63, sp: 640, jet: true, sweep: 45,
     mass: 18200, fuel: 4000, S: 49.2, span: 11.7, L: 19.2, cla: 3.5, clmax: 1.25, cd0: 0.021, e: 0.7, engine: 'j79', engines: 2, rcs: 6,
-    mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.72, 0.2],
+    mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.72, 0.2], inertia: [223700, 44700, 253500], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² [arfagem, rolagem, guinada] do F-4C/E publicado (a estimativa por L² dava 2–2,4× mais)
     vne: 1400 / 3.6, glim: 9.5, kda: 0.05, kde: 0.36, kdr: 0.03, armor: { pilot: 6 },
     hpParts: { wingL: 60, wingR: 60, tail: 40, engine: 50, fuel: 36, fuse: 75 },
     fuseR: 0.95, noseR: 0.5, wingZ: -1.2, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, tailY: 0.48, finY: 0.34, intakes: 'side', nozzles: 2, gunPod: true, wingBreak: [0.66, 12], finish: 'camo', underColor: 0xc9ccc6,
@@ -212,7 +212,7 @@ export const PLANES = {
   mig21: {
     key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
     mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0175, e: 0.62, engine: 'r13', rcs: 3,
-    mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.75, 0.17],
+    mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.75, 0.17], inertia: [57000, 7000, 61000], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² aproximados do MiG-21 (asa curta e fuselagem fina)
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },
     hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
     fuseR: 0.62, noseR: 0.45, wingZ: -1.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,

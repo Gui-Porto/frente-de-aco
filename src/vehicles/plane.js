@@ -424,13 +424,15 @@ export class Plane {
     // "rola, depois puxa": com muita rolagem pela frente o profundor espera (puxar/empurrar inclinado
     // jogava o nariz para o lado, criava erro lateral e o avião ficava rolando para lá e para cá)
     const rp = lerp(1, clamp(Math.cos(rollErr), 0.15, 1), w);
-    let elev = off > 1.4 && du < 0 ? 1 : K * (3.2 * pe * rp - 0.9 * (this.pr - aimRate)) + trim + (nose ? 1.2 * this.iP : 0);
+    // ganhos do instrutor por avião (def.steer = { kp, kd, ka, kr, ky }); padrão = o que serve à maioria
+    const SP = D.steer || {}, kp = SP.kp ?? 3.2, kd = SP.kd ?? 0.9, ka = SP.ka ?? 3.1, kr = SP.kr ?? 1.8, ky = SP.ky ?? 1.6;
+    let elev = off > 1.4 && du < 0 ? 1 : K * (kp * pe * rp - kd * (this.pr - aimRate)) + trim + (nose ? 1.2 * this.iP : 0);
     const elev0 = elev;
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
-    this.ail = clamp(K * (3.1 * rollErr - 2.0 * this.rr), -1, 1);
+    this.ail = clamp(K * (ka * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
-    this.rud = clamp(K * 1.8 * yawErr * (1 - w * 0.7) - 1.6 * this.yr, -1, 1);
+    this.rud = clamp(K * kr * yawErr * (1 - w * 0.7) - ky * this.yr, -1, 1);
     const as = D.clmax / D.cla, aLim = as * (0.86 + this.flaps * 0.08);
     // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
     elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
