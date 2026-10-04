@@ -81,7 +81,7 @@ export function showcase(key) {
   if (show) hs.remove(show.root);
   const D = PLANES[key]; show = buildPlane(D); cur = key;
   // trem de pouso do próprio modelo (o mesmo que desce em voo)
-  const G = show.gearMesh; G.visible = true;
+  const G = show.gearMesh; G.userData.anim(1); // baixado, portas abertas
   show.root.position.set(0, G.userData.lift - 0.02, 0);
   show.root.rotation.x = -G.userData.pitch; // pousado na bequilha
   show.root.traverse(o => { if (o.isMesh) o.castShadow = true; });

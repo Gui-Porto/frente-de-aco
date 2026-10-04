@@ -99,9 +99,9 @@ function engine(p, x, y) {
   else { lbl('POTÊNCIA', tx, top + 30); num(`${Math.round(E.power * 100)}%`, tx + 108, top + 30, 15); }
   if (E.jet && E.hasAB) {
     const lit = E.ab > 0.02, lighting = p.wep && !lit;
-    lbl('PÓS-COMB.', tx, top + 52); ptxt(lit ? `ACESA ${Math.round(E.ab * 100)}%` : lighting ? (E.N > 0.97 ? 'ACENDENDO' : 'AGUARDA ROTAÇÃO') : 'DESLIGADA', tx + 108, top + 52, 13, lit ? T.ab : lighting ? C.amber : T.dim, 'right', UI, 700);
+    lbl('PC', tx, top + 52); ptxt(lit ? `ACESA ${Math.round(E.ab * 100)}%` : lighting ? (E.N > 0.97 ? 'ACENDENDO' : 'AGUARDA ROT.') : 'DESLIGADA', tx + 108, top + 52, 13, lit ? T.ab : lighting ? C.amber : T.dim, 'right', UI, 700);
   } else if (boost) { lbl('WEP', tx, top + 52); ptxt(p.wep ? 'LIGADO' : 'DESLIGADO', tx + 108, top + 52, 13, p.wep ? T.ab : T.dim, 'right', UI, 700); }
-  else { lbl('PÓS-COMB.', tx, top + 52); ptxt('—', tx + 108, top + 52, 13, T.faint, 'right', UI, 600); }
+  else { lbl('PC', tx, top + 52); ptxt('—', tx + 108, top + 52, 13, T.faint, 'right', UI, 600); }
   // temperaturas
   const rx = x + 170, L = HEAT_LIMITS[p.cooling], hc = (v, lim) => (v > lim + 10 ? (Math.sin(V.blink * 10) > 0 ? C.enemy : T.fg) : v > lim ? C.amber : T.fg);
   if (!p.engineOn) { lbl('MOTOR', rx, top + 8); ptxt('PARADO', rx + 146, top + 8, 15, C.enemy, 'right', UI, 700); }
@@ -146,7 +146,7 @@ function fuel(p, x, y, w) {
 
 // ---------- raio-X da aeronave (segurar a tecla): silhueta grande + cada componente e seu estado ----------
 const XG = [
-  ['ESTRUTURA', ['skin', 'spar', 'boom']], ['MOTOR', ['engine', 'oil', 'cool', 'turbo']], ['COMBUSTÍVEL', ['fuel']],
+  ['ESTRUTURA', ['skin', 'spar', 'boom', 'gear']], ['MOTOR', ['engine', 'oil', 'cool', 'turbo']], ['COMBUSTÍVEL', ['fuel']],
   ['COMANDOS', ['ctrl', 'flap', 'act']], ['ARMAS E SISTEMAS', ['gun', 'ammo', 'radar', 'pilot']],
 ];
 export function xrayPanel(p, theme) {
@@ -216,6 +216,7 @@ export function damageList(p) {
     if (m.kind === 'ctrl' && m.dead && !m.lost) out.push([`${UP(m.label)} ${m.ripped ? 'ARRANCADO' : m.name === 'cables' ? (m.label.startsWith('Hastes') ? 'CORTADAS' : 'CORTADOS') : 'TRAVADO'}`, C.enemy]);
     else if (m.kind === 'flap' && m.dead && !m.lost && (fl.dead && fr.dead)) out.push([`${UP(m.label)} ${m.ripped ? 'ARRANCADO' : 'TRAVADO'}`, C.amber]);
     else if (m.kind === 'act' && m.dead) out.push([`${UP(m.label)} AVARIADO`, C.amber]);
+    else if (m.kind === 'gear' && m.dead) out.push([`${UP(m.label)} ${m.lost ? 'ARRANCADO' : 'TRAVADO'}`, m.lost ? C.enemy : C.amber]);
     else if (m.kind === 'radar' && m.dead) out.push(['RADAR INOPERANTE', C.amber]);
     else if (m.kind === 'turbo' && m.dead) out.push(['TURBO AVARIADO', C.amber]);
     else if (m.kind === 'gun' && m.dead && !m.lost) out.push([`${UP(m.label)} INOPERANTE`, C.amber]);
@@ -286,18 +287,33 @@ function silhouette(p, x, y, w, sh) {
   draw(fuse, sf('fuse'), false);
   { const o = finCfg(D), r = M.rud, fz0 = finStation(o, 0, 0)[2], fz1 = finStation(o, 0, 1)[2]; draw([[0.07, 0, fz0], [0.07, 0, fz1], [-0.07, 0, fz1], [-0.07, 0, fz0]], sf('tail'), !p.tailOn);
     if (p.tailOn) { const z0 = finStation(o, 0.1, 0.7)[2], z1 = finStation(o, 0.1, 1)[2]; draw([[0.09, 0, z0], [0.09, 0, z1], [-0.09, 0, z1], [-0.09, 0, z0]], r.ripped ? 0 : modFrac(r), r.ripped, hot(r)); } }
-  // componentes internos (as superfícies já foram desenhadas acima)
+  // componentes internos, como no WT: inteiro, só o que orienta o piloto (motores e piloto, em tom neutro);
+  // o resto (longarinas, armas, munição, tanques, óleo, sistemas) só aparece quando avaria, como uma marca
+  // colorida no lugar dele. Antes cada módulo era um quadrado cinza e eles se sobrepunham numa mancha.
+  const marks = [];
   for (const m of Object.values(M)) {
-    if (m.lost || m.kind === 'ctrl' || m.kind === 'flap') continue;
+    if (m.lost || m.kind === 'ctrl' || m.kind === 'flap' || m.kind === 'skin') continue;
     const f = m.kind === 'engine' ? (p.engs[m.i].on ? p.engs[m.i].hp / p.maxHp.engine : 0) : modFrac(m);
-    const [a, b] = P(m.c[0] + m.h[0], m.c[2] + m.h[2]), ww = Math.max(3, m.h[0] * 2 * s), hh = Math.max(3, m.h[2] * 2 * s);
-    g.fillStyle = hot(m) ? '#fff' : f >= 0.7 ? 'rgba(238,241,236,.28)' : fcol(f); g.beginPath();
-    if (m.kind === 'pilot') g.arc(a + ww / 2, b + hh / 2, Math.min(ww, hh) / 2 + 1, 0, 7); else g.roundRect(a, b, ww, hh, 1.5);
-    g.fill();
-    // tanque: nível do combustível de baixo para cima (azul), vazio = só o contorno
-    if (m.kind === 'fuel' && m.cap > 0 && !hot(m)) { const lv = clamp(m.left / m.cap, 0, 1); g.fillStyle = 'rgba(120,190,235,.55)'; g.fillRect(a, b + hh * (1 - lv), ww, hh * lv); }
-    if (f <= 0) { g.strokeStyle = C.enemy; g.lineWidth = 1.3; g.beginPath(); g.moveTo(a, b); g.lineTo(a + ww, b + hh); g.moveTo(a + ww, b); g.lineTo(a, b + hh); g.stroke(); }
-    if (m.leak > 0 && m.left > 0) { g.fillStyle = C.sky; g.beginPath(); g.arc(a + ww + 3, b + hh / 2 + Math.sin(V.blink * 8) * 2, 2, 0, 7); g.fill(); }
+    const key = m.kind === 'engine' || m.kind === 'pilot', leak = m.leak > 0 && m.left > 0;
+    if (!key && f >= 0.7 && !leak && !hot(m)) continue;
+    const [cx, cy] = P(m.c[0], m.c[2]);
+    if (key) {
+      const ww = Math.max(5, m.h[0] * 2 * s), hh = Math.max(5, m.h[2] * 2 * s);
+      g.fillStyle = hot(m) ? '#fff' : f >= 0.7 ? 'rgba(238,241,236,.32)' : fcol(f); g.beginPath();
+      if (m.kind === 'pilot') g.arc(cx, cy, Math.min(ww, hh) / 2 + 1, 0, 7); else g.roundRect(cx - ww / 2, cy - hh / 2, ww, hh, Math.min(ww, hh) / 2);
+      g.fill();
+      if (f <= 0) marks.push([cx, cy, true]);
+      continue;
+    }
+    // avaria: longarina vira um traço ao longo da asa; o resto, um ponto do tamanho certo para não cobrir os vizinhos
+    g.fillStyle = hot(m) ? '#fff' : fcol(Math.min(f, 0.69)); g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1;
+    if (m.kind === 'spar') { const w = Math.max(6, m.h[0] * 2 * s); g.fillRect(cx - w / 2, cy - 1.5, w, 3); }
+    else { g.beginPath(); g.arc(cx, cy, 3.2, 0, 7); g.fill(); g.stroke(); }
+    if (f <= 0) marks.push([cx, cy, false]);
+    if (leak) { g.fillStyle = C.sky; g.beginPath(); g.arc(cx + 6, cy + Math.sin(V.blink * 8) * 2, 2, 0, 7); g.fill(); }
   }
+  // destruído: X vermelho por cima de tudo
+  g.strokeStyle = C.enemy; g.lineWidth = 1.5;
+  for (const [cx, cy, big] of marks) { const r = big ? 5 : 3.5; g.beginPath(); g.moveTo(cx - r, cy - r); g.lineTo(cx + r, cy + r); g.moveTo(cx + r, cy - r); g.lineTo(cx - r, cy + r); g.stroke(); }
   if (p.fire > 0) { const [a, b] = P(p.fireAt[0], p.fireAt[2]); g.fillStyle = `rgba(255,${120 + Math.random() * 80},40,${0.5 + Math.random() * 0.3})`; g.beginPath(); g.arc(a, b, 8 + Math.random() * 3, 0, 7); g.fill(); }
 }

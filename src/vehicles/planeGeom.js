@@ -51,3 +51,9 @@ export function tipArea(D) {
   for (let i = 0; i < 40; i++) { const s = (i + 0.5) / 40, c = chordAt(o, s); t += c; if (s > sB) a += c; }
   return a / t;
 }
+// trem de pouso: altura do CG ao chão (lift), pernas principais (x = ±mx, z = mz, roda mr) e do nariz/bequilha
+// (z = nz, comprimento nl, roda nr). O modelo (buildGear) e as caixas de dano (gearL/gearR/gearN) usam a mesma planta.
+export function gearPlan(D) {
+  const lift = D.fuseR + 1.35, mr = D.jet ? 0.36 : 0.4, nr = D.jet ? 0.28 : 0.17;
+  return { lift, mx: D.span * 0.16, mz: D.wingZ + 0.4, mr, nz: D.jet ? D.L * 0.33 : -D.L * 0.46, nl: D.jet ? lift : lift * 0.45, nr };
+}

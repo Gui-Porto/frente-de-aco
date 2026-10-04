@@ -203,7 +203,7 @@ export const PLANES = {
       { id: 'hydU', k: 'act', n: 'Hidráulico utilitário', does: ['flaps', 'brake'], z: 0.0, y: -0.7, s: [0.35, 0.2, 0.5] },
       { id: 'pc1', k: 'act', n: 'Hidráulico PC-1', does: ['ctl'], x: 0.5, z: -0.3, y: 0.2, s: [0.2, 0.2, 0.5] }, { id: 'pc2', k: 'act', n: 'Hidráulico PC-2', does: ['ctl'], x: -0.5, z: -0.3, y: 0.2, s: [0.2, 0.2, 0.5] }],
     // M61 de 6 canos na carenagem sob o nariz (F-4E)
-    guns: [{ w: 'M61', n: 1, span: [0], z: 8.2, ammo: 640, mount: { zf: 0.41, r: 0.022, len: -0.05, cluster: 6, rr: 0.065, pod: { r: 0.2, len: 3.2 }, b: [[0, -1]] } }],
+    guns: [{ w: 'M61', n: 1, span: [0], z: 8.2, ammo: 640, mount: { zf: 0.41, r: 0.022, len: -0.05, cluster: 6, rr: 0.065, pod: { r: 0.2, len: 3.2, blend: true }, b: [[0, -1]] } }],
     // freios sob as asas, atrás do trem principal (abrem para baixo)
     brake: [{ ws: 0.16, cf: 0.45, ax: 1, w: 0.75, len: 0.8, open: 'down', deg: 50 }, { ws: 0.16, cf: 0.45, ax: -1, w: 0.75, len: 0.8, open: 'down', deg: 50 }],
     missiles: [{ w: 'AIM7E', n: 4 }, { w: 'AIM9J', n: 4 }],
