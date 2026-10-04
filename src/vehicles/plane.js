@@ -311,7 +311,7 @@ export class Plane {
         // toque: o amortecedor afunda, o pneu parado no ar esfola na pista (fumaça) e um toque firme quica
         this.gcv += 0.5 + vs * 0.55;
         const Vg = Math.hypot(this.vel.x, this.vel.z);
-        if (Vg > 25) for (const sx of [1, -1]) { _pt.set(sx * D.span * 0.16, -G.lift, G.mainZ).applyMatrix4(this.root.matrixWorld); for (let i = 0; i < 3; i++) fxTrail(_pt.clone().add(rv(0.3)), 0xdedcd6, 0.35 + Math.min(vs, 6) * 0.06, 1.6 + Math.random()); }
+        if (Vg > 25) for (const sx of [1, -1]) { _pt.set(sx * G.mainX, -G.lift, G.mainZ).applyMatrix4(this.root.matrixWorld); for (let i = 0; i < 3; i++) fxTrail(_pt.clone().add(rv(0.3)), 0xdedcd6, 0.35 + Math.min(vs, 6) * 0.06, 1.6 + Math.random()); }
         if (vs > 3.2) this.vel.y = vs * 0.2;
         if (this.isPlayer) shakeAt(this.pos, 0.25 + Math.min(vs, 10) * 0.12, 50);
       }

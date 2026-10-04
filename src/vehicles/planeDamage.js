@@ -93,7 +93,7 @@ export function planeModules(D) {
   // trem: cada perna na posição RECOLHIDA (dentro da asa/fuselagem, onde fica o voo todo); principais recolhem
   // para dentro, a do nariz para a frente e a bequilha para trás
   const G = gearPlan(D);
-  for (const sd of ['L', 'R']) put('gear' + sd, 'gear', 'Trem' + SIDE[sd][1], [SIDE[sd][0] * (G.mx - G.lift * 0.4), -fr * 0.3, G.mz], [G.lift * 0.42, 0.22, G.mr * 1.1], 8, { leg: sd });
+  for (const sd of ['L', 'R']) put('gear' + sd, 'gear', 'Trem' + SIDE[sd][1], [SIDE[sd][0] * (G.mx + (G.ret === 'out' ? 1 : -1) * G.lift * 0.4), -fr * 0.3, G.mz], [G.lift * 0.42, 0.22, G.mr * 1.1], 8, { leg: sd });
   put('gearN', 'gear', jet ? 'Trem do nariz' : 'Bequilha', [0, -fr * 0.45, G.nz - G.nl * 0.4], [0.22, 0.25, G.nl * 0.42], 6, { leg: 'N' });
   put('cables', 'ctrl', D.boost ? 'Hastes de comando' : LABEL.cables, [0, 0, -L * 0.25], [0.18, 0.18, L * 0.14], 9);
   const out = {};
