@@ -23,8 +23,6 @@ export function ptxt(s, x, y, size = 13, col = C.white, align = 'left', font = U
 export function gstroke(w = 1.6, col = C.green) { g.shadowBlur = 0; g.lineWidth = w + 2.2; g.strokeStyle = C.out; g.stroke(); g.lineWidth = w; g.strokeStyle = col; g.stroke(); }
 export const fmtD = d => (d < 1000 ? `${Math.round(d / 10) * 10} m` : `${(d / 1000).toFixed(1).replace('.', ',')} km`);
 export const dec = (v, n = 1) => v.toFixed(n).replace('.', ',');
-// direção relativa em "horas" (12 h = nariz). az > 0 = à direita
-export const clock = az => `${((Math.round(az / (Math.PI / 6)) % 12) + 12) % 12 || 12} h`;
 // placa de painel: chanfro no canto superior esquerdo, borda fina na cor do tema
 export function plate(x, y, w, h, T, cut = 14) {
   g.shadowBlur = 0; g.beginPath();

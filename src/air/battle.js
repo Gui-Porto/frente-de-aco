@@ -239,7 +239,7 @@ export const B = {
   // ---------- lançamentos inimigos percebidos pelo jogador ----------
   // Só entra o que o piloto/aeronave consegue saber: VISUAL (fumaça do lançamento a até 4 km, dentro de
   // ±75° do nariz, ou a até 1,5 km em qualquer direção), RWR que distingue guiamento (iluminação de
-  // semiativo) ou MAW. Alimenta o status "LANÇAMENTO" do radar, o alerta central e o som.
+  // semiativo) ou MAW. Alimenta o losango "M" no radar e o som.
   launches: [],
   onLaunch(m) {
     const p = this.player; if (!p || !p.alive || m.owner.team === p.team) return;

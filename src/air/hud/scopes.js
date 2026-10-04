@@ -4,7 +4,7 @@ import { clamp } from '../../core/util.js';
 import { RADAR_MODE, B } from '../battle.js';
 import { missiles } from '../missiles.js';
 import { cam } from '../../game/camera.js';
-import { g, V, C, MONO, UI, ptxt, txt, plate, dec, clock, fmtD } from './kit.js';
+import { g, V, C, MONO, UI, ptxt, txt, plate, dec, fmtD } from './kit.js';
 import { sysName } from './themes.js';
 import { kb } from './flight.js';
 // =====================================================================
@@ -16,9 +16,7 @@ import { kb } from './flight.js';
 // inimigos que você vê a olho ou pelo seu radar).
 // =====================================================================
 const RH = 252, RW = 286, WW = 176, DEG = Math.PI / 180;
-const LVL_TXT = { SEARCH: 'BUSCA', TRACK: 'RASTREIO', LOCK: 'TRAVADO', GUIDANCE: 'MÍSSIL GUIADO' };
 const SCALES = [10000, 20000, 40000];
-const QNAME = { DF: 'frente dir.', DT: 'trás dir.', EF: 'frente esq.', ET: 'trás esq.' };
 
 export function leftPanels(p, T) {
   const k = clamp(Math.min(V.W / 1400, V.H / 820), 0.72, 1);
@@ -35,9 +33,7 @@ function radarScope(p, rd, T) {
   plate(0, 0, RW, RH, T);
   ptxt(sysName(T, rd.R), 22, 22, 13, T.fg, 'left', UI, 700);
   const mode = rd.mode === 'STT' ? (rd.locked ? 'TRAVADO' : 'TRAVANDO') : RADAR_MODE[rd.mode].toUpperCase();
-  const launch = B.launches.find(l => S.now - l.at < 6);
-  if (launch) { if (Math.sin(V.blink * 10) > -0.3) { g.fillStyle = C.enemy; g.fillRect(RW - 132, 9, 118, 18); ptxt('LANÇAMENTO', RW - 73, 22, 12.5, '#fff', 'center', UI, 800); } }
-  else ptxt(mode, RW - 14, 22, 12, rd.mode === 'STT' ? (rd.locked ? C.enemy : C.amber) : rd.on ? T.accent : T.dim, 'right', UI, 700);
+  ptxt(mode, RW - 14, 22, 12, rd.mode === 'STT' ? (rd.locked ? C.enemy : C.amber) : rd.on ? T.accent : T.dim, 'right', UI, 700);
   const sx = 14, sy = 32, sw = RW - 28, sh = RH - 66;
   g.fillStyle = SC.bg; g.fillRect(sx, sy, sw, sh);
   // escala: a menor que cabe o contato mais distante (ACM sempre 10 km)
@@ -122,10 +118,7 @@ function rwrScope(p, rw, mw, T) {
     const rr = R * clamp(m.r / mw.W.range, 0.2, 1), s = Math.sin(m.az), c = Math.cos(m.az), x = cx + s * rr, y = cy - c * rr;
     g.fillStyle = C.enemy; g.beginPath(); g.moveTo(x - s * 9, y + c * 9); g.lineTo(x + s * 5 - c * 6, y - c * 5 - s * 6); g.lineTo(x + s * 5 + c * 6, y - c * 5 + s * 6); g.closePath(); g.fill();
   }
-  const ty = 32 + (RH - 66) + 17, mm = mw && mw.list[0];
-  if (mm) { if (blink) ptxt(`MÍSSIL · ${clock(mm.az)} · ${Math.max(1, Math.round(mm.tti))} s`, cx, ty, 12, C.enemy, 'center', UI, 800); }
-  else if (top) ptxt(`${LVL_TXT[top.lvl]}${top.type ? ' · ' + top.type : ''} · ${rw.W.res >= 90 ? QNAME[(top.az >= 0 ? 'D' : 'E') + (Math.abs(top.az) < Math.PI / 2 ? 'F' : 'T')] : clock(top.az)}`, cx, ty, 12, top.lvl === 'SEARCH' ? T.fg : top.lvl === 'TRACK' ? C.amber : C.enemy, 'center', UI, 700);
-  else ptxt('Sem emissões', cx, ty, 12, T.dim, 'center', UI, 600);
+  // sem linha de texto de ameaça: rastreio/trava/míssil são os símbolos acima + a voz
 }
 // SPO-10: quatro lâmpadas (quadrantes). Busca pisca; rastreio/trava fica acesa.
 function quadrants(rw, T, cx, cy, R) {
