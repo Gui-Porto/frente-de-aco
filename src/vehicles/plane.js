@@ -343,8 +343,12 @@ export class Plane {
     const D = this.def;
     // antecipação (opts.lead s): mira onde o círculo ESTARÁ — sem isso o nariz andava sempre atrás de um
     // mouse em movimento. Velocidade da mira filtrada e limitada (um puxão brusco não vira salto).
+    let aimRate = 0; // quanto o erro de arfagem anda só porque a MIRA andou (eixos atuais): o amortecimento não freia a curva pedida
     if (opts.lead) {
-      if (!this._aimPrev) { this._aimPrev = dir.clone(); this._aimVel = new V3(); }
+      if (!this._aimPrev) { this._aimPrev = dir.clone(); this._aimVel = new V3(); this._aimR = 0; }
+      const ang = d => Math.atan2(d.dot(_pu), Math.max(d.dot(_pf), 0.05));
+      this._aimR += ((ang(dir) - ang(this._aimPrev)) / Math.max(dt, 1e-3) - this._aimR) * (1 - Math.exp(-dt * 10));
+      aimRate = clamp(this._aimR, -1.2, 1.2);
       _pd.copy(dir).sub(this._aimPrev).divideScalar(Math.max(dt, 1e-3)); this._aimPrev.copy(dir);
       this._aimVel.lerp(_pd, 1 - Math.exp(-dt * 3.5));
       // só antecipa movimento intencional: abaixo de ~3°/s (tremor da mão) não há avanço; antes o tremor de ±0,5° virava ±3° de comando
@@ -360,7 +364,10 @@ export class Plane {
     const nose = !!opts.nose, K = opts.gain || 1;
     const eN = Math.atan2(du, Math.max(df, 0.05)), pe = eN + this.alpha * (nose ? 0.25 : 0.9);
     // no modo nariz o integral soma só o erro do NARIZ: somando pe, parava com o nariz 0,25·α fora do círculo
-    this.iP = clamp(this.iP + (nose ? eN : pe) * dt * (off < 0.3 ? 1 : 0), -0.3, 0.3) * (off < 0.3 ? 1 : 0.95);
+    // anti-windup: só soma perto da mira (< ~5°) e sem o limitador de G/ângulo de ataque atuando; fora disso esvazia.
+    // Antes somava até 17° e em curva puxada enchia (0,3): ao parar o mouse o nariz passava ~6° do círculo e voltava em 3 s
+    if (off < 0.09 && !this._elevLim) this.iP = clamp(this.iP + (nose ? eN : pe) * dt, -0.15, 0.15);
+    else this.iP *= Math.exp(-dt * 4);
     const trim = 0.9 * clamp(this.alpha, -0.5, 0.5) / D.kde;
     // rolagem: inclina para colocar o alvo no plano de sustentação; perto do nariz, nivela as asas.
     // PERTO da mira (até ~17°) a inclinação usa só o desvio LATERAL: atan2(−dl, |du|); "acima/abaixo" fica
@@ -378,14 +385,17 @@ export class Plane {
     // e a inclinação fica limitada ao tamanho do erro: 8° ao lado pedia ~80° de asa e uma puxada que passava do alvo
     // e voltava (MiG-21/F-4 balançavam 40°↔84° depois de a mira parar)
     if (this.nearAim) { const lim = Math.PI / 2 * clamp(off / 0.3, 0.3, 1); bank = clamp(bank, -lim, lim); }
-    const w = nose ? clamp((off - 0.035) / 0.14, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
-    const rollErr = lerp(level * 0.6, bank, w);
+    const w = nose ? clamp((off - 0.02) / 0.09, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
+    // nivelar: ganho 0,6 perto do nível (não balança), mais forte com muita inclinação a desfazer — parando o mouse
+    // depois de uma curva o avião desfazia 90° a ~25°/s e o nariz ficava ~3,5° ao lado do círculo por 3 s
+    const rollErr = lerp(level * (0.6 + 0.7 * clamp(Math.abs(level) - 0.35, 0, 1)), bank, w);
     // "rola, depois puxa": com muita rolagem pela frente o profundor espera (puxar/empurrar inclinado
     // jogava o nariz para o lado, criava erro lateral e o avião ficava rolando para lá e para cá)
     const rp = lerp(1, clamp(Math.cos(rollErr), 0.15, 1), w);
-    let elev = off > 1.4 && du < 0 ? 1 : K * (3.2 * pe * rp - 0.9 * this.pr) + trim + (nose ? 1.2 * this.iP : 0);
+    let elev = off > 1.4 && du < 0 ? 1 : K * (3.2 * pe * rp - 0.9 * (this.pr - aimRate)) + trim + (nose ? 1.2 * this.iP : 0);
+    const elev0 = elev;
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
-    this.ail = clamp(K * (2.6 * rollErr - 2.0 * this.rr), -1, 1);
+    this.ail = clamp(K * (3.1 * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
     this.rud = clamp(K * 1.8 * yawErr * (1 - w * 0.7) - 0.5 * this.yr, -1, 1);
@@ -402,6 +412,7 @@ export class Plane {
     }
     // no chão: mira no horizonte ou abaixo = fica rolando (sem puxar); mira acima = roda e decola
     if (this.onGround) elev = dir.y < 0.03 ? clamp(elev, -0.2, 0) : Math.min(elev, 0.8);
+    this._elevLim = Math.abs(elev - elev0) > 0.02;
     this.elev = clamp(elev, -1, 1);
   }
   // direção de tiro: armas FIXAS no eixo do avião, como no WT (quem aponta é o avião, não o mouse)
