@@ -1,10 +1,12 @@
 import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
-import { AC, eng, cockpitTone, cockpitThump, sndWhoosh, sndSonicBoom, sndGear, sndTouch, sndFlaps, sndAB, soundAt } from '../fx/audio.js';
+import { AC, eng, cockpitTone, cockpitVoice,cockpitThump, sndWhoosh, sndSonicBoom, sndGear, sndTouch, sndFlaps, sndAB, soundAt } from '../fx/audio.js';
 import { acam } from './camera.js';
 import { clamp } from '../core/util.js';
 import { B } from './battle.js';
 import { LOCK } from './targeting.js';
+import { pickVoice, voiceStep, VOICE_RATE } from './voice.js';
+import { H } from '../world/terrain.js';
 // =====================================================================
 // AudioSystem do modo aéreo. Tudo sintetizado e dirigido por DADOS:
 //  - motor: perfil em ENGINES[id].snd (pistão: f0..f1; jato: rugido, apito,
@@ -30,7 +32,10 @@ export function airAudio(dt) {
   if (p && !S.paused && S.state === 'play') { cockpitEvents(p); detents(p); }
   else drain(p);
   tones(p, dt);
+  const talk = p && !S.paused && S.state === 'play';
+  voice(voiceStep(talk ? pickVoice(p, p.pos.y - H(p.pos.x, p.pos.z)) : null, dt, talk));
 }
+function voice(v) { if (v !== undefined) cockpitVoice(v, VOICE_RATE); }
 
 function engine(q, vol) {
   const E = q && q.eng, jet = E && E.jet, sd = E ? E.E.snd || {} : {}, pit = acam.mode === 2 && q === S.player; // cabine: mais abafado
@@ -174,4 +179,4 @@ function tones(p, dt) {
   else if (w === 'stall') { wn.o.frequency.value = 330; wn.g.gain.value = pulse(3, 0.6) ? 0.025 : 0; }
   else wn.g.gain.value = 0;
 }
-export function airAudioOff() { if (!eng.jet) return; for (const v of eng.voices) { v.g.gain.value = 0; if (v.recP) v.recP.g.gain.value = 0; if (v.recJ) v.recJ.g.gain.value = 0; } for (const r of [eng.recP, eng.recJ, eng.recC, eng.gunLoop]) if (r) r.g.gain.value = 0; eng.roll.g.gain.value = 0; eng.wind.buffet.gain.value = 0; eng.jet.g.gain.value = 0; eng.ab.g.gain.value = 0; eng.wind.g.gain.value = 0; eng.rumble.g.gain.value = 0; eng.seek.g.gain.value = 0; eng.warn.g.gain.value = 0; eng.air.g.gain.value = 0; }
+export function airAudioOff() { voice(voiceStep(null, 0, false)); if (!eng.jet) return; for (const v of eng.voices) { v.g.gain.value = 0; if (v.recP) v.recP.g.gain.value = 0; if (v.recJ) v.recJ.g.gain.value = 0; } for (const r of [eng.recP, eng.recJ, eng.recC, eng.gunLoop]) if (r) r.g.gain.value = 0; eng.roll.g.gain.value = 0; eng.wind.buffet.gain.value = 0; eng.jet.g.gain.value = 0; eng.ab.g.gain.value = 0; eng.wind.g.gain.value = 0; eng.rumble.g.gain.value = 0; eng.seek.g.gain.value = 0; eng.warn.g.gain.value = 0; eng.air.g.gain.value = 0; }

@@ -1,15 +1,14 @@
 import { H } from '../../world/terrain.js';
 import { B } from '../battle.js';
-import { g, V, C, UI, txt, clock } from './kit.js';
+import { g, V, C, UI, txt } from './kit.js';
 import { S } from '../../core/state.js';
 // =====================================================================
 // Alertas centrais por prioridade. Ameaças vêm SÓ dos sistemas da aeronave:
-// RWR (rastreio, trava, guiamento); o MAW só toca o alerta (aparece no painel). Sem
-// sistema, não há alerta — o piloto precisa ver a fumaça. Também define o
-// tom de alerta (B.warnTone) e desenha o arco de direção da ameaça.
+// RWR (rastreio, trava, guiamento) e MAW. Rastreio/trava/míssil NUNCA viram
+// texto: são voz (voice.js) + tom + arco de direção aqui + símbolos no painel
+// do RWR/MAW. Sem sistema, não há alerta — o piloto precisa ver a fumaça.
+// Também define o tom de alerta (B.warnTone).
 // =====================================================================
-const QUAD = { FD: 'frente à direita', TD: 'atrás à direita', TE: 'atrás à esquerda', FE: 'frente à esquerda' };
-const where = (rw, az) => (rw && rw.W.res >= 90 ? QUAD[(az >= 0 ? (Math.abs(az) < Math.PI / 2 ? 'FD' : 'TD') : (Math.abs(az) < Math.PI / 2 ? 'FE' : 'TE'))] : clock(az));
 
 export function warnings(p) {
   const list = [], rw = p.sys.rwr, mw = p.sys.maw;
@@ -19,10 +18,6 @@ export function warnings(p) {
   else if (B.launches.some(l => l.how === 'visual' && S.now - l.at < 4)) tone = 'launch';
   const th = rw && rw.top;
   if (th && th.lvl !== 'SEARCH') {
-    const ty = th.type ? ` (${th.type})` : '';
-    if (th.lvl === 'GUIDANCE') list.push([`MÍSSIL GUIADO${ty} · ${where(rw, th.az)}`, C.enemy, true]);
-    else if (th.lvl === 'LOCK') list.push([`TRAVADO PELO RADAR${ty} · ${where(rw, th.az)}`, C.enemy, false]);
-    else list.push([`RASTREADO${ty} · ${where(rw, th.az)}`, C.amber, false]);
     tone = tone || { GUIDANCE: 'guidance', LOCK: 'lock', TRACK: 'track' }[th.lvl];
     if (!arc) arc = { az: th.az, col: th.lvl === 'TRACK' ? C.amber : C.enemy, k: th.strength, wide: rw.W.res >= 90 };
   }

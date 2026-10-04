@@ -21,6 +21,7 @@
   "homepage": "https://github.com/Gui-Porto/frente-de-aco#readme",
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",
+    "sam-js": "^0.3.1",
     "three": "^0.186.1"
   },
   "devDependencies": {
