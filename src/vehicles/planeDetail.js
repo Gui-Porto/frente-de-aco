@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { station, chordAt, finCfg, finStation } from './planeGeom.js';
 // =====================================================================
 // Detalhes do modelo procedural dos jatos (só visual): bocais com cone de
@@ -34,43 +33,6 @@ export function nozzle(add, M, par, x, y, ze, r, n = {}) {
     }
     for (const q of g) add(q, M.heat, par, x, y, ze + 0.06);
   }
-}
-
-// Cabine: painel de instrumentos com mostradores, capota antirreflexo (coaming), mira refletora
-// e assento ejetável (encosto, apoio de cabeça, alças amarelas). Origem = cabeça do tripulante.
-const rbox = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 3, r);
-export function seat(add, M, par, opts = {}) {
-  const S = M.seat || M.dark, Cu = M.cushion || M.dark;
-  add(rbox(0.44, 0.74, 0.09, 0.03), S, par, 0, -0.38, -0.24);                                        // encosto
-  add(rbox(0.36, 0.5, 0.05, 0.02), Cu, par, 0, -0.42, -0.18);                                        // almofada das costas
-  add(rbox(0.34, 0.27, 0.17, 0.04), S, par, 0, 0.0, -0.24);                                          // caixa do paraquedas / apoio de cabeça
-  add(rbox(0.24, 0.17, 0.04, 0.02), Cu, par, 0, 0.0, -0.14);                                         // almofada da cabeça
-  add(rbox(0.44, 0.08, 0.44, 0.02), S, par, 0, -0.72, -0.02);                                        // assento
-  for (const s of [1, -1]) {
-    add(new THREE.BoxGeometry(0.03, 0.82, 0.05), M.steel, par, s * 0.2, -0.36, -0.29);              // trilhos do canhão ejetor
-    add(rbox(0.05, 0.3, 0.32, 0.015), S, par, s * 0.23, -0.62, -0.06);                             // laterais do assento
-    add(new THREE.BoxGeometry(0.045, 0.045, 0.16), M.yellow, par, s * 0.24, -0.47, 0.06);           // alças laterais
-  }
-  // alça de face (Martin-Baker/KM-1) no topo; F-86: só as laterais
-  if (opts.face !== false) add(new THREE.TorusGeometry(0.06, 0.011, 6, 12, Math.PI), M.yellow, par, 0, 0.14, -0.15);
-  add(new THREE.BoxGeometry(0.08, 0.05, 0.05), M.yellow, par, 0, -0.68, 0.2);                         // alça entre as pernas
-}
-// painel: face com mostradores e, por cima, a capota antirreflexo curva (não uma placa) na largura w do para-brisa
-export function panel(add, M, par, z, y, w) {
-  const p = add(rbox(w, 0.3, 0.06, 0.02), M.dark, par, 0, y - 0.44, z);
-  const hood = add(new THREE.CylinderGeometry(w * 0.5, w * 0.5, 0.3, 18, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2), M.dark, par, 0, y - 0.29, z + 0.1);
-  hood.scale.y = 0.32;
-  // mostradores (aro + vidro) voltados para o tripulante (−z)
-  for (let i = 0; i < 7; i++) {
-    const x = ((i % 4) - 1.5) * w * 0.22, yy = y - 0.36 - Math.floor(i / 4) * 0.11;
-    add(new THREE.CylinderGeometry(0.036, 0.036, 0.012, 14).rotateX(Math.PI / 2), M.steel, par, x, yy, z - 0.032);
-    add(new THREE.CircleGeometry(0.03, 14).rotateY(Math.PI), M.dial, par, x, yy, z - 0.04);
-  }
-  return p;
-}
-export function gunsight(add, M, par, z, y) {
-  add(new THREE.BoxGeometry(0.08, 0.07, 0.12), M.dark, par, 0, y - 0.23, z);
-  const g = add(new THREE.PlaneGeometry(0.1, 0.09), M.glass, par, 0, y - 0.15, z + 0.02); g.rotation.x = -0.6;
 }
 
 // Luzes: navegação (vermelha à esquerda = +x, verde à direita), branca na deriva, anticolisão vermelha
