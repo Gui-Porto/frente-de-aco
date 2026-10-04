@@ -69,12 +69,13 @@ export function updatePlaneFx(p, dt) {
   const flick = () => 1 + (Math.random() - 0.5) * 0.16;
   if (E.jet) {
     const ab = on && E.hasAB ? E.ab : 0, hot = on ? clamp((E.N - 0.9) / 0.1, 0, 1) : 0;
+    const wep = on && !E.hasAB ? E.ab : 0; // WEP do jato sem PC: chama curta e bocal ao rubro, sem diamantes
     for (const f of fx.flames) {
-      // PC: chama longa; sem PC: só o brilho curto do bocal em potência militar
-      const len = ab > 0.01 ? f.r * (7 + 9 * ab) : f.r * 1.1 * hot, rad = f.r * (ab > 0.01 ? 0.85 + 0.1 * ab : 0.7);
+      // PC: chama longa; WEP: chama curta; sem nada: só o brilho curto do bocal em potência militar
+      const len = ab > 0.01 ? f.r * (7 + 9 * ab) : wep > 0.01 ? f.r * (3.8 + 1.2 * Math.random()) : f.r * 1.1 * hot, rad = f.r * (ab > 0.01 ? 0.85 + 0.1 * ab : wep > 0.01 ? 0.8 : 0.7);
       // disco incandescente na boca: visto de trás é o que mais aparece (brilha já em potência militar)
-      const gk = Math.max(ab, hot * 0.35);
-      f.glow.scale.setScalar(gk > 0.01 ? f.r * (1.25 + 0.6 * ab) * flick() : HIDE);
+      const gk = Math.max(ab, wep * 0.8, hot * 0.35);
+      f.glow.scale.setScalar(gk > 0.01 ? f.r * (1.25 + 0.6 * Math.max(ab, wep * 0.6)) * flick() : HIDE);
       if (len < 0.02) { f.out.scale.setScalar(HIDE); f.inn.scale.setScalar(HIDE); continue; }
       f.out.scale.set(rad * flick(), rad * flick(), len * flick());
       f.inn.scale.copy(ab > 0.01 ? f.out.scale : _p.setScalar(HIDE)).multiplyScalar(ab > 0.01 ? 0.95 : 1);

@@ -466,7 +466,7 @@ export function buildPlane(D) {
   // detalhes por dados (planeDetail.js): luz da cauda, anticolisão, antenas, tanques externos, gancho
   DT.tailLight(add, DM, tail, D); DT.beacons(add, DM, root, D, at); DT.antennas(add, DM, root, tail, D, at);
   DT.drops(add, DM, root, D, at, wingCfg, wingL, wingR, sB); DT.hook(add, DM, root, D, at);
-  const gear = buildGear(D, root, wingCfg, dark);
+  const gear = buildGear(D, root, wingCfg, dark, under);
   // efeitos presos ao avião (chama da PC, fogo do WEP, cone de vapor) — fora da fusão de malhas
   const fx = buildPlaneFx(D, root, nozzles, stacks);
   // une as peças estáticas por material (menos draw calls); superfícies que se soltam ou somem ficam à parte
@@ -477,26 +477,52 @@ export function buildPlane(D) {
 }
 // Trem de pouso: pernas principais na asa, bequilha (pistão) ou trem do nariz (jato). userData.lift = altura
 // do CG ao chão com o trem baixado; userData.pitch = atitude parado (cauda baixa no pistão).
-export function buildGear(D, root, wingCfg, mat) {
+export function buildGear(D, root, wingCfg, mat, doorM = mat) {
   const g = new THREE.Group(); g.visible = false; root.add(g);
   const lift = D.fuseR + 1.35, tire = new THREE.MeshStandardMaterial({ color: 0x151515, roughness: .9 });
   // cada perna é um pivô no ponto de fixação: recolhe girando (principais para dentro, nariz para a frente,
   // bequilha para trás); userData.anim(k) põe o trem em k (0 recolhido, 1 baixado)
   const mk = (geo, m, par, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; par.add(o); return o; };
-  const strut = (x, z, len, rad, r, w, door) => {
+  const chrome = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: .18, metalness: 1 }), hubM = new THREE.MeshStandardMaterial({ color: 0x8d8f8c, roughness: .5, metalness: .7 });
+  // tubo entre dois pontos (braço de arrasto, tesoura)
+  const rod = (par, a, b, rr, m) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(); const o = mk(new THREE.CylinderGeometry(rr, rr, L, 6), m, par, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return o; };
+  // roda: pneu com perfil redondo (toro), aro, disco de freio e calota
+  const wheel = (par, x, y, z, r, w) => {
+    const tb = Math.min(w / 2, r * 0.32);
+    mk(new THREE.TorusGeometry(r - tb, tb, 10, 28).rotateY(Math.PI / 2), tire, par, x, y, z);
+    mk(new THREE.CylinderGeometry(r - tb * 1.2, r - tb * 1.2, w * 0.8, 20).rotateZ(Math.PI / 2), hubM, par, x, y, z);           // aro
+    mk(new THREE.CylinderGeometry(r * 0.3, r * 0.3, w + 0.03, 12).rotateZ(Math.PI / 2), mat, par, x, y, z);                     // cubo
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; mk(new THREE.BoxGeometry(w * 0.84, 0.025, 0.025), mat, par, x, y + Math.sin(a) * r * 0.45, z + Math.cos(a) * r * 0.45); } // parafusos/raios
+  };
+  // perna oleopneumática: cilindro fixo + haste cromada e roda num grupo que sobe quando o amortecedor comprime
+  const slides = [];
+  const strut = (x, z, len, rad, r, w, door, fork) => {
     const p = new THREE.Group(); p.position.set(x, 0, z); g.add(p);
-    mk(new THREE.CylinderGeometry(rad, rad * 1.2, len, 8), mat, p, 0, -len / 2, 0);                              // perna
-    mk(new THREE.CylinderGeometry(rad * 0.7, rad * 0.7, len * 0.35, 8), mat, p, 0, -len * 0.82, 0.04);           // amortecedor
-    mk(new THREE.CylinderGeometry(r, r, w, 18).rotateZ(Math.PI / 2), tire, p, 0, -len - r * 0.9, 0);            // pneu
-    mk(new THREE.CylinderGeometry(r * 0.5, r * 0.5, w + 0.02, 12).rotateZ(Math.PI / 2), mat, p, 0, -len - r * 0.9, 0); // cubo
-    if (door) mk(new THREE.BoxGeometry(0.03, len * 0.75, Math.max(0.5, r * 1.8)), mat, p, door * 0.14, -len * 0.45, 0); // porta presa à perna
+    const ol = len * 0.4, cyl = len - ol * 0.55, wy = -len - r * 0.9;
+    mk(new THREE.CylinderGeometry(rad, rad * 1.15, cyl, 10), mat, p, 0, -cyl / 2, 0);                          // cilindro
+    mk(new THREE.CylinderGeometry(rad * 1.35, rad * 1.35, 0.06, 10), mat, p, 0, -cyl + 0.03, 0);               // colar do retentor
+    rod(p, [0, -len * 0.12, 0], [0, -len * 0.02, -len * 0.5], rad * 0.45, mat);                                // braço de arrasto
+    const s = new THREE.Group(); p.add(s); slides.push([s, ol * 0.5]);
+    mk(new THREE.CylinderGeometry(rad * 0.62, rad * 0.62, ol, 10), chrome, s, 0, -len + ol / 2, 0);            // haste cromada
+    // tesoura de torque: dois braços em V na frente da perna
+    rod(p, [0, -cyl + 0.02, 0], [0, -cyl - ol * 0.25, rad * 2.6], rad * 0.3, mat);
+    rod(s, [0, -cyl - ol * 0.25, rad * 2.6], [0, -len + 0.03, rad * 0.4], rad * 0.3, mat);
+    if (fork) { // garfo do trem do nariz: duas placas dos lados da roda
+      for (const sx of [1, -1]) mk(new THREE.BoxGeometry(0.03, r * 1.3, r * 0.5), mat, s, sx * (w / 2 + 0.03), wy + r * 0.55, 0);
+      mk(new THREE.BoxGeometry(w + 0.1, 0.05, r * 0.5), mat, s, 0, wy + r * 1.2, 0);
+    } else mk(new THREE.CylinderGeometry(rad * 0.7, rad * 0.7, w * 0.7, 8).rotateZ(Math.PI / 2), mat, s, Math.sign(x) * w * 0.35, wy, 0); // eixo
+    wheel(s, 0, wy, 0, r, w);
+    if (door) mk(new THREE.BoxGeometry(0.025, len * 0.62, Math.max(0.5, r * 1.9)), doorM, p, door * (rad + 0.12), -len * 0.36, 0); // porta presa à perna (cor da barriga)
     return p;
   };
   const mz = D.wingZ + 0.4, mx = D.span * 0.16, mr = D.jet ? 0.36 : 0.4, legs = [];
   for (const s of [1, -1]) legs.push([strut(s * mx, mz, lift - mr * 1.9, 0.07, mr, 0.2, s), 'z', -s]);
   const nz = D.jet ? D.L * 0.33 : -D.L * 0.46, nl = D.jet ? lift : lift * 0.45, nr = D.jet ? 0.28 : 0.17;
-  legs.push([strut(0, nz, nl - nr * 1.9, 0.06, nr, 0.14, 0), 'x', D.jet ? -1 : 1]);
+  legs.push([strut(0, nz, nl - nr * 1.9, 0.06, nr, 0.14, 0, D.jet), 'x', D.jet ? -1 : 1]);
   g.userData.anim = k => { const a = (1 - k) * Math.PI / 2; for (const [p, ax, sg] of legs) p.rotation[ax] = sg * a; };
+  // c: compressão do amortecedor 0..1 (peso parado ≈ 0,35; toque forte → 1)
+  g.userData.squash = c => { for (const [s, t] of slides) s.position.y = c * t; };
+  g.userData.travel = slides[0][1]; // curso do trem principal: o corpo desce isso com o amortecedor todo comprimido
   g.userData.lift = lift; g.userData.pitch = D.jet ? 0 : Math.atan2(lift - nl, D.L * 0.46 + mz) * 0.9;
   g.userData.mainZ = mz; g.userData.noseZ = nz;
   return g;

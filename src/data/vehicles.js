@@ -153,7 +153,7 @@ export const PLANES = {
     // 6 M3 nas laterais do nariz (3 de cada lado, em calhas com painel anti-sopro)
     guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.07, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
     // freios aerodinâmicos: dois painéis nas laterais da fuselagem traseira, abrindo para fora
-    brake: [{ zf: -0.17, ax: 1, ay: -0.25, w: 0.55, len: 0.85, open: 'side', deg: 55 }, { zf: -0.17, ax: -1, ay: -0.25, w: 0.55, len: 0.85, open: 'side', deg: 55 }],
+    brake: [{ zf: -0.17, ax: 1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }, { zf: -0.17, ax: -1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }],
     missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', maw: 'pd',
     bombs: [], rockets: null
   },
@@ -176,7 +176,7 @@ export const PLANES = {
     guns: [{ w: 'N37', n: 1, span: [-0.45], z: 2.8, ammo: 40, mount: { zf: 0.4, r: 0.048, len: 0.85, brake: true, fair: { r: 0.12, len: 1.5 }, b: [[-0.45, -1.05]] } },
       { w: 'NR23', n: 2, span: [0.5], z: 2.6, ammo: 80, mount: { zf: 0.38, r: 0.032, len: 0.55, fair: { r: 0.09, len: 1.3 }, b: [[0.3, -1.05], [0.62, -0.95]] } }],
     // freios na fuselagem traseira, perto da cauda (abrem para os lados)
-    brake: [{ zf: -0.4, ax: 1, ay: 0, w: 0.42, len: 0.55, open: 'side', deg: 55 }, { zf: -0.4, ax: -1, ay: 0, w: 0.42, len: 0.55, open: 'side', deg: 55 }],
+    brake: [{ zf: -0.4, ax: 1, ay: 0, w: 0.5, len: 0.7, open: 'side', deg: 60 }, { zf: -0.4, ax: -1, ay: 0, w: 0.5, len: 0.7, open: 'side', deg: 60 }],
     bombs: [], rockets: null
   },
   // ---- geração com radar, pós-combustão e RWR (escala de jogo nas distâncias) ----
@@ -231,7 +231,7 @@ export const PLANES = {
     // GSh-23L de dois canos em casulo ventral
     guns: [{ w: 'GSh23', n: 1, span: [0], z: 1.0, ammo: 200, mount: { zf: 0.1, r: 0.026, len: 0.3, twin: 0.1, pod: { r: 0.17, len: 1.9 }, b: [[0, -1]] } }],
     // dois freios ventrais à frente e um atrás (abrem para baixo)
-    brake: [{ zf: 0.15, ax: 0.45, ay: -1, w: 0.32, len: 0.6, open: 'down', deg: 35 }, { zf: 0.15, ax: -0.45, ay: -1, w: 0.32, len: 0.6, open: 'down', deg: 35 }, { zf: -0.3, ax: 0, ay: -1, w: 0.42, len: 0.5, open: 'down', deg: 40 }],
+    brake: [{ zf: 0.15, ax: 0.45, ay: -1, w: 0.4, len: 0.72, open: 'down', deg: 40 }, { zf: 0.15, ax: -0.45, ay: -1, w: 0.4, len: 0.72, open: 'down', deg: 40 }, { zf: -0.3, ax: 0, ay: -1, w: 0.42, len: 0.5, open: 'down', deg: 40 }],
     missiles: [{ w: 'R3R', n: 2 }, { w: 'R3S', n: 2 }],
     bombs: [], rockets: null
   }
