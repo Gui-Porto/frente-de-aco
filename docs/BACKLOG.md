@@ -4,7 +4,7 @@ Lista viva dos pedidos, na ordem em que serão feitos. Cada item vira uma branch
 
 ## Em andamento / próximos
 
-1. **Mísseis detalhados**: modelo 3D melhor (cabeça de busca, aletas, canards, asas do Sparrow), ficha completa no hangar, motor/fumaça mais fiéis.
+Nenhum item no momento.
 
 ## Pendências menores
 

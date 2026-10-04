@@ -277,18 +277,32 @@ export function beltRounds(W, name) {
 }
 
 // Mísseis ar-ar (guiamento por navegação proporcional; buscador infravermelho de aspecto traseiro)
+// form: medidas do modelo 3D (m, contadas a partir da ponta do nariz; span = envergadura de ponta a ponta).
+//   nose: { kind: 'ir' (domo de vidro de raio dome·r, cone até o diâmetro cheio em len) | 'ogive' (radome em ogiva de comprimento len) }
+//   canards/wings/tails: { at (bordo de ataque na raiz), root, tip (cordas), span, roller? (diâmetro do rolleron) }; bordo de fuga reto
+//   bands: faixas pintadas { at, w } — warhead amarela (ogiva explosiva), motor marrom; nozzle: { len, r (fração do raio) }
 export const MISSILES = {
   AIM9B: { name: 'AIM-9B Sidewinder', short: 'AIM-9B', mass: 70, d: 0.127, len: 2.83, thrust: 17800, burn: 2.2, cd: 0.45,
-    life: 22, range: 4600, minRange: 250, gimbal: 30, fov: 4, acq: 14, lockT: 0.9, maxG: 13, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 95, seeker: 'ir' },
+    life: 22, range: 4600, minRange: 250, gimbal: 30, fov: 4, acq: 14, lockT: 0.9, maxG: 13, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 95, seeker: 'ir',
+    form: { nose: { kind: 'ir', len: 0.3, dome: 0.55 }, canards: { at: 0.3, root: 0.26, tip: 0.04, span: 0.45 }, wings: { at: 2.38, root: 0.4, tip: 0.14, span: 0.56, roller: 0.09 },
+      bands: { warhead: { at: 0.72, w: 0.04 }, motor: { at: 1.25, w: 0.04 } }, nozzle: { len: 0.06, r: 0.8 } } },
   AIM9J: { name: 'AIM-9J Sidewinder', short: 'AIM-9J', mass: 78, d: 0.127, len: 3.02, thrust: 15500, burn: 3.0, cd: 0.42,
-    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 18, nav: 4, fuse: 9, warhead: 4.5, rearAspect: 110, flareRes: 0.45, seeker: 'ir' },
+    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 18, nav: 4, fuse: 9, warhead: 4.5, rearAspect: 110, flareRes: 0.45, seeker: 'ir',
+    form: { nose: { kind: 'ir', len: 0.28, dome: 0.6 }, canards: { at: 0.28, root: 0.3, tip: 0.06, span: 0.56 }, wings: { at: 2.55, root: 0.42, tip: 0.15, span: 0.64, roller: 0.09 },
+      bands: { warhead: { at: 0.78, w: 0.04 }, motor: { at: 1.35, w: 0.04 } }, nozzle: { len: 0.06, r: 0.8 } } },
   R3S: { name: 'R-3S (K-13)', short: 'R-3S', mass: 75, d: 0.127, len: 2.84, thrust: 17000, burn: 2.2, cd: 0.45,
-    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 12, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 90, flareRes: 0.6, seeker: 'ir' },
+    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 12, nav: 3.8, fuse: 10, warhead: 4.5, rearAspect: 90, flareRes: 0.6, seeker: 'ir',
+    form: { nose: { kind: 'ir', len: 0.33, dome: 0.5 }, canards: { at: 0.33, root: 0.24, tip: 0.05, span: 0.42 }, wings: { at: 2.4, root: 0.38, tip: 0.13, span: 0.53, roller: 0.09 },
+      bands: { warhead: { at: 0.74, w: 0.04 }, motor: { at: 1.28, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } },
   // semiativos: não têm buscador próprio de aquisição — exigem o radar do lançador travado (STT) até o impacto
   AIM7E: { name: 'AIM-7E Sparrow', short: 'AIM-7E', mass: 197, d: 0.203, len: 3.66, thrust: 26000, burn: 3.6, cd: 0.4,
-    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 16, nav: 4, fuse: 12, warhead: 9, seeker: 'sarh' },
+    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 16, nav: 4, fuse: 12, warhead: 9, seeker: 'sarh',
+    form: { nose: { kind: 'ogive', len: 0.62 }, wings: { at: 1.2, root: 0.66, tip: 0.08, span: 1.02 }, tails: { at: 3.18, root: 0.44, tip: 0.18, span: 0.81 },
+      bands: { warhead: { at: 1.95, w: 0.05 }, motor: { at: 2.35, w: 0.05 } }, nozzle: { len: 0.05, r: 0.75 } } },
   R3R: { name: 'R-3R (K-13R)', short: 'R-3R', mass: 83, d: 0.127, len: 3.1, thrust: 17500, burn: 2.4, cd: 0.44,
-    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 13, nav: 3.8, fuse: 10, warhead: 5, seeker: 'sarh' }
+    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 13, nav: 3.8, fuse: 10, warhead: 5, seeker: 'sarh',
+    form: { nose: { kind: 'ogive', len: 0.42 }, canards: { at: 0.5, root: 0.24, tip: 0.05, span: 0.42 }, wings: { at: 2.65, root: 0.4, tip: 0.13, span: 0.53, roller: 0.09 },
+      bands: { warhead: { at: 0.98, w: 0.04 }, motor: { at: 1.5, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } }
 };
 
 // Campos derivados do motor (fonte única: air/systems/engine.js). Telas antigas leem hp/wep/thrust.

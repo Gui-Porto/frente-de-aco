@@ -187,8 +187,7 @@ let metalRough = null;
 export function buildPlane(D) {
   // modelo glTF carregado para esta aeronave? (modelLibrary.js) — senão, procedural
   if (hasModel(D)) {
-    const w = new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .7 }), gl = new THREE.MeshStandardMaterial({ color: 0x3a4c58, roughness: .05, metalness: .9, transparent: true, opacity: .62 });
-    const r = gltfPlane(D, id => { const M = MISSILES[id]; return new THREE.Mesh(missileGeometry(M), [w, M.seeker === 'sarh' ? w : gl]); });
+    const r = gltfPlane(D, id => missileMesh(MISSILES[id]));
     if (r) { r.gearMesh = buildGear(D, r.root, null, new THREE.MeshStandardMaterial({ color: 0x1b1b1a, roughness: .45, metalness: .5 })); return r; }
   }
   const root = new THREE.Group(), L = D.L, fr = D.fuseR, jet = !!D.jet;
@@ -451,7 +450,7 @@ export function buildPlane(D) {
         add(new THREE.BoxGeometry(0.07, ph + 0.04, Math.min(c * 0.55, M.len * 0.5)), paint, par, x, p0[1] - tw - ph / 2 + 0.02, p0[2]);     // pilone
         add(new THREE.BoxGeometry(0.09, 0.05, M.len * 0.62), dark, par, x, y + r + 0.02, z);                                              // trilho de lançamento
       }
-      const m = add(missileGeometry(M), [white, M.seeker === 'sarh' ? white : glass], par, x, y, z);
+      const m = add(missileGeometry(M), MSL_MATS, par, x, y, z);
       missileMeshes.push(m);
     }
   }
@@ -525,21 +524,77 @@ function mergeStatic(grp, keep) {
     const m = new THREE.Mesh(merged, mat); m.castShadow = m.receiveShadow = true; grp.add(m);
   }
 }
-// míssil inteiro (corpo + aletas + nariz) numa geometria só, por tipo; grupo 0 = corpo, 1 = nariz
+// ---------- mísseis ----------
+// Materiais ÚNICOS para todo míssil (no pilone e em voo), sem textura: mesmos parâmetros dos materiais lisos
+// dos aviões, então reaproveitam programas já compilados — nenhum shader novo aparece no disparo.
+// Índices: 0 corpo, 1 domo de vidro (IR), 2 faixa amarela (ogiva), 3 faixa marrom (motor), 4 bocal escuro, 5 radome
+export const MSL_MATS = [
+  new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .55, metalness: .1 }),
+  new THREE.MeshStandardMaterial({ color: 0x3a4c58, roughness: .05, metalness: .9, transparent: true, opacity: .62 }),
+  new THREE.MeshStandardMaterial({ color: 0xd9a514, roughness: .6, metalness: .1 }),
+  new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: .7, metalness: .1 }),
+  new THREE.MeshStandardMaterial({ color: 0x1d1c1a, roughness: .45, metalness: .6 }),
+  new THREE.MeshStandardMaterial({ color: 0xb9b6a8, roughness: .5, metalness: .05 }),
+];
+// forma padrão para míssil sem `form` (proporções de um AIM-9)
+const formOf = M => M.form || { nose: { kind: M.seeker === 'sarh' ? 'ogive' : 'ir', len: M.len * 0.1, dome: 0.55 }, canards: { at: M.len * 0.1, root: M.len * 0.09, tip: M.len * 0.015, span: M.d * 3.5 },
+  wings: { at: M.len * 0.84, root: M.len * 0.14, tip: M.len * 0.05, span: M.d * 4.4 }, bands: {}, nozzle: { len: M.len * 0.02, r: 0.8 } };
+// superfície em X (4 aletas a 45°): planta trapezoidal com bordo de fuga reto; z0 = bordo de ataque na raiz
+function finSet(r, z0, f, t, out) {
+  const s = f.span / 2, te = z0 - f.root, sh = new THREE.Shape();
+  sh.moveTo(r * 0.9, z0); sh.lineTo(s, te + f.tip); sh.lineTo(s, te); sh.lineTo(r * 0.9, te); sh.closePath();
+  // forma no plano (radial, axial) → extrusão na espessura; rotateX(90°) leva y (axial) para +z
+  const one = new THREE.ExtrudeGeometry(sh, { depth: t, bevelEnabled: true, bevelThickness: t * 0.3, bevelSize: t * 0.3, bevelSegments: 1 }).translate(0, 0, -t / 2).rotateX(Math.PI / 2);
+  // rolleron: rodinha na ponta do bordo de fuga, eixo perpendicular à aleta
+  const parts = [one];
+  if (f.roller) { const rr = f.roller / 2; parts.push(new THREE.CylinderGeometry(rr, rr, t * 3, 14).translate(s - rr * 0.6, 0, te + rr * 0.9)); }
+  for (let k = 0; k < 4; k++) for (const p of parts) out.push(p.clone().rotateZ(Math.PI / 4 + k * Math.PI / 2));
+}
+// míssil inteiro numa geometria só por tipo, com grupos por material (MSL_MATS); centro no meio do comprimento, nariz em +z
 const _mslGeo = new Map();
 export function missileGeometry(M) {
   if (_mslGeo.has(M)) return _mslGeo.get(M);
-  const r = M.d / 2, parts = [new THREE.CylinderGeometry(r, r, M.len, 12).rotateX(Math.PI / 2)];
-  for (const ro of [Math.PI / 4, -Math.PI / 4]) {
-    parts.push(new THREE.BoxGeometry(r * 8, .015, M.len * 0.11).rotateZ(ro).translate(0, 0, -M.len * 0.42));
-    parts.push(new THREE.BoxGeometry(r * 5, .015, M.len * 0.06).rotateZ(ro).translate(0, 0, M.len * (M.seeker === 'sarh' ? 0.05 : 0.36)));
+  const F = formOf(M), r = M.d / 2, L = M.len, tip = L / 2, tail = -L / 2, nz = F.nozzle || { len: 0.05, r: 0.8 };
+  const G = [[], [], [], [], [], []], V = (x, y) => new THREE.Vector2(x, y);
+  // corpo torneado: perfis (raio, z) do bocal para o nariz; LatheGeometry gira em y e rotateX(90°) leva y → +z
+  const lathe = (pts, seg = 18) => new THREE.LatheGeometry(pts, seg).rotateX(Math.PI / 2);
+  const noseL = F.nose.len, body = [V(r * 0.96, tail), V(r, tail + 0.01)];
+  if (F.nose.kind === 'ogive') {
+    // ogiva tangente: ρ = (r² + l²)/2r; raio a x da ponta = √(ρ² − (l − x)²) + r − ρ
+    const rho = (r * r + noseL * noseL) / (2 * r), pts = [];
+    for (let i = 0; i <= 12; i++) { const x = noseL * (1 - i / 12); pts.push(V(Math.max(r * 0.04, Math.sqrt(Math.max(0, rho * rho - (noseL - x) ** 2)) + r - rho), tip - x)); }
+    pts.push(V(0, tip));
+    G[5].push(lathe(pts)); body.push(V(r, tip - noseL));
+  } else {
+    // buscador IR: cone curto até o domo de vidro hemisférico na ponta
+    const rd = r * (F.nose.dome || 0.55), zc = tip - rd, dome = [];
+    for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI / 2; dome.push(V(Math.max(1e-4, rd * Math.cos(a)), zc + rd * Math.sin(a))); }
+    G[1].push(lathe(dome)); body.push(V(r, tip - noseL), V(rd * 1.03, zc - 0.005), V(rd * 0.9, zc));
   }
-  for (const q of parts) q.deleteAttribute('uv');
-  const body = mergeGeometries(parts.map(q => q.toNonIndexed()));
-  const nose = new THREE.ConeGeometry(r, r * 4, 12).rotateX(Math.PI / 2).translate(0, 0, M.len / 2 + r * 2).toNonIndexed(); nose.deleteAttribute('uv');
-  const g = mergeGeometries([body, nose], true);
+  G[0].push(lathe(body));
+  // faixas pintadas: anéis um pouco acima da pele
+  for (const [k, gi] of [['warhead', 2], ['motor', 3]]) { const b = F.bands && F.bands[k]; if (b) G[gi].push(lathe([V(r * 1.006, tip - b.at - b.w), V(r * 1.006, tip - b.at)])); }
+  // bocal: tubo escuro com a garganta para dentro
+  const rn = r * nz.r;
+  G[4].push(lathe([V(rn * 0.55, tail + 0.02), V(rn * 0.85, tail - nz.len * 0.6), V(rn, tail - nz.len), V(rn * 1.04, tail - nz.len), V(r * 0.96, tail + 0.002)]));
+  // superfícies: canards (AIM-9/R-3), asas (rollerons nas traseiras do AIM-9/R-3; no meio do corpo no Sparrow), aletas traseiras
+  const t = Math.max(0.006, M.d * 0.06);
+  for (const k of ['canards', 'wings', 'tails']) if (F[k]) finSet(r, tip - F[k].at, F[k], t, G[0]);
+  // une cada grupo e depois todos, com o índice de material certo em cada grupo
+  const used = [], list = [];
+  G.forEach((arr, i) => {
+    if (!arr.length) return;
+    const g = mergeGeometries(arr.map(q => { q = q.index ? q.toNonIndexed() : q; q.deleteAttribute('uv'); return q; }));
+    used.push(i); list.push(g);
+  });
+  const g = mergeGeometries(list, true);
+  g.groups.forEach((gr, j) => (gr.materialIndex = used[j]));
+  g.computeBoundingSphere();
   _mslGeo.set(M, g); return g;
 }
+export const missileMesh = M => new THREE.Mesh(missileGeometry(M), MSL_MATS);
+// distância do centro ao fim do bocal (chama e fumaça saem daí)
+export const missileTail = M => M.len / 2 + (formOf(M).nozzle?.len || 0.05);
 // ---------- capota ----------
 // perfil ao longo do comprimento (t: 0 = para-brisa, 1 = traseira): sobe rápido no para-brisa,
 // platô sobre o piloto e afina em gota até a traseira
