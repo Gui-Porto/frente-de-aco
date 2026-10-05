@@ -157,7 +157,8 @@ export class Plane {
     for (const [o, k] of this._det) o.layers.set(lv >= k ? 1 : 0);
   }
   // desmaiado: sem comando nenhum (manche solto, sem disparar); 0..1 para escurecer a tela
-  get blackout() { return this.koT > 0 ? Math.min(1, this.koAge / 0.3, this.koT / 1.2) : 0; }
+  // escurecimento da tela: desmaiado = preto (entra em 0,3 s; sai no último 1,2 s); acordado = visão de túnel pela carga
+  get blackout() { const g = Math.max(0, (this.gStress - 0.3) / 0.7) ** 1.4 * 0.9; return this.koT > 0 ? Math.max(g, Math.min(1, this.koAge / 0.3, this.koT / 1.2)) : g; }
   physics(dt) {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
@@ -253,10 +254,12 @@ export class Plane {
       this.q.x += _pq.x; this.q.y += _pq.y; this.q.z += _pq.z; this.q.w += _pq.w; this.q.normalize();
     }
     if (Math.random() < dt * 0.3) this.dropSign = Math.random() < .5 ? 1 : -1;
-    // fisiologia do piloto: nada abaixo de G muito alto; acima de 17 G (ou −3,5 G) SUSTENTADO a carga acumula
-    // e o piloto DESMAIA: alguns segundos sem controle (o avião segue solto), depois volta a si
-    const gT = this.wounded ? 15 : 17; // piloto ferido apaga antes
-    const gx = this.n > gT ? (this.n - gT) * 0.3 : this.n < -3.5 ? (-3.5 - this.n) * 0.3 : -0.4; // 19,5 G: ~1,3 s; 18 G: ~3 s
+    // fisiologia do piloto: G SUSTENTADO acima da tolerância acumula carga (gStress 0..1). A tela vai escurecendo das
+    // bordas para o centro (visão de túnel, `blackout`) e em 1 o piloto DESMAIA: alguns segundos sem controle, o avião
+    // segue solto, depois ele volta a si. Sem texto nenhum — só a tela. Jato tem traje anti-G (+1 G); ferido apaga antes.
+    // 9 G no jato: ~3,7 s até apagar; 11 G: ~1,7 s. Negativo: abaixo de −3 G.
+    const gT = (this.eng.jet ? 7.5 : 6.5) - (this.wounded ? 1.5 : 0);
+    const gx = this.n > gT ? (this.n - gT) * 0.16 + 0.03 : this.n < -3 ? (-3 - this.n) * 0.2 : this.n > gT - 1.5 ? -0.12 : -0.3;
     // combustível: consumo do motor + vazamentos; seco = motor apaga
     const leak = fuelLeak(this);
     fuelStep(this, this.engineOn ? this.eng.flow : 0, dt);
@@ -264,10 +267,10 @@ export class Plane {
     if (leak > 0 && this.fuel > 0 && Math.random() < dt * 35) for (const m of modsOf(this, 'fuel')) if (m.leak > 0 && m.left > 0) fxTrail(_pt.set(...m.c).applyMatrix4(this.root.matrixWorld).clone(), 0xf2f0ea, 0.45 + 0.1 * Math.min(m.leak, 4), 3); // névoa de combustível, mais grossa quanto maior o furo
     if (this.koT > 0) {
       this.koT -= dt; this.koAge += dt;
-      if (this.koT <= 0 && this.isPlayer) showDmg('Piloto recobrou a consciência', true);
+      if (this.koT <= 0) this.gStress = 0.55; // acorda ainda meio apagado: a visão volta aos poucos
     } else {
       this.gStress = clamp(this.gStress + gx * dt, 0, 1);
-      if (this.gStress >= 1 && this.alive && this.pilot) { this.koT = 3.5 + Math.random() * 1.5; this.koAge = 0; this.gStress = 0; if (this.isPlayer) showDmg('Piloto desmaiou · G excessivo'); }
+      if (this.gStress >= 1 && this.alive && this.pilot) { this.koT = 4 + Math.random() * 3; this.koAge = 0; this.gStress = 1; }
     }
     // limites estruturais
     if (this.alive) {

@@ -63,8 +63,15 @@ export function updateAirHUD(dt) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, V.W / 2, V.H - 40, 15, C.ally, 'center', UI);
   }
   tacMap(v, T);
-  $('#gdark').style.opacity = live ? Math.max(p.blackout * 0.97, B.fadeK || 0) : 0; // desmaio ou troca de tela pós-reparo
-  if (live && p.koT > 0) otxt(`PILOTO DESMAIADO · ${Math.ceil(p.koT)} s`, V.W / 2, V.H / 2 + 6, 22, C.white, 'center');
+  gdark(live ? Math.max(p.blackout, B.fadeK || 0) : 0); // G (visão de túnel → desmaio) ou troca de tela pós-reparo
+}
+// escurecimento: as bordas fecham primeiro (visão de túnel) e em 1 a tela fica toda preta; só reescreve o estilo quando muda
+let _gd = -1;
+function gdark(k) {
+  k = Math.round(Math.min(1, k) * 100) / 100; if (k === _gd) return; _gd = k;
+  const el = $('#gdark'), r = 62 * (1 - k);
+  el.style.opacity = Math.min(1, k * 1.8);
+  el.style.background = `radial-gradient(ellipse at center, rgba(0,0,0,${(k * k).toFixed(3)}) ${(r * 0.5).toFixed(1)}%, #000 ${(r + 16).toFixed(1)}%)`;
 }
 
 // ---------- base aérea: marcador da pista e barra de reparo/rearme ----------
