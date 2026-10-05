@@ -446,7 +446,7 @@ export function buildPlane(D) {
         // duto: do lábio para trás e para dentro (centro do motor), seção ficando redonda; os primeiros 40% claros
         // carenagem externa na estação z (borda de fora e meia-altura): o duto não pode passar dela
         const podAt = z => { const t = clamp01((zf - z) / (zf - zb)), i = Math.min(11, Math.floor(t * 12)), f = t * 12 - i, A = secs[i], B = secs[i + 1]; return { out: Math.abs(A[1] + (B[1] - A[1]) * f) + A[3] + (B[3] - A[3]) * f, hh: A[4] + (B[4] - A[4]) * f }; };
-        const DL = 1.9, ey = -fr * 0.15, R = fr * 0.33, duct = [];
+        const DL = 1.45, ey = -fr * 0.15, R = fr * 0.33, duct = []; // face do compressor à frente da raiz da asa (mais fundo, a asa aparecia dentro do duto)
         for (let k = 0; k <= 12; k++) {
           const t = k / 12, e = t * t * (3 - 2 * t), z = z0 - t * DL, pa = podAt(z), xin = at(z / L).hw + 0.012, xout = pa.out - th - 0.01;
           // o duto vai para o eixo do motor, mas sem entrar na fuselagem (a chapa clara de fora aparecia) nem sair
@@ -804,7 +804,6 @@ export function buildPlane(D) {
       add(new RoundedBoxGeometry(b.w, 0.03, b.len, 2, 0.01).translate(0, 0, -b.len / 2), under, piv);
       for (const k of [-0.3, 0, 0.3]) add(new THREE.BoxGeometry(0.02, 0.05, b.len * 0.9), ductM, piv, k * b.w, 0.035, -b.len / 2);
       add(new THREE.CylinderGeometry(0.018, 0.018, 0.3, 6), steel, piv, 0, 0.15, -b.len * 0.55);
-      add(new THREE.BoxGeometry(b.w, 0.01, b.len), ductM, par, x, y + 0.025, z - b.len / 2);                 // vão
       brakes.push({ pivot: piv, axis: new THREE.Vector3(1, 0, 0), max: -b.deg * deg });
       continue;
     }
