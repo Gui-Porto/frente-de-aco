@@ -36,6 +36,8 @@ export const ACTIONS = [
   // mesmos comandos nas batalhas terrestres e na Batalha Aérea (padrão do War Thunder com mouse aim)
   ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Space']],
   ['a_cm', 'Avião', 'Contramedidas (flares + chaff)', ['KeyX']],
+  ['a_flare', 'Avião', 'Só flares (contra infravermelho)', ['KeyU']],
+  ['a_chaff', 'Avião', 'Só chaff (contra radar)', ['KeyI']],
   ['a_wsel', 'Avião', 'Selecionar míssil', ['KeyZ']],
   ['a_rmode', 'Avião', 'Radar: trocar modo', ['KeyN']],
   ['a_rlock', 'Avião', 'Radar: travar / soltar alvo', ['CapsLock']],

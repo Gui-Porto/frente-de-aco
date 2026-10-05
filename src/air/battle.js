@@ -131,7 +131,8 @@ export const B = {
       this.avionicsInput(p, c);
       pilot(p, c, cam.aimDir, dt);
       p.firing = c.fire;
-      if (c.cm) { if (dropCM(p)) this.stats.cm = (this.stats.cm || 0) + 1; else if (!p.flares && !p.chaff) toast('Sem contramedidas', 1200); }
+      const cmK = c.cm ? 'both' : c.flare ? 'flare' : c.chaff ? 'chaff' : null;
+      if (cmK) { if (dropCM(p, cmK)) this.stats.cm = (this.stats.cm || 0) + 1; else if (cmK === 'flare' ? !p.flares : cmK === 'chaff' ? !p.chaff : !p.flares && !p.chaff) toast(cmK === 'flare' ? 'Sem flares' : cmK === 'chaff' ? 'Sem chaff' : 'Sem contramedidas', 1200); }
       if (c.ext && !p.extinguish()) toast(p.fire > 0 ? 'Extintor já usado' : 'Sem incêndio', 1200);
       // buscador sempre ligado enquanto houver míssil (o tom avisa); prioriza o alvo marcado (T)
       if (this.seeker && p.missiles > 0) this.seeker.update(dt, p, planes, this.marked, S.now); else if (this.seeker) { this.seeker.state = LOCK.OFF; this.seeker.target = null; }

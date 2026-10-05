@@ -8,7 +8,7 @@ import { isDown, pressed, settings } from '../core/settings.js';
 export const cmd = {
   pitch: 0, roll: 0, yaw: 0, thr: 0,      // -1..1 (eixos; 0 = instrutor decide)
   fire: false, missile: false, aim: false, // gatilhos
-  cm: false, ext: false, cam: false, target: false, gear: false, flaps: false, brake: false, wsel: false, rmode: false, rlock: false, rnext: false,
+  cm: false, flare: false, chaff: false, ext: false, cam: false, target: false, gear: false, flaps: false, brake: false, wsel: false, rmode: false, rlock: false, rnext: false,
   lookX: 0, lookY: 0,                     // olhar/mira pelo direcional analógico (rad/s)
   pad: false,
 };
@@ -19,7 +19,7 @@ export function readInput() {
   cmd.pitch = k('a_pitch_up', 'a_pitch_dn'); cmd.roll = k('a_roll_r', 'a_roll_l'); cmd.yaw = k('a_yaw_l', 'a_yaw_r');
   cmd.thr = k('a_thr_up', 'a_thr_dn');
   cmd.fire = isDown('a_guns'); cmd.missile = pressed('a_missile'); cmd.aim = isDown('a_zoom');
-  cmd.cm = pressed('a_cm'); cmd.ext = pressed('a_ext');
+  cmd.cm = pressed('a_cm'); cmd.flare = pressed('a_flare'); cmd.chaff = pressed('a_chaff'); cmd.ext = pressed('a_ext');
   cmd.cam = pressed('a_cam'); cmd.target = pressed('a_target');
   cmd.gear = pressed('a_gear'); cmd.flaps = pressed('a_flaps'); cmd.brake = pressed('a_airbrake');
   cmd.wsel = pressed('a_wsel'); cmd.rmode = pressed('a_rmode'); cmd.rlock = pressed('a_rlock'); cmd.rnext = pressed('a_rnext');
