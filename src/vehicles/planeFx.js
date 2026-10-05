@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { camera, scene } from '../core/render.js';
 import { clamp, rand } from '../core/util.js';
-import { fxTrail } from '../fx/particles.js';
+import { fxTrail, spawnP } from '../fx/particles.js';
 // =====================================================================
 // Efeitos visuais presos à aeronave (estilo WT):
 //  - chama da pós-combustão com diamantes de choque; brilho quente do bocal
@@ -98,9 +98,20 @@ export function updatePlaneFx(p, dt) {
   }
   // cone de vapor: aparece só numa faixa estreita em torno de Mach 1
   if (fx.vapor) {
-    const M = p.mach || 0, k = on ? clamp(1 - Math.abs(M - 0.985) / 0.045, 0, 1) : 0;
-    if (k > 0.02) { const s = 0.75 + 0.25 * k; fx.vapor.scale.set(s * rand(0.97, 1.03), s * rand(0.97, 1.03), p.def.L * 0.22 * k); }
+    const M = p.mach || 0, k = p.alive ? clamp(1 - Math.abs(M - 0.985) / 0.05, 0, 1) : 0;
+    if (k > 0.02) { const s = 0.8 + 0.35 * k; fx.vapor.scale.set(s * rand(0.96, 1.04), s * rand(0.96, 1.04), p.def.L * 0.3 * k); }
     else fx.vapor.scale.setScalar(HIDE);
+    // passou de Mach 1: anel de condensação que se abre em volta do avião e fica para trás
+    if (M >= 1 && (p._m0 || 0) < 1 && (p._m0 || 0) > 0.9 && p.pos.distanceToSquared(camera.position) < 3000 * 3000) {
+      p.axes && p.axes();
+      const f = _p.set(0, 0, 1).applyQuaternion(p.q), r = p.def.fuseR * 1.6, a = new THREE.Vector3(1, 0, 0).applyQuaternion(p.q), b = new THREE.Vector3(0, 1, 0).applyQuaternion(p.q);
+      const c = p.pos.clone().addScaledVector(f, p.def.wingZ);
+      for (let i = 0; i < 28; i++) {
+        const t = i / 28 * Math.PI * 2, dir = a.clone().multiplyScalar(Math.cos(t)).addScaledVector(b, Math.sin(t));
+        spawnP({ pos: c.clone().addScaledVector(dir, r), vel: p.vel.clone().multiplyScalar(0.25).addScaledVector(dir, 22), life: rand(0.9, 1.5), size: 2.2, size1: 7, color: 0xf4f6f8, op: 0.55, drag: 2.2 });
+      }
+    }
+    p._m0 = M;
   }
   // apagado = fora do desenho (antes ia 1 draw call por chama/escapamento por avião, todo quadro)
   for (const f of fx.flames) { f.glow.visible = f.glow.scale.x > HIDE; f.out.visible = f.out.scale.x > HIDE; f.inn.visible = f.inn.scale.x > HIDE; }

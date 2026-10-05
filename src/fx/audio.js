@@ -84,6 +84,17 @@ export function audioInit() {
     }
     // pós-combustão: ronco grave de ruído com "estalos"
     { const an = loop(brownBuf, 0.9), af = filt('lowpass', 260, 0.9), ag = gain(0); an.connect(af); af.connect(ag); ag.connect(engBus); eng.ab = { g: ag, f: af }; }
+    // PC/WEP por perfil de motor (ENGINES[id].snd.boost): ronco grave, estalos (ganho sorteado a cada quadro), o "grito"
+    // tonal (ruído em banda estreita), chiado da injeção e a aspereza (dois tons graves batendo)
+    {
+      const lo = filt('lowpass', 300, 0.8), log = gain(0); loop(brownBuf, 1.1).connect(lo); lo.connect(log); log.connect(engBus);
+      const cf = filt('bandpass', 1500, 0.8), cg = gain(0); loop(noiseBuf, 0.9).connect(cf); cf.connect(cg); cg.connect(engBus);
+      const hf = filt('bandpass', 800, 6), hg = gain(0); loop(noiseBuf, 1.05).connect(hf); hf.connect(hg); hg.connect(engBus);
+      const sf = filt('highpass', 3500, 0.5), sg = gain(0); loop(noiseBuf, 1.2).connect(sf); sf.connect(sg); sg.connect(engBus);
+      const r1 = AC.createOscillator(), r2 = AC.createOscillator(), rf = filt('lowpass', 180), rg = gain(0); r1.type = r2.type = 'sawtooth'; r1.frequency.value = 52; r2.frequency.value = 57;
+      r1.connect(rf); r2.connect(rf); rf.connect(rg); rg.connect(engBus); r1.start(); r2.start();
+      eng.boost = { lo, log, cf, cg, hf, hg, sg, r1, r2, rg };
+    }
     // vento na fuselagem (duas bandas: chiado e sopro grave) e trepidação perto do estol
     {
       const wf = filt('bandpass', 700, 0.5), wg = gain(0), lf = filt('lowpass', 260, 0.7), lg = gain(0.8);
@@ -223,7 +234,25 @@ export function sndWhoosh(pos, k = 1, jet = true) {
   s.connect(f); f.connect(g); g.connect(o); s.start(a.t, rand(0, 1)); s.stop(a.t + 1.2);
 }
 // estrondo sônico: dois estalos secos (onda N) com grave
-export function sndSonicBoom(pos) { const a = at(pos, 2.5); if (!a) return; const o = out(a); noiseBurst(a.t, Math.min(a.vol, 1.3), 900, 0.35, 1, o); noiseBurst(a.t + 0.12, Math.min(a.vol, 1.1), 900, 0.4, 1, o); thump(a.t, Math.min(a.vol, 1.2), 45, 0.8, o); }
+// estrondo sônico de quem passa supersônico: onda em N (dois estalos secos ~0,1 s) e o ribombo que rola depois
+export function sndSonicBoom(pos) {
+  const a = at(pos, 3.2); if (!a) return; const o = out(a, 1.4), v = Math.min(a.vol, 1.4);
+  noiseBurst(a.t, v, 2600, 0.09, 0.8, o, 'lowpass', noiseBuf, 0.002); thump(a.t, v * 0.9, 60, 0.35, o);
+  noiseBurst(a.t + 0.11, v * 0.95, 2400, 0.1, 0.8, o, 'lowpass', noiseBuf, 0.002); thump(a.t + 0.11, v * 0.8, 55, 0.4, o);
+  noiseBurst(a.t + 0.15, v * 0.6, 160, 1.8, 0.8, o, 'lowpass', brownBuf, 0.05);
+}
+// cruzando Mach 1 (o próprio jogador): o "tum" da onda de choque passando pela cabine, um sopro que some e o ronco
+export function sndMachCross() {
+  if (!AC) return; const t = AC.currentTime;
+  thump(t, 0.9, 48, 0.9); noiseBurst(t, 0.35, 900, 0.18, 1, sfx, 'lowpass', noiseBuf, 0.003);
+  noiseBurst(t + 0.05, 0.4, 140, 1.4, 0.9, sfx, 'lowpass', brownBuf, 0.03); noiseBurst(t, 0.12, 2400, 0.6, 1.5, sfx, 'bandpass', noiseBuf, 0.02);
+}
+// ignição da PC/WEP: "tum" grave + baforada (tamanho por motor), sintetizado (a gravação abstart foi removida)
+export function sndBoostIgnite(k = 1) {
+  if (!AC) return; const t = AC.currentTime;
+  thump(t, 0.35 + 0.45 * k, 50 + 15 * (1 - k), 0.5 + 0.3 * k); noiseBurst(t, 0.12 + 0.2 * k, 500, 0.45 + 0.25 * k, 0.8, sfx, 'lowpass', brownBuf, 0.01);
+  noiseBurst(t + 0.03, 0.06 * k, 2200, 0.2, 1.2, sfx, 'bandpass');
+}
 export function audioPause(p) { if (AC) p ? AC.suspend() : AC.resume(); }
 // canhão de tanque: estalo da boca, corpo do disparo, sub-grave e a cauda do vale (reverberação)
 export function sndShot(pos, cal) {
@@ -270,7 +299,7 @@ export function sndTear(pos) {
 }
 // bala inimiga passando perto: estalo supersônico gravado (de quem estava do lado de lá da .50)
 export function sndSnap(pos) { const a = at(pos, 1); if (!a) return; const k = ['snap1', 'snap2', 'snap3'].filter(n => SMP[n]); if (k.length) playRec(SMP[k[Math.floor(Math.random() * k.length)]], null, 0.55, rand(0.9, 1.15), out(a, 0.2)); }
-export function sndAB() { if (AC && SMP.abstart) playRec(SMP.abstart, null, 0.5, rand(0.95, 1.05)); }
+export function sndAB() { if (AC && SMP.abstart) playRec(SMP.abstart, null, 0.5, rand(0.95, 1.05)); else sndBoostIgnite(1); }
 export function sndCrack(pos) { const a = at(pos, .5); if (!a) return; noiseBurst(a.t, Math.min(a.vol, .6), 1800, .5, 2, out(a)); }
 export function sndClick() { if (!AC) return; const t = AC.currentTime; noiseBurst(t, .25, 5000, .06, 6); noiseBurst(t + .09, .3, 3000, .08, 6); }
 export function sndUi() { if (!AC) return; const t = AC.currentTime; noiseBurst(t, .08, 6000, .04, 8); }

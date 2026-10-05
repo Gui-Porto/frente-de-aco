@@ -1,6 +1,7 @@
 import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
-import { AC, eng, cockpitTone, cockpitVoice,cockpitThump, sndWhoosh, sndSonicBoom, sndGear, sndTouch, sndFlaps, sndAB, soundAt } from '../fx/audio.js';
+import { AC, eng, cockpitTone, cockpitVoice, cockpitThump, sndWhoosh, sndSonicBoom, sndMachCross, sndBoostIgnite, sndGear, sndTouch, sndFlaps, soundAt } from '../fx/audio.js';
+import { shakeCam } from '../ui/hud.js';
 import { acam } from './camera.js';
 import { clamp } from '../core/util.js';
 import { B } from './battle.js';
@@ -16,7 +17,7 @@ import { H } from '../world/terrain.js';
 //    (perfil em RWRS[id].snd) e do MAW; tons contínuos de alerta por prioridade;
 //  - detentes da manete (marcha lenta, 100%, PC/WEP) e ignição da PC.
 // =====================================================================
-let beepT = 0, prevThr = -1, prevAB = 0, prevWep = false, prevGear = 0, prevFlap = 0, prevTouch = 0;
+let beepT = 0, prevThr = -1, prevAB = 0, prevWep = false, prevGear = 0, prevFlap = 0, prevTouch = 0, prevMach = 0;
 export function airAudio(dt) {
   if (!AC || !eng.jet) return;
   const live = S.state === 'play' || S.state === 'spectate' || S.state === 'end';
@@ -62,6 +63,15 @@ function engine(q, vol) {
     eng.jet.f.frequency.value = (r0 + n * (r1 - r0) + q.ias * 1.2) * (pit ? 0.6 : 1);
     eng.jet.w.frequency.value = wh; eng.jet.w2.frequency.value = wh * 1.52 + 7; eng.jet.howl.frequency.value = wh * 0.48; // pás do compressor + uivo da entrada de ar
     eng.ab.f.frequency.value = 160 + 120 * E.ab;
+    // PC/WEP com a cara de cada motor (snd.boost); k = quanto está aceso
+    const bo = sd.boost, Bn = eng.boost, k = bo ? E.ab * vol : 0, muf = pit ? 0.55 : 1;
+    if (Bn) {
+      Bn.log.gain.value = k * 0.16; Bn.lo.frequency.value = (bo ? bo.lo : 300) * muf;
+      Bn.cg.gain.value = k && Math.random() < 0.35 + 0.4 * bo.crack ? k * bo.crack * (0.05 + Math.random() * 0.12) : 0; Bn.cf.frequency.value = 900 + Math.random() * 1800;
+      Bn.hg.gain.value = k ? k * bo.howl[2] * (0.85 + Math.random() * 0.3) * muf : 0; if (bo) { Bn.hf.frequency.value = bo.howl[0] * (0.97 + 0.06 * E.N); Bn.hf.Q.value = bo.howl[1]; }
+      Bn.sg.gain.value = k ? k * bo.hiss * 0.05 * muf : 0;
+      Bn.rg.gain.value = k ? k * bo.rasp * 0.05 : 0; Bn.r1.frequency.value = 46 + 10 * E.ab; Bn.r2.frequency.value = 51 + 12 * E.ab;
+    }
   } else {
     const f = (sd.f0 || 45) + Math.min(E.power, 1.2) * ((sd.f1 || 85) - (sd.f0 || 45));
     eng.air.o.frequency.value = f; eng.air.o2.frequency.value = f / 2;
@@ -122,6 +132,7 @@ function passes(on) {
     if (m.d < 160 && d > m.d && m.closing && performance.now() - m.t > 1500) { sndWhoosh(q.pos, Math.min(1.5, q.ias / 180), !!q.eng.jet); m.t = performance.now(); }
     m.closing = d < m.d;
     if (d < 1800 && (m.mach < 1) !== ((q.mach || 0) < 1) && (q.mach || 0) >= 1) sndSonicBoom(q.pos);
+    if ((q.mach || 0) > 1 && d < 2200 && m.closing && d > m.d && performance.now() - (m.boomT || 0) > 4000) { sndSonicBoom(q.pos); m.boomT = performance.now(); shakeCam(0.4 * (1 - d / 2200)); }
     m.d = d; m.mach = q.mach || 0; passMem.set(q, m);
   }
 }
@@ -152,8 +163,13 @@ function detents(p) {
   const t = p.throttle;
   if (prevThr >= 0 && ((t >= 1 && prevThr < 1) || (t <= 0 && prevThr > 0))) cockpitTone(180, 120, 0.04, 0.05, 'square');
   if (p.wep !== prevWep && p.canBoost) cockpitTone(p.wep ? 240 : 160, p.wep ? 300 : 120, 0.06, 0.05, 'square');
-  const ab = p.eng.hasAB ? p.eng.ab : 0;
-  if (ab > 0.02 && prevAB <= 0.02) { cockpitThump(0.7, 55, 0.6); sndAB(); }
+  const ab = p.eng.jet ? p.eng.ab : 0, bo = (p.eng.E.snd || {}).boost;
+  if (ab > 0.02 && prevAB <= 0.02) { sndBoostIgnite(bo ? bo.ign : 0.6); if (p.eng.hasAB) shakeCam(0.18 * (bo ? bo.ign : 0.6)); }
+  // cruzando Mach 1 (subindo): o tum da onda de choque e um tranco; descendo, só um sopro
+  const M = p.mach || 0;
+  if (M >= 1 && prevMach < 1 && prevMach > 0.9) { sndMachCross(); shakeCam(0.55); }
+  else if (M < 0.99 && prevMach >= 1) cockpitThump(0.35, 60, 0.4);
+  prevMach = M;
   if (p.gearCmd !== prevGear) sndGear(p.gearCmd > 0.5);
   if (p.flapStage !== prevFlap) sndFlaps();
   if (p.touchT && p.touchT !== prevTouch) sndTouch(Math.min(1.4, 0.4 + (p.touchV || 0) / 4));
@@ -181,4 +197,4 @@ function tones(p, dt) {
   else if (w === 'stall') { wn.o.frequency.value = 330; wn.g.gain.value = pulse(3, 0.6) ? 0.025 : 0; }
   else wn.g.gain.value = 0;
 }
-export function airAudioOff() { voice(voiceStep(null, 0, false)); if (!eng.jet) return; for (const v of eng.voices) { v.g.gain.value = 0; if (v.recP) v.recP.g.gain.value = 0; if (v.recJ) v.recJ.g.gain.value = 0; } for (const r of [eng.recP, eng.recJ, eng.recC, eng.gunLoop]) if (r) r.g.gain.value = 0; eng.roll.g.gain.value = 0; eng.wind.buffet.gain.value = 0; eng.jet.g.gain.value = 0; eng.ab.g.gain.value = 0; eng.wind.g.gain.value = 0; eng.rumble.g.gain.value = 0; eng.seek.g.gain.value = 0; eng.warn.g.gain.value = 0; eng.air.g.gain.value = 0; }
+export function airAudioOff() { voice(voiceStep(null, 0, false)); if (eng.boost) for (const k of ['log', 'cg', 'hg', 'sg', 'rg']) eng.boost[k].gain.value = 0; if (!eng.jet) return; for (const v of eng.voices) { v.g.gain.value = 0; if (v.recP) v.recP.g.gain.value = 0; if (v.recJ) v.recJ.g.gain.value = 0; } for (const r of [eng.recP, eng.recJ, eng.recC, eng.gunLoop]) if (r) r.g.gain.value = 0; eng.roll.g.gain.value = 0; eng.wind.buffet.gain.value = 0; eng.jet.g.gain.value = 0; eng.ab.g.gain.value = 0; eng.wind.g.gain.value = 0; eng.rumble.g.gain.value = 0; eng.seek.g.gain.value = 0; eng.warn.g.gain.value = 0; eng.air.g.gain.value = 0; }
