@@ -60,14 +60,21 @@ export function tipArea(D) {
 export function gearPlan(D) {
   const lift = D.fuseR + 1.35, mr = D.jet ? 0.36 : 0.4, nr = D.jet ? 0.28 : 0.17, G = D.gear || {};
   // jatos (triciclo): principais atrás do CG, senão o avião senta na cauda; pistão (bequilha): à frente
-  const mx = (G.track || D.span * 0.32) / 2, mz = D.jet ? Math.min(D.wingZ + 0.4, -0.45) : D.wingZ + 0.4, ret = G.ret || 'in';
+  // bordo de ataque da asa em |x|: o munhão tem de ficar debaixo da asa — com enflechamento forte (F-4E, MiG-21) a
+  // conta antiga punha a perna e o alojamento à frente do bordo de ataque, uma caixa solta no ar
+  const o = wingCfg(D, 1), le = x => station(o, Math.min(1, Math.max(0, (x - o.x0) / o.half)), 0)[2];
+  const mx = (G.track || D.span * 0.32) / 2, mz = D.jet ? Math.min(D.wingZ + 0.4, -0.45, le(mx) - 0.32) : D.wingZ + 0.4, ret = G.ret || 'in';
   const nz = D.jet ? D.L * 0.33 : -D.L * 0.46, nl = D.jet ? lift : lift * 0.45;
-  const o = wingCfg(D, 1), ws = Math.min(0.9, Math.max(0, (mx - o.x0) / o.half)), y0 = station(o, ws, 0.45)[1];
+  const ws = Math.min(0.9, Math.max(0, (mx - o.x0) / o.half)), y0 = station(o, ws, 0.45)[1];
   const len = lift - mr * 1.9 + y0;
   // pivô → borda da roda recolhida; para dentro, a perna encolhe (até 40%) para a roda não passar do eixo do avião
   let reach = len + mr * 0.9 + mr + 0.06; const shrink = ret === 'in' ? Math.min(0.4 * len, Math.max(0, reach - (mx - 0.04))) : 0; reach -= shrink;
   const bay = ret === 'out' ? { xi: mx - 0.05, xo: mx + reach } : { xi: mx - reach, xo: mx + 0.03 };
   Object.assign(bay, { za: mz - mr - 0.08, zb: mz + mr + 0.08, y0, len, ret, shrink });
+  // borda da frente em |x|: nunca passa do bordo de ataque (perto do munhão só cabe a perna, a roda deita mais para dentro)
+  bay.zbx = x => Math.max(Math.min(bay.zb, le(x) - 0.06), mz + 0.12);
+  // recolhendo para dentro: |x| da borda de fora da roda deitada — divide a porta da asa em porta da perna e da roda
+  if (ret === 'in') bay.xs = mx - (len + mr * 0.9 - shrink - mr - 0.05);
   // nariz do jato: pivô abaixo do eixo (o duto de ar passa por cima do alojamento); a perna encurta o mesmo tanto
   const ny = D.jet ? -D.fuseR * (D.intakes === 'side' ? 0.42 : 0.8) : 0, nlen = nl - nr * 1.9 + ny;
   const nbay = { za: nz - nlen - nr * 1.9 - 0.06, zb: nz + 0.1, w: Math.max(0.15, (D.jet ? 0.14 : 0.1) / 2 + 0.08), len: nlen, y0: ny };

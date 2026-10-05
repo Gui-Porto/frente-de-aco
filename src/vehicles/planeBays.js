@@ -57,18 +57,21 @@ function orient(g, cx, cy, cz) {
 }
 const mesh = (pos, idx) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.setIndex(idx); return g; };
 
-// cavidade de [x0, x1] × [za, zb]: paredes do fundo (bot(x, z), a chapa) até o teto (top(x, z)) e o teto em grade
-function cavity(x0, x1, za, zb, bot, top) {
+// cavidade de [x0, x1] × [za, zb(x)]: paredes do fundo (bot(x, z), a chapa) até o teto (top(x, z)) e o teto em grade.
+// zb pode ser número ou função de |x| (a borda da frente acompanha o bordo de ataque enflechado)
+function cavity(x0, x1, za, zb0, bot, top) {
+  const zb = typeof zb0 === 'function' ? x => zb0(Math.abs(x)) : () => zb0;
   const per = [], step = 0.05;
   const seg = (ax, az, bx, bz) => { const n = Math.max(2, Math.ceil(Math.hypot(bx - ax, bz - az) / step)); for (let i = 0; i < n; i++) per.push([ax + (bx - ax) * i / n, az + (bz - az) * i / n]); };
-  seg(x0, zb, x1, zb); seg(x1, zb, x1, za); seg(x1, za, x0, za); seg(x0, za, x0, zb);
+  { const n = Math.max(2, Math.ceil((x1 - x0) / step)); for (let i = 0; i < n; i++) { const x = x0 + (x1 - x0) * i / n; per.push([x, zb(x)]); } }
+  seg(x1, zb(x1), x1, za); seg(x1, za, x0, za); seg(x0, za, x0, zb(x0));
   const pos = [], idx = [], n = per.length;
   for (const [x, z] of per) { pos.push(x, bot(x, z) - 0.004, z, x, Math.max(top(x, z), bot(x, z) + 0.05), z); }
   for (let i = 0; i < n; i++) { const a = 2 * i, b = 2 * ((i + 1) % n); idx.push(a, b, a + 1, b, b + 1, a + 1); }
-  const cx = (x0 + x1) / 2, cz = (za + zb) / 2, cy = (bot(cx, cz) + top(cx, cz)) / 2;
+  const cx = (x0 + x1) / 2, cz = (za + zb(cx)) / 2, cy = (bot(cx, cz) + top(cx, cz)) / 2;
   const walls = orient(mesh(pos, idx), cx, cy, cz);
-  const NX = Math.max(4, Math.ceil((x1 - x0) / 0.12)), NZ = Math.max(3, Math.ceil((zb - za) / 0.12)), cp = [], ci = [];
-  for (let i = 0; i <= NX; i++) for (let j = 0; j <= NZ; j++) { const x = x0 + (x1 - x0) * i / NX, z = za + (zb - za) * j / NZ; cp.push(x, Math.max(top(x, z), bot(x, z) + 0.05), z); }
+  const NX = Math.max(4, Math.ceil((x1 - x0) / 0.12)), NZ = Math.max(3, Math.ceil((zb(x0) - za) / 0.12)), cp = [], ci = [];
+  for (let i = 0; i <= NX; i++) for (let j = 0; j <= NZ; j++) { const x = x0 + (x1 - x0) * i / NX, z = za + (zb(x) - za) * j / NZ; cp.push(x, Math.max(top(x, z), bot(x, z) + 0.05), z); }
   for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) { const a = i * (NZ + 1) + j, b = a + NZ + 1; ci.push(a, b, a + 1, b, b + 1, a + 1); }
   const ceil = orient(mesh(cp, ci), cx, cy - 1, cz);
   return { walls, ceil, cx, cy, cz };
@@ -83,13 +86,13 @@ export function buildBays(add, root, pars, D, BAY, o, sec, M, duct = null) {
   // dentro (3 cm) sem passar de 18 cm acima do pivô — a roda deitada (±10 cm) cabe com folga
   const bot = (x, z) => (m.xj && x < m.xj ? fuseBottom(sec, x, z) ?? wingY(o, x, z, -1) : wingY(o, x, z, -1));
   const top = (x, z) => Math.min(wingY(o, x, z, 1) - 0.03, m.y0 + 0.18);
-  const C = cavity(m.xi, m.xo, m.za, m.zb, bot, top), parts = [];
+  const zbx = m.zbx || (() => m.zb), C = cavity(m.xi, m.xo, m.za, zbx, bot, top), parts = [];
   parts.push([C.walls, bayM], [C.ceil, bayM]);
   // nervuras no teto (ao longo da envergadura) e a alma da longarina na parede de trás; tubos hidráulicos na da frente
   const rib = (pts, r, mat) => parts.push([new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p))), Math.max(4, pts.length * 2), r, 5), mat]);
-  for (let k = 1; k <= 3; k++) { const z = m.za + (m.zb - m.za) * k / 4, P = []; for (let i = 0; i <= 8; i++) { const x = m.xi + 0.04 + (m.xo - m.xi - 0.08) * i / 8; P.push([x, top(x, z) - 0.012, z]); } rib(P, 0.012, bayM); }
+  for (let k = 1; k <= 3; k++) { const P = []; for (let i = 0; i <= 8; i++) { const x = m.xi + 0.04 + (m.xo - m.xi - 0.08) * i / 8, z = m.za + (zbx(x) - m.za) * k / 4; P.push([x, top(x, z) - 0.012, z]); } rib(P, 0.012, bayM); }
   for (let i = 1; i < 6; i++) { const x = m.xi + (m.xo - m.xi) * i / 6, z = m.za + 0.015, y0 = bot(x, z) + 0.02, y1 = top(x, z) - 0.01; if (y1 > y0 + 0.03) rib([[x, y0, z], [x, y1, z]], 0.01, bayM); }
-  for (const [dy, r] of [[0.35, 0.008], [0.55, 0.006]]) { const P = []; for (let i = 0; i <= 8; i++) { const x = m.xi + 0.05 + (m.xo - m.xi - 0.1) * i / 8, z = m.zb - 0.025; P.push([x, bot(x, z) + (top(x, z) - bot(x, z)) * dy, z]); } rib(P, r, line); }
+  for (const [dy, r] of [[0.35, 0.008], [0.55, 0.006]]) { const P = []; for (let i = 0; i <= 8; i++) { const x = m.xi + 0.05 + (m.xo - m.xi - 0.1) * i / 8, z = zbx(x) - 0.025; P.push([x, bot(x, z) + (top(x, z) - bot(x, z)) * dy, z]); } rib(P, r, line); }
   // suporte da perna (munhão) no teto junto ao pivô
   const px = m.ret === 'out' ? m.xi + 0.08 : m.xo - 0.08, mz = (m.za + m.zb) / 2;
   parts.push([new THREE.BoxGeometry(0.1, 0.06, 0.24).translate(px, top(px, mz) - 0.03, mz), dark]);

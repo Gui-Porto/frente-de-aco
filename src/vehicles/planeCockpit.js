@@ -294,13 +294,13 @@ function ejectSeat(add, M, par, o) {
   } else {
     // Martin-Baker: caixa da cabeça, contêiner do paraquedas-piloto em cima, orelhas e almofada
     add(rbox(0.32, 0.3, 0.22, 0.05), S, par, 0, 0.05, -0.28);
-    add(new THREE.CylinderGeometry(0.075, 0.075, 0.28, 14).rotateZ(Math.PI / 2), S, par, 0, 0.22, -0.3);
+    add(new THREE.CylinderGeometry(0.065, 0.065, 0.28, 14).rotateZ(Math.PI / 2), S, par, 0, 0.2, -0.3); // topo a 0,27 da cabeça (planeModel encaixa sob o vidro)
     for (const s of [1, -1]) add(rbox(0.04, 0.16, 0.08, 0.015), S, par, s * 0.15, 0.06, -0.17);
     add(rbox(0.22, 0.17, 0.05, 0.02), Cu, par, 0, 0.02, -0.155);
     if (o.face) {
       // alça de face: arco amarelo com listras pretas, acima da cabeça
-      const fh = add(new THREE.TorusGeometry(0.07, 0.011, 6, 16, Math.PI), Y, par, 0, 0.27, -0.2); fh.rotation.x = -0.35;
-      for (const a of [0.5, 1.2, 1.95, 2.65]) add(new THREE.BoxGeometry(0.012, 0.026, 0.026), K, par, Math.cos(a) * 0.07, 0.27 + Math.sin(a) * 0.07 * Math.cos(0.35), -0.2 - Math.sin(a) * 0.07 * Math.sin(0.35));
+      const fh = add(new THREE.TorusGeometry(0.07, 0.011, 6, 16, Math.PI), Y, par, 0, 0.21, -0.2); fh.rotation.x = -0.35;
+      for (const a of [0.5, 1.2, 1.95, 2.65]) add(new THREE.BoxGeometry(0.012, 0.026, 0.026), K, par, Math.cos(a) * 0.07, 0.21 + Math.sin(a) * 0.07 * Math.cos(0.35), -0.2 - Math.sin(a) * 0.07 * Math.sin(0.35));
     }
   }
   // concha lateral (afina para a frente) e assento: almofada sobre a caixa de sobrevivência

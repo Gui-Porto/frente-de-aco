@@ -191,7 +191,7 @@ export const PLANES = {
     fuseR: 0.95, noseR: 0.5, wingZ: -1.2, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, tailY: 0.48, finY: 0.34, intakes: 'side', nozzles: 2, gunPod: true, wingBreak: [0.66, 12], finish: 'camo', underColor: 0xc9ccc6,
     radar: 'apq120', rwr: 'apr36',
     fuse: [[-0.53, .72, .42, .5, -.1], [-0.46, .78, .5, .56, -.08], [-0.36, .86, .62, .66, -.04], [-0.2, .95, .86, .82, 0], [0, 1, 1, .95, 0], [0.14, .92, 1.02, .9, 0], [0.26, .7, .92, .78, .02], [0.36, .52, .7, .62, 0], [0.45, 'n1', 'n1', 'n1', 0]],
-    canopy: { z: 0.27, len: 5.0, w: 0.46, h: 0.62, frames: [0.2, 0.5, 0.76], seats: [0.34, 0.74], flat: 0.8, rearDy: -0.03 }, smoke: 0.8,
+    canopy: { z: 0.27, len: 5.0, w: 0.48, h: 0.74, frames: [0.2, 0.5, 0.76], seats: [0.34, 0.74], flat: 0.8, rearDy: -0.03 }, smoke: 0.8,
     // bocais com pétalas da pós-combustão, lâminas UHF/IFF, anticolisão em cima e embaixo, gancho e tanques de 370 gal nos pilones externos
     nozzle: { len: 0.7, petals: 18, petalLen: 0.5 }, antennas: [{ k: 'blade', zf: 0.04, ay: 1, h: 0.3, len: 0.42 }, { k: 'blade', zf: 0.02, ay: -1, h: 0.24, len: 0.34 }],
     beacons: [[-0.12, 1], [0.15, -1]], hook: true, drops: [{ ws: 0.8, len: 4.3, d: 0.66 }],
@@ -205,7 +205,7 @@ export const PLANES = {
     // M61 de 6 canos na carenagem sob o nariz (F-4E)
     guns: [{ w: 'M61', n: 1, span: [0], z: 8.2, ammo: 640, mount: { zf: 0.41, r: 0.022, len: -0.05, cluster: 6, rr: 0.065, pod: { r: 0.2, len: 3.2, blend: true }, b: [[0, -1]] } }],
     // freios sob as asas, atrás do trem principal (abrem para baixo)
-    brake: [{ ws: 0.16, cf: 0.45, ax: 1, w: 0.75, len: 0.8, open: 'down', deg: 50 }, { ws: 0.16, cf: 0.45, ax: -1, w: 0.75, len: 0.8, open: 'down', deg: 50 }],
+    brake: [{ ws: 0.16, cf: 0.62, ax: 1, w: 0.75, len: 0.8, open: 'down', deg: 50 }, { ws: 0.16, cf: 0.62, ax: -1, w: 0.75, len: 0.8, open: 'down', deg: 50 }],
     missiles: [{ w: 'AIM7E', n: 4 }, { w: 'AIM9J', n: 4 }],
     bombs: [], rockets: null
   },
