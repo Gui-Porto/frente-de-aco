@@ -1,4 +1,5 @@
 import { isDown, pressed, settings, mouse } from '../core/settings.js';
+import { clamp } from '../core/util.js';
 // =====================================================================
 // InputSystem + AircraftController da Batalha Aérea.
 // Teclado, mouse e gamepad viram um COMANDO normalizado; o comando é que
@@ -59,10 +60,19 @@ export function pilot(p, c, aimDir, dt) {
   // Tecla de manche no modo mouse = controle direto naquele instante (como no WT): antes só o profundor
   // era trocado e o instrutor seguia rolando o avião atrás do círculo do mouse parado → avião "bambo".
   // A câmera continua livre no mouse; ao soltar, o instrutor volta a levar o nariz para o círculo.
-  if (settings.gameplay.flightMode === 'teclado' || c.pad || manualAxes(c)) {
+  if (settings.gameplay.flightMode === 'teclado' || c.pad) {
     // controle direto, com rampa suave nas superfícies
     const r = 1 - Math.exp(-dt * 6);
     p.elev += (c.pitch - p.elev) * r; p.ail += (c.roll - p.ail) * r; p.rud += (c.yaw - p.rud) * r;
+  } else if (manualAxes(c)) {
+    // tecla no modo mouse (como no WT): o eixo apertado é do piloto; o instrutor continua segurando o resto.
+    // Antes aileron e leme iam a zero e o profundor a ±1 sem limite: estolava, o torque da hélice e a queda
+    // de asa rolavam o avião — "bambo" a cada W/S, pior nos de hélice.
+    const r = 1 - Math.exp(-dt * 6);
+    const glim = Math.min(p.def.glim - 1.5, 10);
+    p.elev += (p.limitElev(c.pitch, { glim }) - p.elev) * r;           // sem estol e dentro do G, como o instrutor
+    p.ail += ((c.roll || clamp(-2.5 * p.rr, -1, 1)) - p.ail) * r;      // solto: segura a inclinação (amortece rolagem)
+    p.rud += ((c.yaw || clamp(-1.6 * p.yr, -1, 1)) - p.rud) * r;       // solto: anula a guinada
   } else {
     // instrutor: nariz (linha das armas) no círculo do mouse, resposta mais viva que a da IA.
     // lead 0,1 s: com o integral e a inclinação de curva da mira, 0,3 deixava o nariz ~3° À FRENTE do círculo em curva

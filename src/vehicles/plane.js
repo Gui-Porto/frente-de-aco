@@ -468,7 +468,10 @@ export class Plane {
     if (this.nearAim) { if (off > NEAR * 1.5) this.nearAim = false; } else if (off < NEAR) this.nearAim = true;
     // perto da mira, o + 0.08 (~5°) deixa a inclinação proporcional ao desvio lateral: sem ele, dl e du quase zero
     // davam atan2 de ruído (±90°) e o jato balançava as asas com qualquer tremor da mira
-    let bank = Math.atan2(-dl, this.nearAim ? Math.abs(du) + 0.08 : du);
+    // círculo ABAIXO do nariz (até ~60°, quase sem desvio lateral; ex.: soltar o S no modo mouse): o jogador empurra
+    // o nariz de volta. Antes pedia ±180° de inclinação com o sinal decidido pelo ruído de dl → rolava de dorso
+    const push = nose && !this.nearAim && du < 0 && off < 1.05 && Math.abs(dl) < -du;
+    let bank = Math.atan2(-dl, this.nearAim ? Math.abs(du) + 0.08 : push ? -du : du);
     // e a inclinação fica limitada ao tamanho do erro: 8° ao lado pedia ~80° de asa e uma puxada que passava do alvo
     // e voltava (MiG-21/F-4 balançavam 40°↔84° depois de a mira parar)
     if (this.nearAim) { const lim = Math.PI / 2 * clamp(off / 0.3, 0.3, 1); bank = clamp(bank, -lim, lim); }
@@ -491,13 +494,12 @@ export class Plane {
     this.ail = clamp(K * (ka * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
-    this.rud = clamp(K * kr * yawErr * (1 - w * 0.7) - ky * this.yr, -1, 1);
-    const as = D.clmax / D.cla, aLim = as * (opts.aoa ?? 0.86 + this.flaps * 0.08);
-    // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
-    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
-    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
-    elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
-    elev = Math.max(elev, (-(opts.gneg || 2.5) - this.n) * 0.6 - 0.25);                 // limite de G negativo
+    // integral lateral (modo nariz): perto da mira a inclinação quase não age e o leme proporcional era fraco —
+    // depois de uma curva o nariz ficava ~3° ao lado do círculo parado por mais de 3 s (Spitfire, medido)
+    if (nose && off < 0.09 && !this.onGround) this.iY = clamp((this.iY || 0) + yawErr * dt, -0.1, 0.1);
+    else this.iY = (this.iY || 0) * Math.exp(-dt * 4);
+    this.rud = clamp(K * kr * yawErr * (1 - w * 0.7) - ky * this.yr + (nose ? 4 * this.iY : 0), -1, 1);
+    elev = this.limitElev(elev, opts);
     // proteção perto do solo (assistência arcade): não deixa mergulhar abaixo de ~60 m sem querer
     if (opts.groundAssist) {
       const agl = this.pos.y - H(this.pos.x, this.pos.z), sink = -this.vel.y;
@@ -509,6 +511,15 @@ export class Plane {
     if (this.onGround) elev = dir.y < 0.03 ? clamp(elev, this.def.jet ? -0.2 : -0.8, 0) : Math.min(elev, 0.8);
     this._elevLim = Math.abs(elev - elev0) > 0.02;
     this.elev = clamp(elev, -1, 1);
+  }
+  // limitadores do instrutor (sem estol, G máximo/mínimo); também valem para W/S no modo mouse
+  limitElev(elev, opts = {}) {
+    const D = this.def, as = D.clmax / D.cla, aLim = as * (opts.aoa ?? 0.86 + this.flaps * 0.08);
+    // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
+    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
+    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
+    elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
+    return Math.max(elev, (-(opts.gneg || 2.5) - this.n) * 0.6 - 0.25);                 // limite de G negativo
   }
   // direção de tiro: armas FIXAS no eixo do avião, como no WT (quem aponta é o avião, não o mouse)
   fireDir(out) { this.axes(); return out.copy(_pf); }
