@@ -58,7 +58,7 @@ Tudo por dados, sem `if (key === …)`: entrada em `PLANES` (`data/vehicles.js`:
 
 **Cabine e insígnias**: modo cockpit (V) é a cabine 3D — câmera no olho do piloto (`pilotMesh`, que some), plano próximo 0,04 m só nesse modo. `vehicles/planeCockpit.js` monta a cabine sob a capota (a fuselagem vem aberta: `fuselage(D, hole)`), estilo por nação/era (`def.cockpit.style`); vidro quase incolor (metálico escuro escondia tudo). Insígnias são `DecalGeometry` projetadas na chapa (`paint.js planeDecals`), só nas faces voltadas para fora; marcações por dados em `def.marks` (`serial`, `buzz`, `nose`, `decalZ`).
 
-**Instrutor do mouse** (`Plane.steerTo`, medido com `airMouse → updateAirCamera → simulate`): integral do profundor com anti-windup (só perto da mira e sem limitador atuando), amortecimento de arfagem relativo à taxa da mira. Ao mexer nos ganhos, meça curva contínua + parada do mouse e tremor: o MiG-21/F-4E ainda balançam um pouco depois de curva forte.
+**Instrutor do mouse** (`Plane.steerTo`, medido com `airMouse → updateAirCamera → simulate`): integral do profundor com anti-windup (só perto da mira e sem limitador atuando), amortecimento de arfagem relativo à taxa da mira. Ao mexer nos ganhos, meça curva contínua + parada do mouse e tremor: o MiG-21/F-4E ainda balançam um pouco depois de curva forte. O comando fica parado o quadro todo (vários passos de física): ganho de amortecimento × autoridade (`_ailAuth`) × dt tem de ficar < ~1, senão em alta velocidade bate a cada quadro (MiG-21 a 1250 km/h: ±46°/s de rolagem por quadro, "tremendo"); por isso `rk` corta o ganho do aileron no instrutor e no W/S.
 
 ## Modelos e mapa — armadilhas já pagas
 
