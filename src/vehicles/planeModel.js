@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { planeDecals, camoTexture } from './paint.js';
-import { MISSILES } from '../data/vehicles.js';
+import { MISSILES, GUNS } from '../data/vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { hasModel, gltfPlane } from './modelLibrary.js';
@@ -475,7 +475,24 @@ export function buildPlane(D) {
       nozzles.push({ x: nx, y: ny, z: ze, r: nr * 0.85 });
     }
   } else {
-    if (D.cowl === 'radial') { add(new THREE.TorusGeometry(D.noseR * 0.93, 0.06, 8, 28), dark, root, 0, 0, L * 0.43); add(new THREE.CylinderGeometry(D.noseR * 0.92, D.noseR * 0.98, 0.25, 28, 1, true).rotateX(Math.PI / 2), dark, root, 0, 0, L * 0.22); }
+    if (D.cowl === 'radial') {
+      add(new THREE.TorusGeometry(D.noseR * 0.93, 0.06, 8, 28), dark, root, 0, 0, L * 0.43); add(new THREE.CylinderGeometry(D.noseR * 0.92, D.noseR * 0.98, 0.25, 28, 1, true).rotateX(Math.PI / 2), dark, root, 0, 0, L * 0.22);
+      // motor dentro da carenagem (D.radial = { cyl, fan }): defletor escuro fechando a boca (antes via-se o céu e a
+      // cabine entre o spinner e o lábio), cilindros aletados em estrela com o cárter e, no Fw 190, a ventoinha
+      const R = D.noseR * 0.9, zE = L * 0.41, rd = D.radial || { cyl: 9 }, eng = new THREE.MeshStandardMaterial({ color: 0x3a3b3c, roughness: .5, metalness: .7 });
+      add(new THREE.CircleGeometry(R * 1.05, 32), DM.soot, root, 0, 0, zE - 0.12);
+      add(DT.latheZ([V2(R * 0.42, zE - 0.1), V2(R * 0.42, zE + 0.02), V2(R * 0.3, zE + 0.1), V2(0.001, zE + 0.13)], 24), eng, root, 0, 0, 0); // cárter
+      const cyl = [];
+      for (let i = 0; i < rd.cyl; i++) {
+        const a = i / rd.cyl * Math.PI * 2, parts = [new THREE.CylinderGeometry(R * 0.13, R * 0.15, R * 0.5, 12).translate(0, R * 0.62, 0)];
+        for (let k = 0; k < 6; k++) parts.push(new THREE.CylinderGeometry(R * 0.18, R * 0.18, 0.008, 14).translate(0, R * 0.45 + k * R * 0.06, 0)); // aletas
+        parts.push(new THREE.BoxGeometry(R * 0.2, R * 0.08, R * 0.24).translate(0, R * 0.9, 0));                                  // cabeçote
+        for (const q of parts) cyl.push(q.rotateZ(a).translate(0, 0, zE - 0.02));
+        cyl.push(new THREE.CylinderGeometry(0.012, 0.012, R * 0.5, 5).translate(0, R * 0.6, 0).rotateX(0.5).rotateZ(a + 0.2).translate(0, 0, zE + 0.03)); // vareta
+      }
+      add(mergeGeometries(cyl), eng, root);
+      if (rd.fan) add(DT.bladeRing(rd.fan, R * 0.3, R * 0.95, R * 0.28, 0.7, 0.4, 0.012), dark, root, 0, 0, L * 0.43 - 0.02);
+    }
     else for (const s of [1, -1]) for (let i = 0; i < 6; i++) { add(new THREE.BoxGeometry(0.12, 0.09, 0.2), dark, root, s * fr * 0.88, fr * 0.42, L * 0.36 - i * 0.24); stacks.push({ x: s * fr * 0.98, y: fr * 0.42, z: L * 0.36 - i * 0.24 - 0.08, dir: -s * 0.75 }); } // escapamentos
     if (D.cowl === 'radial') for (const s of [1, -1]) for (let i = 0; i < 4; i++) stacks.push({ x: s * fr * 0.9, y: -fr * 0.35 + i * 0.16, z: L * 0.2, dir: -s * 0.3 });
     // tomada de ar ventral: só P-47 (radiador de óleo/intercooler na frente) e Il-2 (radiador sob a fuselagem); Spitfire tem os da asa e o Fw 190 é radial
@@ -659,9 +676,37 @@ export function buildPlane(D) {
     // a raiz leva o alojamento do trem (furo no intradorso; o pedaço tirado é a porta presa à perna)
     const m = BAY.main, skin0 = cutSurface(Object.assign({}, o, { bay: { xi: m.wxi, xo: m.xo, za: m.za, zb: m.zb, zbx: m.zbx, xs: m.xs } }), SURF.cf, mv.filter(inner), grp, false, 0, sB);
     grp.userData.skins = [skin0, cutSurface(o, SURF.cf, mv.filter(m => !inner(m)), tip, false, sB, 1)]; // chapa da raiz e da ponta (insígnias)
-    if (D.stripes) for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.3, 0.02, D.chord * 0.86), i % 2 ? black : white, grp, side * (fr + 1.0 + i * 0.3), -fr * 0.25 - 0.17 + (1 + i * 0.3) * Math.tan(dih), D.wingZ - D.chord * 0.2);
-    if (D.key === 'mig15') for (const k of [0.38, 0.7]) { const p = station(o, k, 0.5); add(new THREE.BoxGeometry(0.03, 0.18, chordAt(o, k) * 0.9), paint, k < sB ? grp : tip, p[0], p[1] + 0.1, p[2]); } // cercas aerodinâmicas
+    // faixas de invasão: casca da própria asa (trecho da envergadura, até a dobradiça) 4 mm por fora, envolvendo
+    // extradorso e intradorso — antes eram réguas retas atravessando a asa
+    if (D.stripes) for (let i = 0; i < 5; i++) {
+      const x0 = fr + 1.0 + i * 0.3 - 0.15, sg = wingGeometry(Object.assign({}, o, { sub: { s0: (x0 - o.x0) / o.half, s1: (x0 + 0.3 - o.x0) / o.half, a: 0, b: SURF.cf } })), P = sg.attributes.position, Nn = sg.attributes.normal;
+      for (let k = 0; k < P.count; k++) P.setXYZ(k, P.getX(k) + Nn.getX(k) * 0.004, P.getY(k) + Nn.getY(k) * 0.004, P.getZ(k) + Nn.getZ(k) * 0.004);
+      sg.clearGroups(); add(sg, i % 2 ? black : white, grp);
+    }
+    // cercas aerodinâmicas: chapa que nasce rente ao extradorso (perfil da asa embaixo) e sobe até 17 cm no meio da
+    // corda, baixa no bordo de ataque e de fuga — antes era uma régua reta flutuando sobre a asa
+    if (D.key === 'mig15') for (const k of [0.38, 0.7]) {
+      const c = chordAt(o, k), p0 = station(o, k, 0), t = (o.t0 + (o.t1 - o.t0) * k) * c, sh = new THREE.Shape(), N = 14, yu = xc => p0[1] + yt(xc) * t + 0.012 * c * Math.sin(Math.PI * xc);
+      const xs = Array.from({ length: N + 1 }, (_, i) => 0.01 + 0.98 * i / N);
+      xs.forEach((xc, i) => (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(p0[2] - xc * c, yu(xc) - 0.02));
+      for (const xc of [...xs].reverse()) sh.lineTo(p0[2] - xc * c, yu(xc) + 0.03 + 0.14 * Math.sin(Math.PI * Math.min(1, xc * 1.25)) ** 0.6);
+      const fg = new THREE.ExtrudeGeometry(sh, { depth: 0.01, bevelEnabled: true, bevelSize: 0.006, bevelThickness: 0.006, bevelSegments: 2 }).rotateY(-Math.PI / 2).translate(p0[0] + 0.005, 0, 0);
+      add(fg, paint, k < sB ? grp : tip);
+    }
     if (D.key === 'spit9') radiator(o, side * (fr + 1.0), D.wingZ - 0.35, grp); // radiadores sob a asa
+    // armas de asa sem `mount` (pistão): o cano sai do bordo de ataque na estação de cada arma (g.span) — canhão de
+    // 20/23 mm bem para fora com a luva de carenagem, metralhadora só a ponta; antes as asas não tinham arma nenhuma
+    for (const gn of D.guns || []) if (!gn.mount) for (const gx of gn.span) {
+      if (gx <= fr) continue;
+      const W = GUNS[gn.w], sw = (gx - o.x0) / o.half; if (sw <= 0 || sw >= 1) continue;
+      const pl = station(o, sw, 0), par = sw > sB ? tip : grp, big = W.cal >= 20, r = W.cal / 1000 * (big ? 1.1 : 1.2), out = big ? 0.42 : 0.1;
+      const lt = station(o, sw, 0.04); // um pouco atrás do bordo de ataque (dentro do perfil)
+      for (const [r0, len, m, zt] of [[r, 0.3 + out, DM.steel, pl[2] + out], ...(big ? [[r * 2.4, 0.26, paint, pl[2] + 0.1]] : []), [r * 1.6, 0.05, DM.steel, pl[2] + 0.01]]) {
+        const tb = add(new THREE.CylinderGeometry(m === paint ? r0 * 0.75 : r0, r0, len, 12).rotateX(Math.PI / 2), m, par, pl[0], (pl[1] + lt[1]) / 2, zt - len / 2);
+        tb.castShadow = true;
+      }
+      add(new THREE.CircleGeometry(r * 0.6, 10), black, par, pl[0], pl[1], pl[2] + out + 0.002);
+    }
     DT.navLight(add, DM, tip, station(o, 1, 0.3), side); // luz de navegação (vermelha à esquerda, verde à direita)
     return grp;
   };
@@ -720,11 +765,12 @@ export function buildPlane(D) {
         flush(slotG(0.12, 1.1), sootM, x, y, z - 0.95, n).position.addScaledVector(n, 0.002);
         // o cano: metade para fora da chapa, na calha (antes ficava 2 cm para dentro e quase sumia)
         x += n.x * 0.004; y += n.y * 0.004;
-        tube(M.r * 1.25, M.r * 1.25, 0.09, DM.steel, x, y, z + M.len - 0.01);                         // quebra-chamas
+        tube(M.r * 1.25, M.r * 1.25, 0.13, DM.steel, x, y, z + M.len - 0.01);                         // quebra-chamas
+        tube(M.r * 1.7, M.r * 1.35, 0.16, DM.steel, x, y, z + 0.05);                                    // luva do cano na boca da calha
         for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.004, 0.012, 0.05), black, root, x + Math.cos(k * Math.PI / 2) * M.r * 1.26, y + Math.sin(k * Math.PI / 2) * M.r * 1.26, z + M.len - 0.05); // fendas
         add(new THREE.CylinderGeometry(M.r * 1.45, M.r * 1.45, 0.02, 12).rotateX(Math.PI / 2), DM.steel, root, x, y, z - 0.38); // braçadeira do cano
       }
-      const tip = z + M.len, bl = M.port ? 0.46 : Math.max(M.len, 0) + 0.45; // F-86: o trecho do cano na calha
+      const tip = z + M.len, bl = M.port ? 0.62 : Math.max(M.len, 0) + 0.45; // F-86: o cano sai ~20 cm da calha (antes 4 cm: parecia só um furo)
       if (M.cluster) for (let i = 0; i < M.cluster; i++) { const t = i / M.cluster * Math.PI * 2; tube(M.r, M.r, bl, steel, x + Math.cos(t) * M.rr, y + Math.sin(t) * M.rr, tip); }
       else for (const dx of M.twin ? [-M.twin / 2, M.twin / 2] : [0]) {
         tube(M.r, M.r, bl, M.port ? DM.steel : steel, x + dx, y, tip); // F-86: aço mais claro, contrasta com a calha escura
@@ -811,7 +857,9 @@ export function buildPlane(D) {
       const P0 = new THREE.Vector3(...station(o, 0, 0.4)), pivot = new THREE.Group(); pivot.position.copy(P0); tail.add(pivot);
       add(wingGeometry(o).translate(-P0.x, -P0.y, -P0.z), pair, pivot);
       // carenagem do eixo na chapa (fixa): cobre a junta raiz/fuselagem, como nos reais
-      const fb = add(new THREE.SphereGeometry(1, 16, 10), paint, tail, s * (xr - 0.02), P0.y, P0.z + o.c0 * 0.05); fb.scale.set(0.07, 0.07, Math.min(0.45, o.c0 * 0.25));
+      // carenagem do atuador: alongada e passando uns centímetros da raiz (o vão do giro fica coberto, a peça não
+      // parece solta ao lado da fuselagem)
+      const fb = add(new THREE.SphereGeometry(1, 20, 12), paint, tail, s * (xr - 0.03), P0.y, P0.z + o.c0 * 0.02); fb.scale.set(0.1, Math.max(0.07, o.c0 * 0.035), Math.min(0.8, o.c0 * 0.38));
       surf['elev' + sd] = { pivot, axis: new THREE.Vector3(1, 0, 0), max: 12 * deg, base: new THREE.Quaternion() };
     } else cutSurface(o, 0.68, [['elev' + sd, Math.max(0.04, clearS(o, 0.68)), 0.95, 25]], tail);
   }
@@ -845,16 +893,21 @@ export function buildPlane(D) {
     prop.add(disc);
   }
   // pontos duros: bombas, foguetes e mísseis
-  const bombMeshes = [];
+  // bombas e foguetes presos por pilone/trilhos ao intradorso (ou ao ventre) — antes flutuavam sob o avião
+  const bombMeshes = [], under0 = (x, z) => (Math.abs(x) > fr * 0.9 ? wingY(wingCfg(Math.sign(x)), x, z, -1) : at(z / L).yc - at(z / L).h);
   for (const b of D.bombs) for (let i = 0; i < b.n; i++) {
-    const m = add(new THREE.CylinderGeometry(b.d / 2, b.d / 2, b.d * 4.5, 12).rotateX(Math.PI / 2), dark, root, b.x[i] || 0, -fr - b.d / 2 - .05, D.wingZ - .2);
-    add(new THREE.ConeGeometry(b.d / 2, b.d, 12).rotateX(Math.PI / 2), dark, m, 0, 0, b.d * 2.7);
+    const x = b.x[i] || 0, z = D.wingZ - .2, len = b.d * 4.5, py = under0(x, z), ph = 0.12, y = py - ph - b.d / 2;
+    const m = add(DT.latheZ([V2(b.d * 0.3, -len / 2), V2(b.d / 2, -len * 0.3), V2(b.d / 2, len * 0.25), V2(b.d * 0.35, len * 0.45), V2(0.001, len / 2 + b.d * 0.3)], 16), dark, root, x, y, z);
+    for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.01, b.d * 0.7, b.d * 0.9).translate(0, b.d * 0.35, -len / 2 + b.d * 0.3).rotateZ(Math.PI / 4 + k * Math.PI / 2), dark, m); // empenas
+    add(new THREE.BoxGeometry(0.07, ph + 0.06, len * 0.45), under, root, x, py - ph / 2 + 0.02, z);                       // pilone
+    for (const dz of [-1, 1]) add(new THREE.CylinderGeometry(0.012, 0.012, ph + b.d * 0.3, 6), steel, root, x + b.d * 0.3, py - ph / 2 - b.d * 0.1, z + dz * len * 0.18); // escoras
     bombMeshes.push(m);
   }
   const rocketMeshes = [];
   if (D.rockets) for (let i = 0; i < D.rockets.n; i++) {
-    const side = i % 2 ? -1 : 1, k = Math.floor(i / 2);
-    rocketMeshes.push(add(new THREE.CylinderGeometry(.06, .06, 1.4, 8).rotateX(Math.PI / 2), dark, root, side * (D.span * 0.22 + k * 0.45), -.3, D.wingZ + .2));
+    const side = i % 2 ? -1 : 1, k = Math.floor(i / 2), x = side * (D.span * 0.22 + k * 0.45), z = D.wingZ + .2, py = under0(x, z), y = py - 0.13 - 0.06;
+    rocketMeshes.push(add(new THREE.CylinderGeometry(.06, .06, 1.4, 10).rotateX(Math.PI / 2), dark, root, x, y, z));
+    for (const dz of [0.45, -0.35]) add(new THREE.BoxGeometry(0.035, 0.15, 0.1), steel, root, x, py - 0.07, z + dz);        // postes de lançamento
   }
   // mísseis por estante (def.missiles = [{ w, n, belly? }]); dimensões do próprio míssil.
   // belly: semiembutidos sob a fuselagem (Sparrow do F-4); senão pilones sob a asa, de dentro para fora
