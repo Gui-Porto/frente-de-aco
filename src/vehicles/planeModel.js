@@ -484,6 +484,14 @@ export function buildPlane(D) {
   const frameM = jet ? paint : dark;
   for (const t of C.frames) add(canopyFrame(C.len, C.w, C.h, t, jet ? 0.016 : 0.02, C.flat, sf), frameM, root, 0, cy, czc);
   for (const sd of [1, -1]) add(canopySill(C.len, C.w, C.h, C.flat, sf, sd, jet ? 0.022 : 0.026), frameM, root, 0, cy, czc);
+  // jato: espelho retrovisor no topo do arco do para-brisa, com o suporte
+  if (jet) {
+    const P = [0, 0, 0]; canopyPoint(C.len, C.w, C.h, C.frames[0] + 0.015, Math.PI / 2, P, C.flat, sf);
+    const mir = new THREE.Group(); mir.position.set(0, cy + P[1] - 0.045, czc + P[2] - 0.03); mir.rotation.x = -0.15; root.add(mir);
+    add(new RoundedBoxGeometry(0.13, 0.042, 0.012, 2, 0.005), frameM, mir);
+    add(new THREE.PlaneGeometry(0.12, 0.033).rotateY(Math.PI), DM.dark, mir, 0, 0, -0.007);
+    add(new THREE.CylinderGeometry(0.005, 0.005, 0.03, 5), frameM, mir, 0, 0.03, 0.004);
+  }
   // cabeças dos tripulantes: a cabine (banheira, painéis, manche, pedais, assentos, mira) se arranja em volta delas
   const heads = seats.map((t, i) => ({ y: cy + C.h * 0.62 + (i ? C.rearDy || 0 : 0), z: headZ(t) }));
   const canopyH = z => { const P = [0, 0, 0]; canopyPoint(C.len, C.w, C.h, Math.min(1, Math.max(0, (czc + C.len / 2 - z) / C.len)), Math.PI / 2, P, C.flat, sf); return P[1]; };
@@ -1087,8 +1095,8 @@ function canopyGeometry(len, w, h, f, sf) {
 // montante: tubo fino seguindo a seção da capota na fração t do comprimento
 function canopyFrame(len, w, h, t, r = 0.02, f, sf) {
   const pts = []; const P = [0, 0, 0];
-  for (let j = 0; j <= 14; j++) { canopyPoint(len, w * 1.006, h * 1.006, t, j / 14 * Math.PI, P, f, sf); pts.push(new THREE.Vector3(...P)); }
-  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 18, r, 5, false);
+  for (let j = 0; j <= 28; j++) { canopyPoint(len, w * 1.006, h * 1.006, t, j / 28 * Math.PI, P, f, sf); pts.push(new THREE.Vector3(...P)); }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, r, 8, false); // liso: visto da cabine o arco ficava facetado
 }
 // trilho da capota: tubo ao longo da borda de baixo (lado sd), assentado na chapa
 function canopySill(len, w, h, f, sf, sd, r) {

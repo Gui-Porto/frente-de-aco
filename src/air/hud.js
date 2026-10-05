@@ -50,7 +50,6 @@ export function updateAirHUD(dt) {
   const T = themeOf(v.def);
   targets(v, live);
   if (live) {
-    if (acam.mode === 2) cockpitFrame();
     speedLines(p);
     hurt(p);
     reticle(p);
@@ -273,11 +272,4 @@ function speedLines(p) {
     const a = (i * 2.399 + V.blink * 0.3) % (Math.PI * 2), r0 = Math.min(V.W, V.H) * (0.38 + ((i * 37 + V.blink * 400) % 100) / 400);
     g.beginPath(); g.moveTo(V.W / 2 + Math.cos(a) * r0, V.H / 2 + Math.sin(a) * r0); g.lineTo(V.W / 2 + Math.cos(a) * (r0 + 60 * k), V.H / 2 + Math.sin(a) * (r0 + 60 * k)); g.stroke();
   }
-}
-function cockpitFrame() {
-  // armação da capota: arco e montantes, sem desenhar instrumentos por cima da visão
-  g.strokeStyle = 'rgba(20,22,18,.92)'; g.lineWidth = 16; g.shadowBlur = 0;
-  g.beginPath(); g.moveTo(V.W * 0.12, V.H); g.quadraticCurveTo(V.W * 0.2, V.H * 0.2, V.W * 0.36, -10); g.stroke();
-  g.beginPath(); g.moveTo(V.W * 0.88, V.H); g.quadraticCurveTo(V.W * 0.8, V.H * 0.2, V.W * 0.64, -10); g.stroke();
-  g.fillStyle = 'rgba(20,22,18,.94)'; g.fillRect(0, V.H * 0.9, V.W, V.H * 0.1);
 }
