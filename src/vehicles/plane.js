@@ -164,7 +164,13 @@ export class Plane {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
     if (!this.alive && this.pos.y - H(this.pos.x, this.pos.z) > 20) this.shedStep(dt); // abatido, caindo: desmancha no ar
-    if (this.koT > 0) { this.elev = this.ail = this.rud = 0; this.firing = false; }
+    // desmaiado: o manche vai relaxando sozinho a partir de onde estava (o avião segue suave, sem controle); ao voltar a
+    // si, o comando do piloto volta em rampa. Antes ia a zero de uma vez: o nariz desabava e voltava — "quicava"
+    const kc = this._koC || (this._koC = [0, 0, 0]);
+    if (this.koT > 0) { kc[0] *= Math.exp(-dt * 0.9); kc[1] *= Math.exp(-dt * 2.5); kc[2] *= Math.exp(-dt * 2.5); [this.elev, this.ail, this.rud] = kc; this.firing = false; this.koWake = 1.5; }
+    else if (this.koWake > 0) { this.koWake = Math.max(0, this.koWake - dt); const w = 1 - this.koWake / 1.5; this.elev = kc[0] + (this.elev - kc[0]) * w; this.ail = kc[1] + (this.ail - kc[1]) * w; this.rud = kc[2] + (this.rud - kc[2]) * w; }
+    else { kc[0] = this.elev; kc[1] = this.ail; kc[2] = this.rud; }
+    const n0 = this.n, a0 = this.alpha;
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
     const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.racks.reduce((s, r) => s + r.n * r.M.mass, 0) - (this.fuelMax - this.fuel);
     const A = ctrlAuthority(this);
@@ -255,6 +261,8 @@ export class Plane {
       this.q.x += _pq.x; this.q.y += _pq.y; this.q.z += _pq.z; this.q.w += _pq.w; this.q.normalize();
     }
     if (Math.random() < dt * 0.3) this.dropSign = Math.random() < .5 ? 1 : -1;
+    this.nRate = (this.nRate || 0) * 0.6 + 0.4 * (this.n - n0) / Math.max(dt, 1e-3); // taxa do G (G/s), filtrada: amortece o limitador
+    this.aRate = (this.aRate || 0) * 0.6 + 0.4 * (this.alpha - a0) / Math.max(dt, 1e-3); // idem, ângulo de ataque (rad/s)
     // fisiologia do piloto: G SUSTENTADO acima da tolerância acumula carga (gStress 0..1). A tela vai escurecendo das
     // bordas para o centro (visão de túnel, `blackout`) e em 1 o piloto DESMAIA: alguns segundos sem controle, o avião
     // segue solto, depois ele volta a si. Sem texto nenhum — só a tela. Jato tem traje anti-G (+1 G); ferido apaga antes.
@@ -520,8 +528,10 @@ export class Plane {
   limitElev(elev, opts = {}) {
     const D = this.def, as = D.clmax / D.cla, aLim = as * (opts.aoa ?? 0.86 + this.flaps * 0.08);
     // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
-    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
-    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
+    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr - 1.5 * Math.max(0, this.aRate || 0));
+    // limite de G com amortecimento pela taxa do G: só proporcional, o G passava, o limitador cortava, caía e voltava
+    // (no W direto o F-86 ia 10,6 → 6,3 → 9,8 → 7,5 G — o avião "quicava" no limite)
+    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25 - 0.09 * Math.max(0, this.nRate || 0));
     elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
     return Math.max(elev, (-(opts.gneg || 2.5) - this.n) * 0.6 - 0.25);                 // limite de G negativo
   }
