@@ -6,7 +6,7 @@ import { V3, clamp } from '../core/util.js';
 import { drawScore } from '../ui/hud.js';
 import { $ } from '../core/util.js';
 import { B, wear } from './battle.js';
-import { AIRFIELDS } from '../world/terrain.js';
+import { homeField } from '../world/terrain.js';
 import { LOCK, LOCK_LABEL, leadPoint } from './targeting.js';
 import { missiles } from './missiles.js';
 import { acam, CAM_MODES } from './camera.js';
@@ -14,7 +14,7 @@ import { cam } from '../game/camera.js';
 import { cv, g, V, C, MONO, UI, glow, txt, otxt, gstroke, fmtD } from './hud/kit.js';
 import { themeOf } from './hud/themes.js';
 import { flightPanel, xrayPanel } from './hud/flight.js';
-import { killCard, deathCard } from './hud/cards.js';
+import { deathCard } from './hud/cards.js';
 import { leftPanels, tacMap } from './hud/scopes.js';
 import { warnings } from './hud/warnings.js';
 // =====================================================================
@@ -50,7 +50,6 @@ export function updateAirHUD(dt) {
   const T = themeOf(v.def);
   targets(v, live);
   if (live) {
-    if (acam.mode === 2) cockpitFrame();
     speedLines(p);
     hurt(p);
     reticle(p);
@@ -58,7 +57,6 @@ export function updateAirHUD(dt) {
     leftPanels(p, T);
     warnings(p);
     hitMessages();
-    killCard(T);
     baseHud(p);
     if (isDown('a_xray')) xrayPanel(p, T);
   } else if (S.state === 'spectate' && v) {
@@ -71,7 +69,7 @@ export function updateAirHUD(dt) {
 
 // ---------- base aérea: marcador da pista e barra de reparo/rearme ----------
 function baseHud(p) {
-  const a = AIRFIELDS.find(f => f.team === p.team), R = B.refit; if (!a) return;
+  const a = homeField(p.team), R = B.refit; if (!a) return;
   _b.set(a.x, a.h + 6, a.z); const d = _b.distanceTo(p.pos);
   const need = wear(p) > 0.04 || p.guns.every(q => q.ammo < q.max * 0.25) || p.fuel < p.fuelMax * 0.2;
   if (d > 900) {
@@ -274,11 +272,4 @@ function speedLines(p) {
     const a = (i * 2.399 + V.blink * 0.3) % (Math.PI * 2), r0 = Math.min(V.W, V.H) * (0.38 + ((i * 37 + V.blink * 400) % 100) / 400);
     g.beginPath(); g.moveTo(V.W / 2 + Math.cos(a) * r0, V.H / 2 + Math.sin(a) * r0); g.lineTo(V.W / 2 + Math.cos(a) * (r0 + 60 * k), V.H / 2 + Math.sin(a) * (r0 + 60 * k)); g.stroke();
   }
-}
-function cockpitFrame() {
-  // armação da capota: arco e montantes, sem desenhar instrumentos por cima da visão
-  g.strokeStyle = 'rgba(20,22,18,.92)'; g.lineWidth = 16; g.shadowBlur = 0;
-  g.beginPath(); g.moveTo(V.W * 0.12, V.H); g.quadraticCurveTo(V.W * 0.2, V.H * 0.2, V.W * 0.36, -10); g.stroke();
-  g.beginPath(); g.moveTo(V.W * 0.88, V.H); g.quadraticCurveTo(V.W * 0.8, V.H * 0.2, V.W * 0.64, -10); g.stroke();
-  g.fillStyle = 'rgba(20,22,18,.94)'; g.fillRect(0, V.H * 0.9, V.W, V.H * 0.1);
 }

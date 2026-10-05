@@ -183,7 +183,7 @@ export const PLANES = {
   // mass: vazio + combustível embarcado (fuel) + piloto/munição; mísseis somam à parte.
   // wave: arrasto de onda transônico/supersônico { mcr, peak (ΔCD no pico), mpk (Mach do pico) }
   f4e: {
-    key: 'f4e', type: 'plane', marks: { serial: 'AF 67-270', decalZ: -0.33 }, gear: { track: 5.45, ret: 'in' }, name: 'F-4E Phantom II', short: 'F-4E', nation: 'EUA', year: 1967, color: 0x7a7d63, sp: 640, jet: true, sweep: 45,
+    key: 'f4e', type: 'plane', marks: { serial: 'AF 67-270', decalZ: -0.33 }, gear: { track: 5.45, ret: 'in', mw: 0.26, twinN: true }, name: 'F-4E Phantom II', short: 'F-4E', nation: 'EUA', year: 1967, color: 0x7a7d63, sp: 640, jet: true, sweep: 45,
     mass: 18200, fuel: 4000, S: 49.2, span: 11.7, L: 19.2, cla: 3.5, clmax: 1.25, cd0: 0.021, e: 0.7, engine: 'j79', engines: 2, rcs: 6,
     mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.72, 0.2], inertia: [223700, 44700, 253500], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² [arfagem, rolagem, guinada] do F-4C/E publicado (a estimativa por L² dava 2–2,4× mais)
     vne: 1400 / 3.6, glim: 9.5, kda: 0.05, kde: 0.36, kdr: 0.03, armor: { pilot: 6 },
@@ -296,11 +296,11 @@ export const MISSILES = {
       bands: { warhead: { at: 0.74, w: 0.04 }, motor: { at: 1.28, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } },
   // semiativos: não têm buscador próprio de aquisição — exigem o radar do lançador travado (STT) até o impacto
   AIM7E: { name: 'AIM-7E Sparrow', short: 'AIM-7E', mass: 197, d: 0.203, len: 3.66, thrust: 26000, burn: 3.6, cd: 0.4,
-    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 16, nav: 4, fuse: 12, warhead: 9, seeker: 'sarh',
+    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 16, nav: 4, fuse: 12, warhead: 9, seeker: 'sarh', doppler: true, notch: 25, chaffRes: 0.3,
     form: { nose: { kind: 'ogive', len: 0.62 }, wings: { at: 1.2, root: 0.66, tip: 0.08, span: 1.02 }, tails: { at: 3.18, root: 0.44, tip: 0.18, span: 0.81 },
       bands: { warhead: { at: 1.95, w: 0.05 }, motor: { at: 2.35, w: 0.05 } }, nozzle: { len: 0.05, r: 0.75 } } },
   R3R: { name: 'R-3R (K-13R)', short: 'R-3R', mass: 83, d: 0.127, len: 3.1, thrust: 17500, burn: 2.4, cd: 0.44,
-    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 13, nav: 3.8, fuse: 10, warhead: 5, seeker: 'sarh',
+    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 13, nav: 3.8, fuse: 10, warhead: 5, seeker: 'sarh', chaffRes: 0.35,
     form: { nose: { kind: 'ogive', len: 0.42 }, canards: { at: 0.5, root: 0.24, tip: 0.05, span: 0.42 }, wings: { at: 2.65, root: 0.4, tip: 0.13, span: 0.53, roller: 0.09 },
       bands: { warhead: { at: 0.98, w: 0.04 }, motor: { at: 1.5, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } }
 };

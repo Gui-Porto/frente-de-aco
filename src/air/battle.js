@@ -13,7 +13,7 @@ import { Seeker, LOCK } from './targeting.js';
 import { launchMissile, updateMissiles, clearMissiles, dropCM, missiles } from './missiles.js';
 import { readInput, pilot } from './input.js';
 import { applyEnv, updateEnv } from './environment.js';
-import { AIRFIELDS, onAirfield, H } from '../world/terrain.js';
+import { homeField, setFieldSet, onAirfield, H } from '../world/terrain.js';
 import { Euler } from 'three';
 import { updateAirfields } from '../world/airfield.js';
 import { acam, resetAirCam } from './camera.js';
@@ -42,7 +42,7 @@ export const B = {
     const names = NAMES[team], who = mkWho(names[this.nameI[team]++ % names.length], team, false);
     const p = new Plane(key, team, who, new V3(x, y, z + Math.abs(i - (n - 1) / 2) * 60 * side), yaw, PLANE_V(key), { ord: !!o.ord });
     // o.ground: começa estacionado na própria pista e decola (como o jogador)
-    const field = o.ground && p.gearMesh ? AIRFIELDS.find(f => f.team === team) : null, k = field ? this.grid[team]++ : 0;
+    const field = o.ground && p.gearMesh ? homeField(team) : null, k = field ? this.grid[team]++ : 0;
     if (field) this.parkOnRunway(p, field, k, team === 1);
     p.brain = new FighterBrain(p, this.cfg.diff, field ? Object.assign({ runway: field }, o) : o); p.dmgBy = new Map(); p.gridK = field ? k : -1;
     who.veh = key; who.v = p; who.assists = 0;
@@ -71,7 +71,7 @@ export const B = {
   // ---------- ciclo ----------
   start(cfg) {
     clearWorld(); clearMissiles();
-    this.cfg = cfg; this.arena = ARENA[AIR[cfg.plane].era] || ARENA.jato;
+    this.cfg = cfg; this.arena = ARENA[AIR[cfg.plane].era] || ARENA.jato; setFieldSet(AIR[cfg.plane].era === 'helice' ? 'prop' : 'jet');
     S.mode = 'air'; S.airLimit = this.arena.limit; S.air = this; this.mode = MODES[cfg.mode]; this.grid = { 1: 0, '-1': 0 }; this.t = 0; this.phase = 'battle'; this.result = null; this.downT = 0; this.nameI = { 1: 0, '-1': 0 };
     this.stats = { kills: 0, assists: 0, dmgDealt: 0, dmgTaken: 0, missiles: 0, deaths: 0 };
     applyEnv(cfg.weather, cfg.time);
@@ -80,12 +80,12 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
-    this.weapon = 1; this.marked = null; this.radarPending = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.killCard = this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
+    this.weapon = 1; this.marked = null; this.radarPending = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
     // como no WT: a partida começa no chão, na cabeceira da própria pista
-    const home = AIRFIELDS.find(f => f.team === p.team); if (home && p.gearMesh) this.parkAtRunway(p, home);
+    const home = homeField(p.team); if (home && p.gearMesh) this.parkAtRunway(p, home);
   },
   onDamage(v, dmg, by) {
     if (!v.dmgBy) return;
@@ -105,12 +105,13 @@ export const B = {
       pl.who.assists = (pl.who.assists || 0) + 1; pl.who.score += 40;
       if (pl === this.player) { this.stats.assists++; showDmg('Assistência · +40', true); }
     }
-    if (k === this.player) { this.stats.kills++; this.flash('ABATIDO', 3); this.killCard = { at: S.now, v, cause, sum: hitSummary(v, k) }; }
+    if (k === this.player) { this.stats.kills++; this.flash('ALVO DESTRUÍDO', 3); }
     // você caiu: quem, com o quê e o que você levou (fica na tela até a próxima vida/fim)
     if (v === this.player) this.deathCard = { at: S.now, k, cause, sum: hitSummary(v, null), kw: k ? hitSummary(v, k).weapons : [] };
     addFeed(k, v, cause);
     // explosão no ar quando a estrutura cede (o resto cai em chamas até o solo)
     if (cause === 'structure' || cause === 'wing' || cause === 'tail' || cause === 'fire') {
+      if (v.breakup) v.breakup(cause === 'fire' || cause === 'structure' ? 0.55 : 0.3); // estrutura cedendo: o avião se desmancha
       fxExplosion(v.pos.clone(), 1.4);
       for (let i = 0; i < 14; i++) spawnP({ pos: v.pos.clone(), vel: rv(25).add(v.vel), life: rand(1, 2.2), size: .6, size1: .2, tex: TEX.fire, add: true, color: 0xff9a40, grav: 9.8, drag: .25 });
     }
@@ -130,7 +131,8 @@ export const B = {
       this.avionicsInput(p, c);
       pilot(p, c, cam.aimDir, dt);
       p.firing = c.fire;
-      if (c.cm) { if (dropCM(p)) this.stats.cm = (this.stats.cm || 0) + 1; else if (!p.flares && !p.chaff) toast('Sem contramedidas', 1200); }
+      const cmK = c.cm ? 'both' : c.flare ? 'flare' : c.chaff ? 'chaff' : null;
+      if (cmK) { if (dropCM(p, cmK)) this.stats.cm = (this.stats.cm || 0) + 1; else if (cmK === 'flare' ? !p.flares : cmK === 'chaff' ? !p.chaff : !p.flares && !p.chaff) toast(cmK === 'flare' ? 'Sem flares' : cmK === 'chaff' ? 'Sem chaff' : 'Sem contramedidas', 1200); }
       if (c.ext && !p.extinguish()) toast(p.fire > 0 ? 'Extintor já usado' : 'Sem incêndio', 1200);
       // buscador sempre ligado enquanto houver míssil (o tom avisa); prioriza o alvo marcado (T)
       if (this.seeker && p.missiles > 0) this.seeker.update(dt, p, planes, this.marked, S.now); else if (this.seeker) { this.seeker.state = LOCK.OFF; this.seeker.target = null; }
@@ -138,7 +140,7 @@ export const B = {
       else if (c.missile) toast(p.racks.length ? 'Mísseis esgotados' : 'Esta aeronave não leva mísseis', 1600);
       this.refitStep(p, dt); this.fadeK = this.fadeStep(p, dt);
     } else if (p) { p.firing = false; }
-    updateAirfields(dt);
+    updateAirfields(dt, this.player);
     updateMissiles(dt);
     this.updateAvionics(dt);
     this.updateLaunches();
@@ -166,7 +168,7 @@ export const B = {
   // refit: { t, dur, done, parked, onField } — o HUD mostra a barra de progresso
   refit: { t: 0, dur: 0, done: false, parked: false, onField: false },
   refitStep(p, dt) {
-    const a = AIRFIELDS.find(f => f.team === p.team), R = this.refit;
+    const a = homeField(p.team), R = this.refit;
     R.onField = !!(p.onGround && a && onAirfield(a, p.pos.x, p.pos.z));
     R.parked = R.onField && p.ias < 2.5;
     if (!R.parked) { R.t = 0; R.done = false; return; }

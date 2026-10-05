@@ -69,7 +69,7 @@ export class FighterBrain {
     const m = incomingTo(p); this.missile = m && perceives(p, m) ? m : null;
     // contramedidas: flares contra míssil chegando, chaff quando alguém está colado na cauda
     // uma salva a cada ~1,2 s quando o míssil já está perto (antes: uma a cada 0,4 s desde 2,2 km — nenhum míssil acertava)
-    if (this.missile && this.missile.pos.distanceTo(p.pos) < 1500) { if (S.now > (this.cmNext ?? 0)) { this.cmNext = S.now + 1.2; if (Math.random() < d.missileP) dropCM(p); } }
+    if (this.missile && this.missile.pos.distanceTo(p.pos) < 1500) { if (S.now > (this.cmNext ?? 0)) { this.cmNext = S.now + 1.2; if (Math.random() < d.missileP) dropCM(p, this.missile.M.seeker === 'sarh' ? 'chaff' : 'flare'); } }
     else if (this.threat && p.chaff > 0 && Math.random() < 0.12 * d.missileP) dropCM(p);
     if (this.role === 'bomber') return;
     // chaff do alvo confunde a pontaria (perde o alvo por um instante)
@@ -127,9 +127,11 @@ export class FighterBrain {
         p.wep = false; glim = Math.min(glim, 4); break;
       }
       case 'evade': { // míssil: curva máxima perpendicular à linha de visada (estoura o gimbal/limite de G)
+        // semiativo Doppler: de través exato (notch), nivelado ou descendo; IR: curva máxima perpendicular
         const m = this.missile; _r.copy(m.pos).sub(p.pos).normalize();
         _a.crossVectors(_r, UP).normalize(); if (_a.dot(_f) < 0) _a.negate();
-        dir.copy(_a).addScaledVector(UP, -0.25).normalize(); glim = p.def.glim - 1; break;
+        const notch = m.M.seeker === 'sarh';
+        dir.copy(_a).addScaledVector(UP, notch ? -0.12 : -0.25).normalize(); glim = notch ? Math.min(p.def.glim - 1, 6) : p.def.glim - 1; break;
       }
       case 'defend': { // break turn para o lado do atacante; jink inverte o sentido (tesoura)
         const e = this.threat; _r.copy(e.pos).sub(p.pos);

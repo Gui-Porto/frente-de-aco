@@ -268,24 +268,57 @@ export function buildCockpit(ctx) {
   });
 }
 
-// assento ejetável: encosto, almofadas, caixa do paraquedas, trilhos, punhos e alça de face
+// assento ejetável (origem = cabeça do piloto): estrutura com trilhos, encosto e paraquedas atrás, caixa da cabeça
+// com o contêiner do paraquedas-piloto em cima e as "orelhas" (Martin-Baker), alça de face listrada (puxada por cima)
+// ou punhos laterais (KM-1 soviético), concha lateral, caixa de sobrevivência sob a almofada e o punho entre as pernas
 function ejectSeat(add, M, par, o) {
-  const S = M.seat, Cu = M.cushion;
-  add(rbox(0.46, 0.78, 0.1, 0.03), S, par, 0, -0.4, -0.25);
-  add(rbox(0.38, 0.52, 0.06, 0.025), Cu, par, 0, -0.43, -0.19);
-  add(rbox(0.36, 0.3, 0.2, 0.05), S, par, 0, 0.0, -0.25);                       // apoio de cabeça / paraquedas
-  add(rbox(0.26, 0.18, 0.05, 0.02), Cu, par, 0, 0.0, -0.14);
-  add(rbox(0.46, 0.1, 0.46, 0.025), S, par, 0, -0.76, -0.02);                    // caixa do assento (kit de sobrevivência)
-  add(rbox(0.4, 0.05, 0.4, 0.02), Cu, par, 0, -0.7, -0.02);
+  const S = M.seat, Cu = M.cushion, St = M.steel, Y = M.yellow, K = M.dark;
+  const tube = (pts, r, m) => add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p))), 12, r, 6), m, par);
+  // estrutura: dois trilhos com roletes e travessas; canhão ejetor no meio, atrás
   for (const s of [1, -1]) {
-    add(new THREE.BoxGeometry(0.035, 0.95, 0.06), M.steel, par, s * 0.21, -0.36, -0.31); // trilhos do canhão ejetor
-    add(rbox(0.05, 0.34, 0.36, 0.015), S, par, s * 0.235, -0.62, -0.05);
-    add(new THREE.BoxGeometry(0.05, 0.05, 0.16), M.yellow, par, s * 0.25, -0.5, 0.07); // punhos laterais
-    add(new THREE.BoxGeometry(0.04, 0.3, 0.012), M.cushion, par, s * 0.1, -0.35, -0.155); // cintos sobre o encosto
+    add(rbox(0.04, 1.08, 0.06, 0.01), St, par, s * 0.19, -0.33, -0.33);
+    for (const y of [-0.7, -0.25, 0.1]) add(new THREE.CylinderGeometry(0.018, 0.018, 0.03, 8).rotateZ(Math.PI / 2), K, par, s * 0.215, y, -0.36);
   }
-  if (o.face) add(new THREE.TorusGeometry(0.065, 0.012, 6, 14, Math.PI), M.yellow, par, 0, 0.16, -0.15);
-  add(new THREE.BoxGeometry(0.08, 0.05, 0.05), M.yellow, par, 0, -0.7, 0.2);
-  add(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8), M.steel, par, 0, -0.2, -0.36); // canhão ejetor atrás do encosto
+  for (const y of [-0.82, -0.05]) add(new THREE.BoxGeometry(0.36, 0.035, 0.04), St, par, 0, y, -0.34);
+  add(new THREE.CylinderGeometry(0.035, 0.035, 0.75, 10), St, par, 0, -0.3, -0.38);
+  // encosto: paraquedas (pacote estofado) e almofada inclinada com costuras
+  add(rbox(0.38, 0.56, 0.13, 0.04), S, par, 0, -0.43, -0.29);
+  const back = add(rbox(0.36, 0.5, 0.06, 0.025), Cu, par, 0, -0.44, -0.2); back.rotation.x = 0.06;
+  for (const y of [-0.3, -0.45, -0.6]) add(new THREE.BoxGeometry(0.34, 0.006, 0.062), K, par, 0, y, -0.2);
+  if (o.sov) {
+    // KM-1 / SK: apoio de cabeça largo e baixo, sem alça de face; punhos amarelos nas laterais do assento
+    add(rbox(0.34, 0.22, 0.2, 0.05), S, par, 0, 0.0, -0.27);
+    add(rbox(0.26, 0.15, 0.05, 0.02), Cu, par, 0, -0.01, -0.155);
+    add(rbox(0.3, 0.06, 0.16, 0.03), S, par, 0, 0.14, -0.29);
+    for (const s of [1, -1]) { const h = add(new THREE.TorusGeometry(0.04, 0.009, 6, 12, Math.PI), Y, par, s * 0.25, -0.62, 0.12); h.rotation.set(0, Math.PI / 2, Math.PI / 2); }
+  } else {
+    // Martin-Baker: caixa da cabeça, contêiner do paraquedas-piloto em cima, orelhas e almofada
+    add(rbox(0.32, 0.3, 0.22, 0.05), S, par, 0, 0.05, -0.28);
+    add(new THREE.CylinderGeometry(0.075, 0.075, 0.28, 14).rotateZ(Math.PI / 2), S, par, 0, 0.22, -0.3);
+    for (const s of [1, -1]) add(rbox(0.04, 0.16, 0.08, 0.015), S, par, s * 0.15, 0.06, -0.17);
+    add(rbox(0.22, 0.17, 0.05, 0.02), Cu, par, 0, 0.02, -0.155);
+    if (o.face) {
+      // alça de face: arco amarelo com listras pretas, acima da cabeça
+      const fh = add(new THREE.TorusGeometry(0.07, 0.011, 6, 16, Math.PI), Y, par, 0, 0.27, -0.2); fh.rotation.x = -0.35;
+      for (const a of [0.5, 1.2, 1.95, 2.65]) add(new THREE.BoxGeometry(0.012, 0.026, 0.026), K, par, Math.cos(a) * 0.07, 0.27 + Math.sin(a) * 0.07 * Math.cos(0.35), -0.2 - Math.sin(a) * 0.07 * Math.sin(0.35));
+    }
+  }
+  // concha lateral (afina para a frente) e assento: almofada sobre a caixa de sobrevivência
+  for (const s of [1, -1]) {
+    const sh = new THREE.Shape(); sh.moveTo(-0.3, -0.2); sh.lineTo(0.18, -0.2); sh.lineTo(0.18, -0.08); sh.lineTo(-0.05, 0.12); sh.lineTo(-0.3, 0.2); sh.closePath();
+    add(new THREE.ExtrudeGeometry(sh, { depth: 0.035, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.008, bevelSegments: 1 }).rotateY(-Math.PI / 2).translate(s * 0.23 + 0.0175, 0, 0), S, par, 0, -0.66, -0.03);
+  }
+  add(rbox(0.44, 0.14, 0.46, 0.03), S, par, 0, -0.8, -0.02);
+  add(rbox(0.38, 0.06, 0.4, 0.025), Cu, par, 0, -0.71, -0.01);
+  // punho de disparo entre as pernas e a fivela do cinto
+  const ph = add(new THREE.TorusGeometry(0.045, 0.01, 6, 14, Math.PI), Y, par, 0, -0.72, 0.22); ph.rotation.x = -Math.PI / 2;
+  add(new THREE.BoxGeometry(0.03, 0.03, 0.03), K, par, 0, -0.72, 0.2);
+  // cintos: dos ombros por cima até a fivela no peito, e os da cintura
+  for (const s of [1, -1]) {
+    tube([[s * 0.1, -0.2, -0.22], [s * 0.115, -0.21, -0.06], [s * 0.1, -0.33, 0.1], [s * 0.04, -0.52, 0.13]], 0.011, Cu);
+    tube([[s * 0.21, -0.7, -0.1], [s * 0.17, -0.66, 0.07], [s * 0.05, -0.6, 0.14]], 0.011, Cu);
+  }
+  add(rbox(0.07, 0.07, 0.025, 0.01), St, par, 0, -0.55, 0.14);
 }
 // assento de pistão: concha de chapa com rebordo, almofada, blindagem atrás da cabeça e cintos Sutton
 function pistonSeat(add, M, par, D) {
@@ -305,11 +338,20 @@ function pistonSeat(add, M, par, D) {
 // 'asp' (ASP-3N/PF dos MiG), 'lcoss' (visor de cálculo do F-4E). Corpo + vidro refletor inclinado.
 function sight(add, M, par, kind, x, y, z) {
   if (!kind) return;
-  const big = kind === 'a4' || kind === 'asp' || kind === 'lcoss' || kind === 'gyro';
-  const w = big ? 0.12 : 0.08, h = big ? 0.12 : 0.08, d = big ? 0.2 : 0.12;
-  add(rbox(w, h, d, 0.015), M.dark, par, x, y + h / 2, z);
+  const big = kind === 'a4' || kind === 'asp' || kind === 'lcoss' || kind === 'gyro', jetS = kind === 'a4' || kind === 'asp' || kind === 'lcoss';
+  const w = big ? 0.12 : 0.08, h = big ? 0.11 : 0.08, d = big ? 0.2 : 0.12;
+  add(rbox(w, h, d, 0.018), M.dark, par, x, y + h / 2, z);                                                        // corpo
+  add(new THREE.CylinderGeometry(w * 0.32, w * 0.36, 0.03, 16), M.steel, par, x, y + h + 0.012, z + d * 0.2);      // lente (projeta para cima)
   if (kind === 'gyro' || kind === 'a4') add(rbox(w * 0.8, h * 0.6, 0.08, 0.02), M.cushion, par, x, y + h * 0.4, z - d / 2 - 0.04); // almofada de proteção
-  const glass = add(new THREE.PlaneGeometry(w * (kind === 'lcoss' ? 1.4 : 1.1), h * (kind === 'lcoss' ? 1.2 : 0.95)), M.glass, par, x, y + h + 0.04, z + d * 0.2);
-  glass.rotation.x = -0.75;
-  for (const s of [1, -1]) add(new THREE.BoxGeometry(0.008, 0.06, 0.03), M.dark, par, x + s * w * 0.5, y + h + 0.02, z + d * 0.2);
+  if (jetS) for (const s of [1, -1]) add(new THREE.BoxGeometry(0.015, 0.03, d * 0.7), M.steel, par, x + s * w * 0.52, y + h * 0.5, z); // botões de ajuste
+  // vidro refletor inclinado na moldura; o retículo (anel, marcas e ponto, aceso) fica nele, voltado para o piloto
+  const gw = w * (kind === 'lcoss' ? 1.4 : 1.15), gh = h * (kind === 'lcoss' ? 1.25 : 1.05), gz = z + d * 0.2, gy = y + h + 0.03 + gh * 0.36;
+  const pane = new THREE.Group(); pane.position.set(x, gy, gz); pane.rotation.x = -0.72; par.add(pane);
+  add(new THREE.PlaneGeometry(gw, gh), M.glass, pane);
+  for (const s of [1, -1]) add(new THREE.BoxGeometry(0.008, gh * 1.05, 0.012), M.dark, pane, s * gw / 2, 0, 0);
+  add(new THREE.BoxGeometry(gw, 0.01, 0.012), M.dark, pane, 0, -gh / 2, 0);
+  const lit = kind === 'asp' || kind === 'revi' || kind === 'refl' ? M.red : M.green;
+  add(new THREE.TorusGeometry(gh * 0.2, 0.0012, 4, 32), lit, pane, 0, 0.004, -0.002);
+  add(new THREE.CircleGeometry(0.0022, 8).rotateY(Math.PI), lit, pane, 0, 0.004, -0.003);
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; add(new THREE.BoxGeometry(0.0025, 0.007, 0.001), lit, pane, Math.cos(a) * gh * 0.27, 0.004 + Math.sin(a) * gh * 0.27, -0.002).rotation.z = a + Math.PI / 2; }
 }

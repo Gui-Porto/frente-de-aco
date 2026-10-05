@@ -21,10 +21,13 @@ export const ENGINES = {
   bmw801: { snd: { f0: 40, f1: 80 }, kind: 'piston', name: 'BMW 801 D-2', hp: 1700, wep: 2050, eta: 0.82, resp: 0.4, altCrit: 5200, altScale: 6500, cooling: 'radial', torque: 1 },
   am38: { snd: { f0: 44, f1: 84 }, kind: 'piston', name: 'Mikulin AM-38', hp: 1600, wep: 1700, eta: 0.8, resp: 0.45, altCrit: 1500, altScale: 7000, cooling: 'liquid', torque: 1 },
   // ---- turbojato (kN por motor; tsfc em kg/(N·h)) ----
-  j47: { snd: { roar: [280, 1150], whine: [2100, 3600] }, kind: 'turbojet', name: 'GE J47-GE-27', mil: 26.3, wep: 28.9, idle: 0.06, nIdle: 0.45, spoolUp: 5.5, spoolDn: 3.0, tsfc: 0.107, ramK: 0.2, altExp: 0.8 },
-  vk1: { snd: { roar: [260, 1050], whine: [1700, 3100] }, kind: 'turbojet', name: 'Klimov VK-1', mil: 26.5, wep: 29.2, idle: 0.06, nIdle: 0.42, spoolUp: 4.8, spoolDn: 2.8, tsfc: 0.112, ramK: 0.2, altExp: 0.8 },
-  j79: { snd: { roar: [220, 1000], whine: [2400, 4200], ab: 0.11 }, kind: 'turbojet', name: 'GE J79-GE-17', mil: 52.8, ab: 79.6, idle: 0.05, nIdle: 0.5, spoolUp: 4.5, spoolDn: 2.4, tsfc: 0.086, tsfcAB: 0.199, ramK: 0.45, altExp: 0.75 },
-  r13: { snd: { roar: [240, 1100], whine: [1900, 3700], ab: 0.12 }, kind: 'turbojet', name: 'Tumansky R-13-300', mil: 39.9, ab: 63.7, idle: 0.05, nIdle: 0.48, spoolUp: 4.0, spoolDn: 2.2, tsfc: 0.094, tsfcAB: 0.224, ramK: 0.5, altExp: 0.75 },
+  // snd.boost: som da pós-combustão (ou do WEP com injeção de água/álcool no jato sem PC) — lo: corte do ronco grave,
+  // crack: estalos, howl: [Hz, Q, ganho] o "grito" característico, hiss: chiado da injeção, rasp: aspereza (batimento),
+  // ign: tamanho do "tum" da ignição
+  j47: { snd: { roar: [280, 1150], whine: [2100, 3600], boost: { lo: 420, crack: 0.12, howl: [1250, 7, 0.12], hiss: 0.4, rasp: 0, ign: 0.4 } }, kind: 'turbojet', name: 'GE J47-GE-27', mil: 26.3, wep: 28.9, idle: 0.06, nIdle: 0.45, spoolUp: 5.5, spoolDn: 3.0, tsfc: 0.107, ramK: 0.2, altExp: 0.8 },
+  vk1: { snd: { roar: [260, 1050], whine: [1700, 3100], boost: { lo: 360, crack: 0.25, howl: [960, 5, 0.16], hiss: 0.28, rasp: 0.3, ign: 0.5 } }, kind: 'turbojet', name: 'Klimov VK-1', mil: 26.5, wep: 29.2, idle: 0.06, nIdle: 0.42, spoolUp: 4.8, spoolDn: 2.8, tsfc: 0.112, ramK: 0.2, altExp: 0.8 },
+  j79: { snd: { roar: [220, 1000], whine: [2400, 4200], ab: 0.11, boost: { lo: 300, crack: 0.85, howl: [780, 6, 0.32], hiss: 0.08, rasp: 0.15, ign: 1 } }, kind: 'turbojet', name: 'GE J79-GE-17', mil: 52.8, ab: 79.6, idle: 0.05, nIdle: 0.5, spoolUp: 4.5, spoolDn: 2.4, tsfc: 0.086, tsfcAB: 0.199, ramK: 0.45, altExp: 0.75 },
+  r13: { snd: { roar: [240, 1100], whine: [1900, 3700], ab: 0.12, boost: { lo: 220, crack: 0.55, howl: [430, 3, 0.22], hiss: 0.05, rasp: 0.8, ign: 0.85 } }, kind: 'turbojet', name: 'Tumansky R-13-300', mil: 39.9, ab: 63.7, idle: 0.05, nIdle: 0.48, spoolUp: 4.0, spoolDn: 2.2, tsfc: 0.094, tsfcAB: 0.224, ramK: 0.5, altExp: 0.75 },
 };
 const HP_W = 745.7, PISTON_FUEL = 0.000105; // kg/s por hp (mantém a autonomia já balanceada)
 

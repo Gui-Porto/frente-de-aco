@@ -38,10 +38,18 @@ const FLATS = [...POINTS.map(p => ({ x: p.x, z: p.z, r: 48 })), { x: 0, z: 300, 
 for (const f of FLATS) f.h = baseH(f.x, f.z);
 // Pistas da Batalha Aérea (uma por equipe, atrás do spawn): platô retangular com rampa até o relevo.
 // `pad` = largura extra plana ao lado da pista (pátio e hangares). Rumo de decolagem: yaw (0 = +z).
+// set: 'prop' (hélice) ou 'jet' (jato e radar: pista mais longa e bases bem mais afastadas — ~12 km entre elas)
 export const AIRFIELDS = [
-  { team: 1, x: -260, z: 3450, len: 1700, w: 50, pad: 170, yaw: Math.PI },
-  { team: -1, x: 260, z: -3450, len: 1700, w: 50, pad: 170, yaw: 0 },
+  { team: 1, x: -260, z: 3450, len: 1700, w: 50, pad: 170, yaw: Math.PI, set: 'prop' },
+  { team: -1, x: 260, z: -3450, len: 1700, w: 50, pad: 170, yaw: 0, set: 'prop' },
+  { team: 1, x: -420, z: 5600, len: 2400, w: 60, pad: 190, yaw: Math.PI, set: 'jet' },
+  { team: -1, x: 420, z: -5600, len: 2400, w: 60, pad: 190, yaw: 0, set: 'jet' },
 ];
+// bases em uso na batalha atual (a Batalha Aérea escolhe pela era)
+let fieldSet = 'prop';
+export const setFieldSet = s => { fieldSet = s; };
+export const activeFields = () => AIRFIELDS.filter(a => a.set === fieldSet);
+export const homeField = team => AIRFIELDS.find(a => a.team === team && a.set === fieldSet);
 for (const a of AIRFIELDS) { let s = 0; for (let i = -4; i <= 4; i++) s += baseH(a.x, a.z + i * a.len / 8); a.h = s / 9; }
 const RAMP = 320;
 export const onAirfield = (a, x, z, m = 0) => Math.abs(x - a.x) < a.w / 2 + a.pad + m && Math.abs(z - a.z) < a.len / 2 + 60 + m;
@@ -52,6 +60,12 @@ export function H(x, z) {
     if (d2 < f.r * f.r) { const t = Math.sqrt(d2) / f.r, k = t * t * (3 - 2 * t); h = f.h * (1 - k) + h * k; }
   }
   for (const a of AIRFIELDS) {
+    // bases de jato ficam onde começam as serras: um vale largo em volta da pista e do corredor de aproximação
+    // (o relevo vai sendo achatado até 15% da diferença para a altura da pista) — sem cânion na reta final
+    if (a.set === 'jet') {
+      const dv = Math.hypot(Math.max(Math.abs(x - a.x) - a.w / 2 - 300, 0), Math.max(Math.abs(z - a.z) - a.len / 2 - 3200, 0));
+      if (dv < 2600) { const t = dv / 2600, k = t * t * (3 - 2 * t); h = a.h + (h - a.h) * (0.15 + 0.85 * k); }
+    }
     const d = Math.hypot(Math.max(Math.abs(x - a.x) - a.w / 2 - a.pad, 0), Math.max(Math.abs(z - a.z) - a.len / 2 - 60, 0));
     if (d < RAMP) { const t = d / RAMP, k = t * t * (3 - 2 * t); h = a.h * (1 - k) + h * k; }
     // corredor de aproximação nas duas cabeceiras: o relevo não passa de uma rampa de ~2,3° (sem morro na reta final)

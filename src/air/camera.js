@@ -81,12 +81,17 @@ export function updateAirCamera(dt) {
   if (acam.mode === 3) { dist *= 1.5; up = 4.5; k = 7; }
   dist = (dist + acam.gOff * 3) * (1 + speedK * 0.1);
   const cockpit = own && acam.mode === 2;
-  v.root.visible = !cockpit;
+  // cabine 3D (como no WT): o modelo continua visível e a câmera vai para o olho do piloto; só o corpo dele some.
+  // Plano próximo curto só aqui (painel a ~0,8 m, consoles e trilhos da capota mais perto que os 0,3 m de sempre)
+  v.root.visible = true;
+  if (v.pilotMesh) v.pilotMesh.visible = !cockpit;
+  const near = cockpit ? 0.04 : 0.3; if (camera.near !== near) { camera.near = near; camera.updateProjectionMatrix(); }
   fwdQ(viewQ, _f); upQ(viewQ, _u);
   // A suavização é feita no DESLOCAMENTO em relação ao avião (não na posição do mundo):
   // assim não existe atraso proporcional à velocidade e trocar de modo é só uma transição curta.
   if (cockpit) {
-    _p.set(0, v.def.fuseR * 1.15, v.def.jet ? v.def.L * 0.24 : -v.def.L * 0.02).applyQuaternion(v.q);
+    const e = v.pilotMesh ? v.pilotMesh.position : null; // cabeça do piloto no referencial do avião
+    if (e) _p.set(e.x, e.y + 0.09, e.z + 0.05).applyQuaternion(v.q); else _p.set(0, v.def.fuseR * 1.15, v.def.jet ? v.def.L * 0.24 : -v.def.L * 0.02).applyQuaternion(v.q);
     acam.off.copy(_p); fov = 70 + speedK * 6;
   } else {
     // atrás e acima da linha de visada (no "cima" da própria câmera: funciona invertido)

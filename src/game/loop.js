@@ -16,7 +16,7 @@ import { updateCamera, cam } from './camera.js';
 import { updateHUD } from '../ui/hud.js';
 import { initMenus, openSpawn } from '../ui/menus.js';
 import { B } from '../air/battle.js';
-import { updateAirCamera } from '../air/camera.js';
+import { updateAirCamera, aimAt, acam } from '../air/camera.js';
 import { updateAirHUD } from '../air/hud.js';
 import { updateHangar } from '../air/hangar.js';
 import { airAudio, airAudioOff } from '../air/sound.js';
@@ -83,4 +83,4 @@ requestAnimationFrame(frame);
 // gancho para testes automatizados
 import * as R from '../core/render.js';
 window.__r = R;
-window.__game = { B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };
+window.__game = { airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };

@@ -49,10 +49,27 @@ export class Missile {
       _f.copy(this.vel).divideScalar(V);
       // flares: cada SALVA nova dentro do campo do buscador tem uma chance (M.flareRes) de roubar o míssil
       const sarh = M.seeker === 'sarh';
-      if (this.tracking && this.target && !this.target.isFlare && !sarh) for (const fl of flares) {
+      // o alvo quente (pós-combustão) se destaca da flare; em marcha lenta ela rouba mais fácil
+      const tg0 = this.target, heat = tg0 && tg0.eng ? (tg0.eng.ab > 0.1 ? 0.55 : tg0.throttle < 0.4 ? 1.4 : 1) : 1;
+      if (this.tracking && tg0 && !tg0.isFlare && !sarh) for (const fl of flares) {
         if (this.seen.has(fl.grp)) continue; this.seen.add(fl.grp);
         _rel.copy(fl.pos).sub(this.pos); const d = _rel.length();
-        if (d < 3000 && _rel.dot(_f) / d > Math.cos(M.gimbal * Math.PI / 180) && Math.random() < (M.flareRes ?? 0.3)) { this.target = fl; break; }
+        if (d < 3000 && _rel.dot(_f) / d > Math.cos(M.gimbal * Math.PI / 180) && Math.random() < (M.flareRes ?? 0.3) * heat) { this.target = fl; break; }
+      }
+      // semiativo: notch e chaff. Velocidade radial do alvo em relação ao CHÃO na linha de visada (é o que o filtro
+      // Doppler mede): de través (~90°) ela vai a zero e o alvo some no meio do eco do solo. Mantido ~0,4 s, o
+      // buscador Doppler (AIM-7E) perde; o chaff (nuvem quase parada) só engana o Doppler perto do notch, e o
+      // pulsado (R-3R) sempre um pouco
+      if (sarh && this.tracking && tg0 && tg0.vel) {
+        _rel.copy(tg0.pos).sub(this.pos); const d = _rel.length(), vr = tg0.vel.dot(_rel) / Math.max(d, 1);
+        if (M.doppler && Math.abs(vr) < (M.notch || 25)) { this.notchT = (this.notchT || 0) + h; if (this.notchT > 0.4) this.tracking = false; }
+        else this.notchT = Math.max(0, (this.notchT || 0) - h * 0.5);
+        const beam = M.doppler ? clamp(1 - Math.abs(vr) / 150, 0.08, 1) : 1;
+        for (const c of chaffs) {
+          if (this.seen.has(c.grp)) continue; this.seen.add(c.grp);
+          _rel.copy(c.pos).sub(this.pos); const dc = _rel.length();
+          if (dc < 5000 && _rel.dot(_f) / dc > Math.cos(M.gimbal * Math.PI / 180) && Math.random() < (M.chaffRes ?? 0.25) * beam) { this.tracking = false; this.target = c; break; }
+        }
       }
       const tg = this.target;
       // buscador: precisa ver o alvo dentro do gimbal, em relação ao eixo do míssil
@@ -154,16 +171,18 @@ export function updateMissiles(dt) {
   updateTrails(S.now, dt);
   for (let i = missiles.length - 1; i >= 0; i--) { const m = missiles[i]; if (!m.dead) m.update(dt); if (m.dead) missiles.splice(i, 1); }
 }
-export function clearMissiles() { for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; flares.length = 0; clearTrails(); }
+export function clearMissiles() { for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; flares.length = 0; chaffs.length = 0; clearTrails(); }
 
 // ---------- contramedidas ----------
 // Flares: iscas quentes que caem e queimam ~4 s (enganam buscadores IR).
 // Chaff: nuvem de tiras metálicas; quebra a mira/ranging de quem está atrás (a IA perde o alvo).
-export const flares = [];
-export function dropCM(p) {
-  if (!p.alive || (p.flares <= 0 && p.chaff <= 0) || S.now - (p.cmT ?? -9) < 0.4) return false;
+export const flares = [], chaffs = [];
+// kind: 'both' (padrão), 'flare' ou 'chaff'
+export function dropCM(p, kind = 'both') {
+  const fl = kind !== 'chaff' && p.flares > 0, ch = kind !== 'flare' && p.chaff > 0;
+  if (!p.alive || (!fl && !ch) || S.now - (p.cmT ?? -9) < 0.4) return false;
   p.cmT = S.now; sndCm(p.pos);
-  if (p.flares > 0) {
+  if (fl) {
     p.flares--; p.flareUntil = S.now + 2.5;
     const grp = {};
     for (const s of [1, -1]) {
@@ -171,13 +190,16 @@ export function dropCM(p) {
       flares.push({ pos: p.pos.clone(), vel: p.vel.clone().multiplyScalar(0.55).add(_a), alive: true, t: 0, team: p.team, isFlare: true, grp });
     }
   }
-  if (p.chaff > 0) {
+  if (ch) {
     p.chaff--; p.chaffUntil = S.now + 3;
+    // nuvem: sai com o avião e para em segundos (é isso que a deixa no notch do Doppler)
+    chaffs.push({ pos: p.pos.clone(), vel: p.vel.clone().multiplyScalar(0.4), alive: true, t: 0, team: p.team, isChaff: true, grp: {} });
     for (let i = 0; i < 14; i++) spawnP({ pos: p.pos.clone().add(rv(2)), vel: p.vel.clone().multiplyScalar(0.3).add(rv(10)), life: rand(1.5, 3), size: 1.2, size1: 5, color: 0xc9ccd0, op: 0.35, drag: 2.5 });
   }
   return true;
 }
 export function updateFlares(dt) {
+  for (let i = chaffs.length - 1; i >= 0; i--) { const c = chaffs[i]; c.t += dt; c.vel.multiplyScalar(Math.exp(-dt * 2.5)); c.vel.y -= 2 * dt; c.pos.addScaledVector(c.vel, dt); if (c.t > 4) { c.alive = false; chaffs.splice(i, 1); } }
   for (let i = flares.length - 1; i >= 0; i--) {
     const f = flares[i]; f.t += dt;
     f.vel.multiplyScalar(Math.exp(-dt * 1.4)); f.vel.y -= 9.81 * dt * 0.5; f.pos.addScaledVector(f.vel, dt);
