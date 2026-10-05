@@ -159,7 +159,7 @@ export class Plane {
   }
   // desmaiado: sem comando nenhum (manche solto, sem disparar); 0..1 para escurecer a tela
   // escurecimento da tela: desmaiado = preto (entra em 0,3 s; sai no último 1,2 s); acordado = visão de túnel pela carga
-  get blackout() { const g = Math.max(0, (this.gStress - 0.3) / 0.7) ** 1.4 * 0.9; return this.koT > 0 ? Math.max(g, Math.min(1, this.koAge / 0.3, this.koT / 1.2)) : g; }
+  get blackout() { const g = Math.max(0, (this.gStress - 0.12) / 0.88) ** 1.2 * 0.92; return this.koT > 0 ? Math.max(g, Math.min(1, this.koAge / 0.3, this.koT / 1.2)) : g; }
   physics(dt) {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
@@ -266,9 +266,11 @@ export class Plane {
     // fisiologia do piloto: G SUSTENTADO acima da tolerância acumula carga (gStress 0..1). A tela vai escurecendo das
     // bordas para o centro (visão de túnel, `blackout`) e em 1 o piloto DESMAIA: alguns segundos sem controle, o avião
     // segue solto, depois ele volta a si. Sem texto nenhum — só a tela. Jato tem traje anti-G (+1 G); ferido apaga antes.
-    // 9 G no jato: ~3,7 s até apagar; 11 G: ~1,7 s. Negativo: abaixo de −3 G.
-    const gT = (this.eng.jet ? 7.5 : 6.5) - (this.wounded ? 1.5 : 0);
-    const gx = this.n > gT ? (this.n - gT) * 0.16 + 0.03 : this.n < -3 ? (-3 - this.n) * 0.2 : this.n > gT - 1.5 ? -0.12 : -0.3;
+    // Limiar 5 G (pistão) / 6 G (jato): com 7,5/6,5 quase nenhum avião sustentava G acima (Fw 190/P-47 chegam a ~5,7 G,
+    // MiG-21/F-4E a ~7 G) e o jogador nunca apagava. Pistão a 8 G: ~2,6 s; 7 G: ~3,6 s. Jato a 9 G: ~2,4 s. Negativo: abaixo de −3 G.
+    // Recupera devagar: curvas seguidas somam (antes −0,3/s zerava logo).
+    const gT = (this.eng.jet ? 6 : 5) - (this.wounded ? 1 : 0);
+    const gx = this.n > gT ? (this.n - gT) * 0.13 + 0.02 : this.n < -3 ? (-3 - this.n) * 0.2 : this.n > gT - 1.5 ? -0.06 : -0.18;
     // combustível: consumo do motor + vazamentos; seco = motor apaga
     const leak = fuelLeak(this);
     fuelStep(this, this.engineOn ? this.eng.flow : 0, dt);

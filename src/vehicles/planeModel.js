@@ -139,7 +139,10 @@ function fuselage(D, hole, bays = [], tail = null) {
   const ringAt = zf => { let i = 0; while (i < R0.length - 2 && R0[i + 1][0] < zf) i++; const a = R0[i], b = R0[i + 1], t = Math.max(0, Math.min(1, (zf - a[0]) / (b[0] - a[0] || 1))); return a.map((v, c) => v + (b[c] - v) * t); };
   // anéis extras nas bordas das aberturas (um fora e um dentro, a 2 mm): borda dianteira/traseira reta
   const edges = [...(hole ? [hole.z0, hole.z1] : []), ...bays.flatMap(b => [b.za, b.zb])];
-  for (const zc of edges) for (const e of [-0.002, 0.002]) { const zf = (zc + e) / L; if (zf <= rings[0][0] || zf >= rings[rings.length - 1][0]) continue; const r = ringAt(zf); r[0] = zf; rings.push(r); }
+  // limites e interpolação sobre a lista ORIGINAL: com o anel recém-empurrado no fim, o "último" virava ele e todas as
+  // bordas seguintes eram descartadas — a chapa fechava em rampa da última fatia da abertura até a próxima (tapava o painel)
+  R0 = rings.slice(); const zA = R0[0][0], zB = R0[R0.length - 1][0];
+  for (const zc of edges) for (const e of [-0.002, 0.002]) { const zf = (zc + e) / L; if (zf <= zA || zf >= zB) continue; const r = ringAt(zf); r[0] = zf; rings.push(r); }
   rings.sort((a, b) => a[0] - b[0]);
   R0 = rings.slice(); // só a parte externa (o duto do nariz é acrescentado depois, voltando em z)
   // entrada de ar no nariz: o loft continua PARA DENTRO — lábio arredondado e fino que vira o duto
@@ -391,7 +394,11 @@ export function buildPlane(D) {
   const under = metal ? paint : new THREE.MeshStandardMaterial({ color: D.underColor || (D.key === 'il2' ? 0x6f8aa0 : D.key === 'fw190' ? 0x9aa3a6 : D.key === 'spit9' ? 0x9ea19a : 0x8d8c80), bumpMap: panelBump(), bumpScale: 1.6, roughness: .6, metalness: .2 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1b1b1a, roughness: .45, metalness: .5 });
   // vidro: quase incolor, reflexo pelo ambiente (o metálico escuro de antes virava espelho e escondia a cabine)
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0xc8d8e0, roughness: .04, metalness: 0, transparent: true, opacity: .3, clearcoat: 1, clearcoatRoughness: .05, envMapIntensity: 2.4, depthWrite: false }); // .2 sumia contra o céu: parecia capota sem vidro
+  // Opacidade por Fresnel (de frente quase limpo, de raspão espelha o céu) e as duas faces: com opacidade fixa .3 e só a
+  // face de fora, de dentro da cabine não havia vidro nenhum e de fora era um véu cinza chapado
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0xd4e2e8, roughness: .03, metalness: 0, transparent: true, opacity: .1, clearcoat: 1, clearcoatRoughness: .04, envMapIntensity: 2.6, side: THREE.DoubleSide, depthWrite: false });
+  glass.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', 'diffuseColor.a = mix(diffuseColor.a, 0.88, pow(1.0 - clamp(abs(dot(normalize(vViewPosition), normal)), 0.0, 1.0), 3.0));\n#include <opaque_fragment>'); };
+  glass.customProgramCacheKey = () => 'glassFresnel';
   const white = new THREE.MeshStandardMaterial({ color: 0xd8d6cc, roughness: .7 });
   const black = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: .7 });
   const accent = new THREE.MeshStandardMaterial({ color: D.nation === 'URSS' ? 0xa8231b : D.nation === 'Alemanha' ? 0xc9b440 : D.nation === 'Reino Unido' ? 0xc9c2a8 : 0x23305a, roughness: .55, metalness: .2 });
@@ -539,12 +546,14 @@ export function buildPlane(D) {
   const canopyG = new THREE.Group(); root.add(canopyG); canopyG.userData.loose = { k: 'canopy', hp: 9, mass: 60 };
   add(canopyGeometry(C.len, C.w, C.h, C.flat, sf), glass, canopyG, 0, cy, czc);
   const frameM = jet ? paint : dark;
-  for (const t of C.frames) add(canopyFrame(C.len, C.w, C.h, t, jet ? 0.016 : 0.02, C.flat, sf), frameM, canopyG, 0, cy, czc);
+  // molduras não projetam sombra: finas e rentes ao vidro, a sombra delas nelas mesmas virava listras (acne)
+  const frame = g => { add(g, frameM, canopyG, 0, cy, czc).castShadow = false; };
+  for (const t of C.frames) frame(canopyFrame(C.len, C.w, C.h, t, jet ? 0.016 : 0.02, C.flat, sf));
   for (const sd of [1, -1]) add(canopySill(C.len, C.w, C.h, C.flat, sf, sd, jet ? 0.022 : 0.026), frameM, root, 0, cy, czc);
   // para-brisa: dois montantes da base até o primeiro arco — o vidro da frente fica emoldurado (sem eles parecia
   // não haver para-brisa) — e a base dele rente à chapa
-  for (const a of [0.3, 0.7]) add(canopyPost(C.len, C.w, C.h, a * Math.PI, 0.004, C.frames[0], jet ? 0.018 : 0.022, C.flat, sf), frameM, canopyG, 0, cy, czc);
-  add(canopyFrame(C.len, C.w, C.h, 0.012, jet ? 0.014 : 0.018, C.flat, sf), frameM, canopyG, 0, cy, czc);
+  for (const a of [0.3, 0.7]) frame(canopyPost(C.len, C.w, C.h, a * Math.PI, 0.004, C.frames[0], jet ? 0.018 : 0.022, C.flat, sf));
+  frame(canopyFrame(C.len, C.w, C.h, 0.012, jet ? 0.014 : 0.018, C.flat, sf));
   // jato: espelho retrovisor no topo do arco do para-brisa, com o suporte
   if (jet) {
     const P = [0, 0, 0]; canopyPoint(C.len, C.w, C.h, C.frames[0] + 0.015, Math.PI / 2, P, C.flat, sf);
@@ -1390,17 +1399,33 @@ function canopyGeometry(len, w, h, f, sf) {
   g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.computeVertexNormals();
   return g;
 }
-// montante: tubo fino seguindo a seção da capota na fração t do comprimento
+// moldura: faixa chata rente ao vidro (seção retangular, toda por fora: o vidro é facetado por dentro da superfície e,
+// com a faixa atravessando-o, de raspão ele aparecia por cima dela em listras), não tubo — o tubo redondo
+// em pé sobre o vidro parecia uma gaiola de canos vista da cabine. pt(u, v, e): ponto ao longo (u 0..1), através
+// (v −1..1) e na casca escalada por e; 4 faces com vértices próprios (quinas vivas)
+function canopyBand(pt, nu) {
+  const pos = [], idx = [], P = [0, 0, 0], E = [1.022, 1.002], sides = [[-1, 0, 1, 0], [1, 0, 1, 1], [1, 1, -1, 1], [-1, 1, -1, 0]]; // [v0, e0, v1, e1]
+  for (const [v0, e0, v1, e1] of sides) {
+    const b = pos.length / 3;
+    for (let i = 0; i <= nu; i++) for (const [v, e] of [[v0, E[e0]], [v1, E[e1]]]) { pt(i / nu, v, e, P); pos.push(...P); }
+    for (let i = 0; i < nu; i++) { const a = b + i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.computeVertexNormals();
+  // a face de fora tem de olhar para fora (para cima no topo do arco): confere e inverte se preciso
+  const n = g.attributes.normal, mid = Math.floor(nu / 2) * 2; // 1ª face (a de fora), no meio
+  if (n.getY(mid) < 0) { const ix = g.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; } g.computeVertexNormals(); }
+  return g;
+}
+// arco transversal na fração t do comprimento; r = meia-largura da faixa (m)
 function canopyFrame(len, w, h, t, r = 0.02, f, sf) {
-  const pts = []; const P = [0, 0, 0];
-  for (let j = 0; j <= 28; j++) { canopyPoint(len, w * 1.006, h * 1.006, t, j / 28 * Math.PI, P, f, sf); pts.push(new THREE.Vector3(...P)); }
-  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, r, 8, false); // liso: visto da cabine o arco ficava facetado
+  const dt = r / len;
+  return canopyBand((u, v, e, P) => canopyPoint(len, w * e, h * e, Math.min(1, Math.max(0, t + v * dt)), u * Math.PI, P, f, sf), 32);
 }
 // montante longitudinal: no ângulo a da seção, de t0 a t1 do comprimento
 function canopyPost(len, w, h, a, t0, t1, r, f, sf) {
-  const pts = [], P = [0, 0, 0];
-  for (let i = 0; i <= 12; i++) { canopyPoint(len, w * 1.006, h * 1.006, t0 + (t1 - t0) * i / 12, a, P, f, sf); pts.push(new THREE.Vector3(...P)); }
-  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, r, 6, false);
+  const da = r / Math.max(0.2, w);
+  return canopyBand((u, v, e, P) => canopyPoint(len, w * e, h * e, t0 + (t1 - t0) * u, a + v * da, P, f, sf), 14);
 }
 // trilho da capota: tubo ao longo da borda de baixo (lado sd), assentado na chapa
 function canopySill(len, w, h, f, sf, sd, r) {

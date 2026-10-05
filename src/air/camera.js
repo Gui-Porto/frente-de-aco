@@ -109,6 +109,9 @@ export function updateAirCamera(dt) {
   if (acam.aimK > 0.01) fov = lerp(fov, 32, acam.aimK);
   acam.fov += (fov - acam.fov) * (1 - Math.exp(-dt * 5));
   setFov(acam.fov);
+  // cabine: o enquadramento desce (a mira fica acima do centro) para o painel aparecer, como no WT — com a mira no
+  // centro e o painel 20–50° abaixo do olho só se via a borda da capota antirreflexo
+  if (cockpit) camera.setViewOffset(1, 1, 0, 0.13, 1, 1);
   acam.pos.y = Math.max(acam.pos.y, H(acam.pos.x, acam.pos.z) + 2);
   camera.position.copy(acam.pos);
   camera.quaternion.copy(viewQ).multiply(FLIP); // a câmera olha para −z
