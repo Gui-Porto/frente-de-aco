@@ -690,17 +690,22 @@ export function buildPlane(D) {
         fairing(M.fair.r, M.fair.len, M.r * 1.6, x, y, z, paint);
       }
       if (M.port) {
-        // calha do F-86: fenda escura rente à chapa, cano lá dentro e fuligem dos disparos para trás
+        // calha do F-86: boca retangular arredondada com lábio de aço, fundo escuro que afunda para a frente, o cano
+        // deitado nela com o quebra-chamas aparecendo na boca, e a fuligem dos disparos para trás
         x = Math.sign(ax) * hullX(a, y); const n = hullN(a, x, y);
-        flush(slotG(0.085, 0.34), black, x, y, z - 0.14, n);
-        flush(slotG(0.11, 0.9), sootM, x, y, z - 0.75, n).position.addScaledVector(n, 0.002);
-        // o cano deitado na calha, a meia altura da chapa: visível de fora (antes ficava 2 cm para dentro, sumia)
-        x -= n.x * 0.006; y -= n.y * 0.006;
+        flush(slotG(0.1, 0.42), black, x, y, z - 0.18, n);
+        flush(slotG(0.12, 0.44).scale(1, 0.6, 1), DM.bare, x, y, z - 0.18, n).position.addScaledVector(n, -0.002); // lábio
+        flush(slotG(0.12, 1.1), sootM, x, y, z - 0.95, n).position.addScaledVector(n, 0.002);
+        // o cano: metade para fora da chapa, na calha (antes ficava 2 cm para dentro e quase sumia)
+        x += n.x * 0.004; y += n.y * 0.004;
+        tube(M.r * 1.25, M.r * 1.25, 0.09, DM.steel, x, y, z + M.len - 0.01);                         // quebra-chamas
+        for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.004, 0.012, 0.05), black, root, x + Math.cos(k * Math.PI / 2) * M.r * 1.26, y + Math.sin(k * Math.PI / 2) * M.r * 1.26, z + M.len - 0.05); // fendas
+        add(new THREE.CylinderGeometry(M.r * 1.45, M.r * 1.45, 0.02, 12).rotateX(Math.PI / 2), DM.steel, root, x, y, z - 0.38); // braçadeira do cano
       }
-      const tip = z + M.len, bl = M.port ? 0.36 : Math.max(M.len, 0) + 0.45; // F-86: só o trecho do cano dentro da calha
+      const tip = z + M.len, bl = M.port ? 0.46 : Math.max(M.len, 0) + 0.45; // F-86: o trecho do cano na calha
       if (M.cluster) for (let i = 0; i < M.cluster; i++) { const t = i / M.cluster * Math.PI * 2; tube(M.r, M.r, bl, steel, x + Math.cos(t) * M.rr, y + Math.sin(t) * M.rr, tip); }
       else for (const dx of M.twin ? [-M.twin / 2, M.twin / 2] : [0]) {
-        tube(M.r, M.r, bl, steel, x + dx, y, tip);
+        tube(M.r, M.r, bl, M.port ? DM.steel : steel, x + dx, y, tip); // F-86: aço mais claro, contrasta com a calha escura
         if (M.port) tube(M.r * 1.35, M.r * 1.35, 0.05, steel, x + dx, y, tip); // anel da boca
         if (M.brake) { tube(M.r * 1.7, M.r * 1.7, 0.22, steel, x + dx, y, tip); for (const yy of [-1, 1]) add(new THREE.BoxGeometry(M.r * 3.6, 0.02, 0.05), black, root, x + dx, y + yy * M.r * 0.6, tip - 0.08); } // freio de boca com janelas
         add(new THREE.CircleGeometry(M.r * 0.6, 10), black, root, x + dx, y, tip + 0.002);
@@ -887,22 +892,53 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
   };
   // perna oleopneumática: cilindro fixo + haste cromada e roda num grupo que sobe quando o amortecedor comprime
   const slides = [];
-  const strut = (x, y0, z, len, rad, r, w, door, fork) => {
+  // side: lado da perna principal (+1 esq., −1 dir.; 0 = nariz/bequilha); twin: duas rodas no eixo (nariz do F-4)
+  const strut = (x, y0, z, len, rad, r, w, door, fork, side = 0, twin = false) => {
     const p = new THREE.Group(); p.position.set(x, y0, z); g.add(p);
-    const ol = len * 0.4, cyl = len - ol * 0.55, wy = -len - r * 0.9;
-    mk(new THREE.CylinderGeometry(rad, rad * 1.15, cyl, 10), mat, p, 0, -cyl / 2, 0);                          // cilindro
-    mk(new THREE.CylinderGeometry(rad * 1.35, rad * 1.35, 0.06, 10), mat, p, 0, -cyl + 0.03, 0);               // colar do retentor
+    const ol = len * 0.4, cyl = len - ol * 0.55, wy = -len - r * 0.9, jet = !!D.jet;
+    // munhão (eixo de recolhimento) e a peça de fixação no topo da perna
+    mk(new THREE.CylinderGeometry(rad * 0.8, rad * 0.8, side ? rad * 5 : rad * 4, 10).rotateZ(side ? 0 : Math.PI / 2).rotateX(side ? Math.PI / 2 : 0), mat, p, 0, -rad * 0.5, 0);
+    mk(new THREE.BoxGeometry(rad * 2.3, rad * 2.4, rad * 2.6), mat, p, 0, -rad * 1.1, 0);
+    mk(new THREE.CylinderGeometry(rad, rad * 1.15, cyl, 12), mat, p, 0, -cyl / 2, 0);                          // cilindro
+    mk(new THREE.CylinderGeometry(rad * 1.35, rad * 1.35, 0.06, 12), mat, p, 0, -cyl + 0.03, 0);               // colar do retentor
     rod(p, [0, -len * 0.12, 0], [0, -len * 0.02, -len * 0.5], rad * 0.45, mat);                                // braço de arrasto
+    if (side) {
+      // braço lateral articulado (trava a perna baixada): da perna até a estrutura de dentro, com o joelho e o atuador
+      const kn = [-side * len * 0.2, -len * 0.27, rad * 0.5], top = [-side * len * 0.36, -rad, 0];
+      rod(p, [0, -len * 0.48, 0], kn, rad * 0.32, mat); rod(p, kn, top, rad * 0.32, mat);
+      mk(new THREE.SphereGeometry(rad * 0.45, 8, 6), mat, p, ...kn);
+      rod(p, [0, -len * 0.2, -rad * 1.2], [-side * len * 0.25, -rad * 0.5, -len * 0.18], rad * 0.28, chrome);   // atuador de recolhimento
+    }
     const s = new THREE.Group(); p.add(s); slides.push([s, ol * 0.5]);
-    mk(new THREE.CylinderGeometry(rad * 0.62, rad * 0.62, ol, 10), chrome, s, 0, -len + ol / 2, 0);            // haste cromada
-    // tesoura de torque: dois braços em V na frente da perna
+    mk(new THREE.CylinderGeometry(rad * 0.62, rad * 0.62, ol, 12), chrome, s, 0, -len + ol / 2, 0);            // haste cromada
+    // tesoura de torque: dois braços em V na frente da perna, com a junta no meio
     rod(p, [0, -cyl + 0.02, 0], [0, -cyl - ol * 0.25, rad * 2.6], rad * 0.3, mat);
     rod(s, [0, -cyl - ol * 0.25, rad * 2.6], [0, -len + 0.03, rad * 0.4], rad * 0.3, mat);
-    if (fork) { // garfo do trem do nariz: duas placas dos lados da roda
-      for (const sx of [1, -1]) mk(new THREE.BoxGeometry(0.03, r * 1.3, r * 0.5), mat, s, sx * (w / 2 + 0.03), wy + r * 0.55, 0);
-      mk(new THREE.BoxGeometry(w + 0.1, 0.05, r * 0.5), mat, s, 0, wy + r * 1.2, 0);
-    } else mk(new THREE.CylinderGeometry(rad * 0.7, rad * 0.7, w * 0.7, 8).rotateZ(Math.PI / 2), mat, s, Math.sign(x) * w * 0.35, wy, 0); // eixo
-    wheel(s, 0, wy, 0, r, w);
+    mk(new THREE.BoxGeometry(rad * 0.9, rad * 0.6, rad * 0.6), mat, p, 0, -cyl - ol * 0.25, rad * 2.6);
+    if (twin) {
+      // duas rodas num eixo passante, com a bucha do esterçamento e o farol de táxi
+      const tw = w / 2 + rad * 0.9;
+      mk(new THREE.CylinderGeometry(rad * 0.6, rad * 0.6, tw * 2 + w * 0.4, 10).rotateZ(Math.PI / 2), mat, s, 0, wy, 0);
+      mk(new THREE.BoxGeometry(rad * 2, r * 0.9, rad * 2), mat, s, 0, wy + r * 0.45, 0);
+      mk(new THREE.CylinderGeometry(rad * 1.5, rad * 1.5, 0.12, 12), mat, p, 0, -cyl * 0.55, 0);              // colar do esterçamento
+      mk(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 12).rotateX(Math.PI / 2), hubM, p, 0, -cyl * 0.4, rad * 1.4); // farol de táxi
+      for (const sx of [1, -1]) wheel(s, sx * tw, wy, 0, r, w);
+    } else {
+      if (fork) { // garfo do trem do nariz: duas placas dos lados da roda
+        for (const sx of [1, -1]) mk(new THREE.BoxGeometry(0.03, r * 1.3, r * 0.5), mat, s, sx * (w / 2 + 0.03), wy + r * 0.55, 0);
+        mk(new THREE.BoxGeometry(w + 0.1, 0.05, r * 0.5), mat, s, 0, wy + r * 1.2, 0);
+      }
+      // jato: roda principal em balanço, ao lado da haste (eixo curto); garfo/bequilha: roda no meio
+      const wx = side && jet ? side * (rad * 0.75 + w / 2) : 0;
+      if (!fork) mk(new THREE.CylinderGeometry(rad * 0.7, rad * 0.7, Math.abs(wx) + w * 0.5, 8).rotateZ(Math.PI / 2), mat, s, wx / 2, wy, 0); // eixo
+      if (!fork) mk(new THREE.BoxGeometry(rad * 1.5, r * 0.9 + rad, rad * 1.5), mat, s, 0, (wy - len) / 2, 0); // ponta da haste até o eixo
+      wheel(s, wx, wy, 0, r, w);
+      // freio: carcaça no lado de dentro da roda e o tubo hidráulico descendo pela perna
+      if (side) {
+        mk(new THREE.CylinderGeometry(r * 0.5, r * 0.5, 0.05, 14).rotateZ(Math.PI / 2), mat, s, wx - Math.sign(wx || side) * (w * 0.5 + 0.01), wy, 0);
+        rod(p, [rad * 1.1 * side, -rad * 1.5, -rad * 0.6], [rad * 1.1 * side, -cyl, -rad * 0.6], 0.007, mat);
+      }
+    }
     if (door) mk(new THREE.BoxGeometry(0.025, len * 0.62, Math.max(0.5, r * 1.9)), doorM, p, door * (rad + 0.12), -len * 0.36, 0); // porta presa à perna (cor da barriga)
     return p;
   };
@@ -927,7 +963,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
   for (const s of [1, -1]) {
     // pivô na linha média da asa naquela estação: recolhida, a perna fica DENTRO da asa
     const out = GP.ret === 'out', y0 = GP.bay.y0, len = GP.bay.len;
-    const p = strut(s * mx, y0, mz, len, 0.07, mr, 0.2, 0);
+    const p = strut(s * mx, y0, mz, len, D.jet ? 0.08 : 0.07, mr, D.gear && D.gear.mw || 0.2, 0, false, s);
     const sg = out ? s : -s;
     // porta da asa presa à perna: desenhada na posição recolhida, então fecha rente quando a perna deita
     const wd = bays && bays.wingDoors[s > 0 ? 'L' : 'R'];
@@ -937,7 +973,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
     if (fg) { const hx = s * m.xi; hingeDoor(fg, hx, fuseBottom(bays.sec, hx, (m.za + m.zb) / 2) ?? y0, -s * Math.PI * 0.5); }
     legs.push({ name: s > 0 ? 'L' : 'R', p, ax: 'z', sg, cov: !!(wd || fg) });
   }
-  const ny = GP.nbay.y0, pn = strut(0, ny, nz, GP.nbay.len, 0.06, nr, 0.14, 0, D.jet);
+  const ny = GP.nbay.y0, twinN = !!(D.gear && D.gear.twinN), pn = strut(0, ny, nz, GP.nbay.len, 0.06, nr * (twinN ? 0.85 : 1), twinN ? 0.12 : 0.14, 0, D.jet && !twinN, 0, twinN);
   // nariz/bequilha: duas portas laterais (a chapa partida no eixo), dobradiça na borda de fora
   const ng = fd('N');
   if (ng) {
