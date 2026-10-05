@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { station, chordAt, finCfg, finStation } from './planeGeom.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // =====================================================================
 // Detalhes do modelo procedural dos jatos (só visual): bocais com cone de
 // turbina e pétalas de pós-combustão, cabine (painel, mira, assento ejetável),
@@ -13,6 +14,32 @@ const V = (x, y) => new THREE.Vector2(x, y);
 // sólido de revolução em torno do eixo z (LatheGeometry gira em y; rotateX(90°) leva y → +z)
 export const latheZ = (pts, seg = 28) => new THREE.LatheGeometry(pts, seg).rotateX(Math.PI / 2);
 
+// Anel de pás (compressor, turbina, aletas-guia) em torno do eixo z, no plano z = 0: n pás finas do raio r0 ao r1,
+// corda c (m) que afina 35% para a ponta e torção tw0 → tw1 (rad) — no lugar das caixinhas giradas de antes
+export function bladeRing(n, r0, r1, c, tw0, tw1, th = 0.01) {
+  const NS = 5, pos = [], idx = [];
+  for (let j = 0; j <= NS; j++) {
+    const t = j / NS, y = r0 + (r1 - r0) * t, cc = c * (1 - 0.35 * t) / 2, a = tw0 + (tw1 - tw0) * t, ca = Math.cos(a), sa = Math.sin(a);
+    for (const [u, v] of [[cc, th / 2], [-cc, th / 2], [-cc, -th / 2], [cc, -th / 2]]) pos.push(u * ca - v * sa, y, u * sa + v * ca);
+  }
+  for (let j = 0; j < NS; j++) for (let k = 0; k < 4; k++) { const a = j * 4 + k, b = j * 4 + (k + 1) % 4; idx.push(a, b, a + 4, b, b + 4, a + 4); }
+  idx.push(0, 2, 1, 0, 3, 2); const e = NS * 4; idx.push(e, e + 1, e + 2, e, e + 2, e + 3);
+  const one = new THREE.BufferGeometry(); one.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); one.setIndex(idx);
+  one.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2));
+  const g = mergeGeometries(Array.from({ length: n }, (_, i) => one.clone().rotateZ(i / n * Math.PI * 2)));
+  g.computeVertexNormals(); return g;
+}
+// Face do compressor vista pela entrada de ar: aletas-guia fixas na frente, rotor (pás torcidas) e o cubo em ogiva.
+// Fixas em `par`; o rotor vai em `rot` (gira com o motor). z = plano do rotor; r = raio do duto ali.
+export function compressorFace(add, M, par, rot, x, y, z, r, nose = M.steel) {
+  const hub = r * 0.32;
+  add(bladeRing(19, hub * 0.95, r * 0.99, r * 0.2, 0.15, 0.05, 0.012), M.steel, par, x, y, z + r * 0.16);            // aletas-guia
+  add(new THREE.TorusGeometry(r * 0.99, r * 0.03, 6, 32), M.steel, par, x, y, z + r * 0.16);                          // anel externo
+  add(latheZ([V(hub * 1.02, -r * 0.05), V(hub * 1.02, r * 0.1), V(hub * 0.9, r * 0.32), V(hub * 0.55, r * 0.5), V(0.001, r * 0.62)], 24), nose, rot, 0, 0, 0); // cubo
+  add(bladeRing(23, hub, r * 0.97, r * 0.26, 0.95, 0.45, 0.01), M.steel, rot, 0, 0, 0);                              // rotor
+  add(new THREE.CircleGeometry(r * 1.02, 32), M.soot, par, x, y, z - r * 0.12);                                       // fundo (o duto termina aqui)
+}
+
 // Bocal do jato: carenagem que afina até o lábio, parede interna escura, cone da turbina lá dentro
 // e, com pós-combustão (n.petals), anel de pétalas convergentes. ze = plano de saída; r = raio do lábio.
 export function nozzle(add, M, par, x, y, ze, r, n = {}) {
@@ -21,9 +48,19 @@ export function nozzle(add, M, par, x, y, ze, r, n = {}) {
   add(latheZ([V(r * 0.9, ze - 0.005), V(r * 0.97, ze + 0.01), V(r, ze + 0.05), V(r * 1.04, ze + len * 0.6), V(r * 1.08, ze + len)]), M.heat, par, x, y, 0); // metal nu queimado (escuro, de cima, parecia uma tomada de ar)
   // parede interna (escura) até o fundo
   add(latheZ([V(r * 0.78, ze + len * 1.3), V(r * 0.86, ze + 0.06), V(r * 0.9, ze - 0.004)]), M.soot, par, x, y, 0);
-  // cone de saída da turbina (aponta para trás) e fundo
+  // cone de saída da turbina (aponta para trás), estágio da turbina com as pás atrás dele e fundo
   add(latheZ([V(0.001, ze + len * 0.35), V(r * 0.3, ze + len * 0.75), V(r * 0.42, ze + len * 1.05)]), M.steel, par, x, y, 0);
+  add(bladeRing(29, r * 0.4, r * 0.8, r * 0.12, -0.7, -0.35, 0.008), M.heat, par, x, y, ze + len * 1.12);
   add(new THREE.CircleGeometry(r * 0.8, 24).rotateY(Math.PI), M.soot, par, x, y, ze + len * 1.25);
+  if (n.petals) {
+    // pós-combustão: dois anéis de estabilizadores de chama (calhas em V) com raios, à frente do bocal
+    const zf = ze + len * 0.62;
+    for (const rr of [0.42, 0.66]) add(new THREE.TorusGeometry(r * rr, r * 0.035, 5, 28), M.heat, par, x, y, zf);
+    for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; add(new THREE.BoxGeometry(r * 0.03, r * 0.5, r * 0.05).translate(0, r * 0.6, 0).rotateZ(a), M.heat, par, x, y, zf); }
+  }
+  // nacela: a carenagem segue para a frente fechando em ogiva DENTRO da fuselagem — nos bimotores ela fica meio para
+  // fora e a boca de trás do tubo era um buraco para o vazio (n.nacelle = comprimento até fechar)
+  if (n.nacelle) { const z0 = ze + len, P = []; for (let i = 0; i <= 10; i++) { const t = i / 10; P.push(V(Math.max(0.001, r * 1.08 * Math.cos(t * Math.PI / 2) ** 0.6), z0 + t * n.nacelle)); } add(latheZ(P), M.under || M.skin, par, x, y, 0); }
   if (n.petals) {
     // pétalas: placas finas em anel, inclinadas para dentro, saindo do lábio
     const N = n.petals, w = 2 * Math.PI * r / N * 1.08, pl = n.petalLen || 0.45, g = [];

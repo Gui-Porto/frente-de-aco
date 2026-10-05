@@ -81,7 +81,7 @@ export const PLANES = {
     mass: 6600, S: 27.87, span: 12.4, L: 11.0, cla: 4.6, clmax: 1.45, cd0: 0.0175, e: 0.8, engine: 'r2800',
     vne: 810 / 3.6, glim: 12, kda: 0.04, kde: 0.32, kdr: 0.05, armor: { pilot: 9, engine: 0 },
     hpParts: { wingL: 38, wingR: 38, tail: 28, engine: 26, fuel: 20, fuse: 45 },
-    fuseR: 0.78, noseR: 0.72, wingZ: 0.6, chord: 2.6, tipChord: 1.3, cowl: 'radial',
+    fuseR: 0.78, noseR: 0.72, wingZ: 0.6, chord: 2.6, tipChord: 1.3, cowl: 'radial', radial: { cyl: 9 }, // R-2800: fileira da frente com 9 cilindros
     // peças reais: dois tanques na fuselagem sob a cabine (sem tanque na asa no D-28), turbocompressor no ventre traseiro, radiadores de óleo na carenagem, flaps hidráulicos
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque principal', z: 0.04, y: -0.4, s: [0.55, 0.35, 0.6] }, { id: 'fuelA', k: 'fuel', n: 'Tanque auxiliar', z: -0.1, y: -0.45, s: [0.5, 0.3, 0.4] },
       { id: 'turbo', k: 'turbo', n: 'Turbocompressor', z: -0.3, y: -0.6, s: [0.35, 0.3, 0.45] }, { id: 'oilc', k: 'cool', n: 'Radiadores de óleo', z: 0.26, y: -0.75, s: [0.55, 0.18, 0.35] },
@@ -109,7 +109,7 @@ export const PLANES = {
     mass: 4750, S: 18.3, span: 10.5, L: 9.0, cla: 4.8, clmax: 1.45, cd0: 0.019, e: 0.8, engine: 'bmw801',
     vne: 850 / 3.6, glim: 12, kda: 0.06, kde: 0.32, kdr: 0.05, armor: { pilot: 8, engine: 6 },
     hpParts: { wingL: 30, wingR: 30, tail: 24, engine: 22, fuel: 18, fuse: 36 },
-    fuseR: 0.66, noseR: 0.66, wingZ: 0.7, chord: 2.2, tipChord: 1.1, cowl: 'radial',
+    fuseR: 0.66, noseR: 0.66, wingZ: 0.7, chord: 2.2, tipChord: 1.1, cowl: 'radial', radial: { cyl: 7, fan: 12 }, // BMW 801: 7 cilindros na frente, ventoinha de 12 pás
     // tanques dianteiro e traseiro sob o piso da cabine, sem tanque na asa; radiador de óleo em anel blindado na frente do motor;
     // flaps e disparo das armas elétricos
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque dianteiro', z: 0.04, y: -0.5, s: [0.45, 0.25, 0.45] }, { id: 'fuelA', k: 'fuel', n: 'Tanque traseiro', z: -0.1, y: -0.45, s: [0.45, 0.28, 0.5] },
@@ -151,7 +151,7 @@ export const PLANES = {
       { id: 'hyd', k: 'act', n: 'Hidráulico utilitário', does: ['flaps', 'brake'], z: -0.02, y: -0.45, s: [0.3, 0.18, 0.4] },
       { id: 'hydN', k: 'act', n: 'Comando hidráulico', does: ['ctl'], z: -0.3, y: 0.3, s: [0.2, 0.15, 0.4] }, { id: 'hydA', k: 'act', n: 'Comando alternativo', does: ['ctl'], z: -0.3, y: -0.3, s: [0.2, 0.15, 0.4] }],
     // 6 M3 nas laterais do nariz (3 de cada lado, em calhas com painel anti-sopro)
-    guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.07, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
+    guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.2, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
     // freios aerodinâmicos: dois painéis nas laterais da fuselagem traseira, abrindo para fora
     brake: [{ zf: -0.17, ax: 1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }, { zf: -0.17, ax: -1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }],
     missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', maw: 'pd',
@@ -188,10 +188,10 @@ export const PLANES = {
     mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.72, 0.2], inertia: [223700, 44700, 253500], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² [arfagem, rolagem, guinada] do F-4C/E publicado (a estimativa por L² dava 2–2,4× mais)
     vne: 1400 / 3.6, glim: 9.5, kda: 0.05, kde: 0.36, kdr: 0.03, armor: { pilot: 6 },
     hpParts: { wingL: 60, wingR: 60, tail: 40, engine: 50, fuel: 36, fuse: 75 },
-    fuseR: 0.95, noseR: 0.5, wingZ: -1.2, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, tailY: 0.48, finY: 0.34, intakes: 'side', nozzles: 2, gunPod: true, wingBreak: [0.66, 12], finish: 'camo', underColor: 0xc9ccc6,
+    fuseR: 0.95, noseR: 0.5, wingZ: 0.4, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, tailY: 0.48, finY: 0.34, intakes: 'side', nozzles: 2, gunPod: true, wingBreak: [0.66, 12], finish: 'camo', underColor: 0xc9ccc6,
     radar: 'apq120', rwr: 'apr36',
     fuse: [[-0.53, .72, .42, .5, -.1], [-0.46, .78, .5, .56, -.08], [-0.36, .86, .62, .66, -.04], [-0.2, .95, .86, .82, 0], [0, 1, 1, .95, 0], [0.14, .92, 1.02, .9, 0], [0.26, .7, .92, .78, .02], [0.36, .52, .7, .62, 0], [0.45, 'n1', 'n1', 'n1', 0]],
-    canopy: { z: 0.27, len: 5.0, w: 0.46, h: 0.62, frames: [0.2, 0.5, 0.76], seats: [0.34, 0.74], flat: 0.8, rearDy: -0.03 }, smoke: 0.8,
+    canopy: { z: 0.27, len: 5.0, w: 0.48, h: 0.74, frames: [0.2, 0.5, 0.76], seats: [0.34, 0.74], flat: 0.8, rearDy: -0.03 }, smoke: 0.8,
     // bocais com pétalas da pós-combustão, lâminas UHF/IFF, anticolisão em cima e embaixo, gancho e tanques de 370 gal nos pilones externos
     nozzle: { len: 0.7, petals: 18, petalLen: 0.5 }, antennas: [{ k: 'blade', zf: 0.04, ay: 1, h: 0.3, len: 0.42 }, { k: 'blade', zf: 0.02, ay: -1, h: 0.24, len: 0.34 }],
     beacons: [[-0.12, 1], [0.15, -1]], hook: true, drops: [{ ws: 0.8, len: 4.3, d: 0.66 }],
@@ -205,7 +205,7 @@ export const PLANES = {
     // M61 de 6 canos na carenagem sob o nariz (F-4E)
     guns: [{ w: 'M61', n: 1, span: [0], z: 8.2, ammo: 640, mount: { zf: 0.41, r: 0.022, len: -0.05, cluster: 6, rr: 0.065, pod: { r: 0.2, len: 3.2, blend: true }, b: [[0, -1]] } }],
     // freios sob as asas, atrás do trem principal (abrem para baixo)
-    brake: [{ ws: 0.16, cf: 0.45, ax: 1, w: 0.75, len: 0.8, open: 'down', deg: 50 }, { ws: 0.16, cf: 0.45, ax: -1, w: 0.75, len: 0.8, open: 'down', deg: 50 }],
+    brake: [{ ws: 0.16, cf: 0.62, ax: 1, w: 0.75, len: 0.8, open: 'down', deg: 50 }, { ws: 0.16, cf: 0.62, ax: -1, w: 0.75, len: 0.8, open: 'down', deg: 50 }],
     missiles: [{ w: 'AIM7E', n: 4 }, { w: 'AIM9J', n: 4 }],
     bombs: [], rockets: null
   },
@@ -215,7 +215,7 @@ export const PLANES = {
     mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.75, 0.17], inertia: [57000, 7000, 61000], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² aproximados do MiG-21 (asa curta e fuselagem fina)
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },
     hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
-    fuseR: 0.62, noseR: 0.45, wingZ: -1.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,
+    fuseR: 0.62, noseR: 0.45, wingZ: -0.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,
     radar: 'rp22', rwr: 'spo10', maw: 'pd',
     fuse: [[-0.53, .82, .84, .82, 0], [-0.44, .86, .9, .86, 0], [-0.3, .92, 1, .92, 0], [-0.1, .96, 1.18, .96, 0], [0.08, .98, 1.22, .98, 0], [0.2, .98, 1.18, .98, 0], [0.3, .94, 1, .94, 0], [0.39, 'n1.18', 'n1.18', 'n1.18', 0], [0.46, 'n1.1', 'n1.1', 'n1.1', 0]],
     canopy: { z: 0.26, len: 2.7, w: 0.38, h: 0.5, frames: [0.26, 0.62] },
