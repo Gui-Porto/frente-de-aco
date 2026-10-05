@@ -893,7 +893,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
     for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) - n.getX(i) * 0.012, p.getY(i) - n.getY(i) * 0.012, p.getZ(i) - n.getZ(i) * 0.012);
     const ix = inner.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; }
     inner.computeVertexNormals();
-    mk(out, doorM, par, 0, 0, 0); mk(inner, bays.bayM, par, 0, 0, 0);
+    mk(out, doorM, par, 0, 0, 0).userData.door = true; mk(inner, bays.bayM, par, 0, 0, 0).userData.door = true;
   };
   // porta de dobradiça na fuselagem: gira em torno de z na linha (hx, hy); ang = ângulo aberta (rad)
   const hingeDoor = (geo, hx, hy, ang) => {
@@ -913,7 +913,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
     // porta do ventre (roda dentro da fuselagem): dobradiça na borda de dentro, abre para baixo
     const fg = fd(s > 0 ? 'L' : 'R'), m = bays && bays.main;
     if (fg) { const hx = s * m.xi; hingeDoor(fg, hx, fuseBottom(bays.sec, hx, (m.za + m.zb) / 2) ?? y0, -s * Math.PI * 0.5); }
-    legs.push({ name: s > 0 ? 'L' : 'R', p, ax: 'z', sg });
+    legs.push({ name: s > 0 ? 'L' : 'R', p, ax: 'z', sg, cov: !!(wd || fg) });
   }
   const ny = GP.nbay.y0, pn = strut(0, ny, nz, GP.nbay.len, 0.06, nr, 0.14, 0, D.jet);
   // nariz/bequilha: duas portas laterais (a chapa partida no eixo), dobradiça na borda de fora
@@ -927,7 +927,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
       hingeDoor(h, sd * w, fuseBottom(bays.sec, sd * w * 0.999, zc) ?? ny, sd * Math.PI * 0.5);
     }
   }
-  legs.push({ name: 'N', p: pn, ax: 'x', sg: 1 }); // nariz e bequilha recolhem para trás, para dentro da fuselagem
+  legs.push({ name: 'N', p: pn, ax: 'x', sg: 1, cov: !!ng }); // nariz e bequilha recolhem para trás, para dentro da fuselagem
   // k: posição comandada; legK(nome) → posição daquela perna (null = arrancada). As portas do ventre abrem no
   // primeiro quarto do curso (e fecham no último, recolhendo)
   g.userData.anim = (k, legK) => {
@@ -936,6 +936,9 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
       if (kk == null) { L.p.visible = false; continue; }
       L.p.rotation[L.ax] = L.sg * (1 - kk) * Math.PI / 2;
       L.p.visible = true;
+      // recolhida (porta fechada por cima): a perna some dos passes de desenho (camada 1); a porta presa nela fica
+      const hid = kk === 0 && L.cov;
+      if (L.hid !== hid) { L.hid = hid; L.p.traverse(o => { if (o.isMesh && !o.userData.door) o.layers.set(hid ? 1 : 0); }); }
     }
     rk = 1 - k; slide();
     const u = Math.min(1, k / 0.25);

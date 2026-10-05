@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { scene, camera } from '../core/render.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, QUAT, UP, rand, srand, hash2 } from '../core/util.js';
 import { H, LIMIT, INNER, POINTS, SPAWN, FW, FD, roadDist, maskGrass, HMAP, AIRFIELDS, onAirfield } from './terrain.js';
 import { addStaticBox } from './physics.js';
@@ -133,6 +134,16 @@ for (let i = 0; i < 30; i++) {
   g.computeVertexNormals();
   const y = H(x, z); const o = add(g, M.ruin, x, y + s * 0.25, z); o.rotation.set(0, srand() * 6, 0);
   regObst({ mn: [x - s * 0.8, y - 2, z - s * 0.8], mx: [x + s * 0.8, y + s * 0.8, z + s * 0.8] });
+}
+
+// prédios/ruínas: centenas de malhas estáticas viram uma por material (cada malha era 1 draw call × cor/sombra/AO)
+{
+  const mats = new Set(Object.values(M)), by = new Map();
+  for (const o of [...scene.children]) if (o.isMesh && !o.isInstancedMesh && mats.has(o.material)) {
+    o.updateMatrix(); const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrix);
+    if (!by.has(o.material)) by.set(o.material, []); by.get(o.material).push(g); scene.remove(o); o.geometry.dispose();
+  }
+  for (const [m, gs] of by) { const o = new THREE.Mesh(mergeGeometries(gs), m); o.castShadow = o.receiveShadow = true; scene.add(o); }
 }
 
 // ---------- Vegetação instanciada ----------

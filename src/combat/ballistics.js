@@ -136,6 +136,9 @@ export function evalArmor(t, hit, am, speed) {
 // =====================================================================
 const shellGeo = new THREE.CylinderGeometry(0.06, 0.06, 1, 5); shellGeo.rotateX(Math.PI / 2);
 const shellMat = new THREE.MeshBasicMaterial({ color: 0xffd08a, fog: false });
+// granada de escala ~0 sempre desenhada: o shader nasce nos primeiros quadros, não no 1º tiro (o renderer.compile
+// do carregamento não serve: compila para o canvas, e o compositor desenha num render target linear)
+{ const w = new THREE.Mesh(shellGeo, shellMat); w.scale.setScalar(1e-4); w.frustumCulled = false; scene.add(w); }
 const MAXTR = 900;
 export const tracerMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 4).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false }), MAXTR);
 tracerMesh.frustumCulled = false; tracerMesh.count = 0; scene.add(tracerMesh);

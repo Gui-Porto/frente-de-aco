@@ -66,14 +66,14 @@ export function drawXray() {
     c.beginPath(); c.arc(q[0], q[1], Math.max(3, o.r * sc * 0.55), 0, 7); c.fill();
   }
   // trajetória do projétil
-  const s = clamp(el / 0.6, 0, 1), a = P(...xray.pre), b = P(...xray.entry);
+  const s = clamp(el / 0.6, 0, 1), a = P(...S.xray.pre), b = P(...S.xray.entry);
   c.strokeStyle = '#ffd08a'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(lerp(a[0], b[0], s), lerp(a[1], b[1], s)); c.stroke();
-  if (s >= 1 && S.xray.end) { const e = P(...xray.end); c.beginPath(); c.moveTo(b[0], b[1]); c.lineTo(lerp(b[0], e[0], k), lerp(b[1], e[1], k)); c.stroke(); }
+  if (s >= 1 && S.xray.end) { const e = P(...S.xray.end); c.beginPath(); c.moveTo(b[0], b[1]); c.lineTo(lerp(b[0], e[0], k), lerp(b[1], e[1], k)); c.stroke(); }
   if (k > 0) {
     c.strokeStyle = 'rgba(255,170,80,.75)'; c.lineWidth = 1; c.beginPath();
     for (const [f0, f1] of S.xray.frags) { const p0 = P(...f0), p1 = P(...f1); c.moveTo(p0[0], p0[1]); c.lineTo(lerp(p0[0], p1[0], k), lerp(p0[1], p1[1], k)); }
     c.stroke();
-    if (S.xray.blast && k < 0.7) { const q = P(...xray.blast); c.fillStyle = `rgba(255,180,80,${0.7 - k})`; c.beginPath(); c.arc(q[0], q[1], 10 + k * 30, 0, 7); c.fill(); }
+    if (S.xray.blast && k < 0.7) { const q = P(...S.xray.blast); c.fillStyle = `rgba(255,180,80,${0.7 - k})`; c.beginPath(); c.arc(q[0], q[1], 10 + k * 30, 0, 7); c.fill(); }
   }
   c.fillStyle = '#ddd6b7'; c.font = '600 13px "Barlow Condensed", sans-serif'; c.textAlign = 'left';
   c.fillText(`${D.short || D.name}`, 10, 18);
