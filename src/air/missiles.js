@@ -41,6 +41,22 @@ export class Missile {
     if (!this.ign && owner) for (let i = 0; i < 6; i++) spawnP({ pos: this.pos.clone().add(rv(0.4)), vel: owner.vel.clone().multiplyScalar(0.6).add(rv(4)), life: rand(1.2, 2.2), size: 1.2, size1: 4, color: 0xdedbd4, op: 0.5, drag: 2 });
     missiles.push(this);
   }
+  // Alvo rente ao chão (como no WT): o buscador se embaralha. Semiativo: o eco do solo e o reflexo do alvo no chão
+  // (multipercurso) puxam a mira para baixo, entre o alvo e a "imagem" dele, com tremor — o míssil oscila, às vezes
+  // perde o alvo ou mergulha no chão. Pior quanto mais baixo o alvo (< 150 m) e quanto mais o míssil olha para baixo.
+  // Infravermelho sofre pouco (só o fundo quente do solo, < 60 m): tremor lateral pequeno.
+  clutter(tg, sarh, h) {
+    const agl = tg.pos.y - H(tg.pos.x, tg.pos.z), top = sarh ? 150 : 60;
+    if (!tg.eng || agl >= top) return tg.pos;
+    const c = 1 - Math.max(0, agl) / top, look = clamp((this.pos.y - tg.pos.y) / Math.max(1, this.pos.distanceTo(tg.pos)) * 3 + 0.5, 0.3, 1);
+    this.wob = (this.wob || rand(0, 9)) + h * rand(2, 5);
+    const w = Math.sin(this.wob) * 0.5 + Math.sin(this.wob * 2.7) * 0.5;
+    if (sarh) {
+      if (Math.random() < h * 0.35 * c * look) this.tracking = false; // sumiu no eco do solo
+      return _cl.copy(tg.pos).add(_cl2.set(w * 14 * c, -(Math.max(0, agl) + 6) * c * look * (0.55 + 0.45 * w), Math.sin(this.wob * 1.9) * 14 * c));
+    }
+    return _cl.copy(tg.pos).add(_cl2.set(w * 6 * c, 0, Math.sin(this.wob * 1.9) * 6 * c));
+  }
   update(dt) {
     const M = this.M; this.t += dt;
     const n = Math.max(1, Math.ceil(dt / 0.01)), h = dt / n;
@@ -86,7 +102,7 @@ export class Missile {
       }
       _a.set(0, -G, 0);
       if (this.tracking && tg) {
-        pnAccel(this.pos, this.vel, tg.pos, tg.vel, M.nav, _q);
+        pnAccel(this.pos, this.vel, this.clutter(tg, sarh, h), tg.vel, M.nav, _q);
         _q.y += G; // compensa a gravidade
         _q.addScaledVector(_f, -_q.dot(_f)); // só aceleração lateral
         const lim = M.maxG * G * clamp((V / 290) ** 2, 0.22, 1); // pouca autoridade em baixa velocidade
@@ -143,6 +159,7 @@ export class Missile {
 }
 // distância mínima entre o segmento a→b e o ponto c (ponto mais próximo em `out`; fração do segmento em _cu)
 let _cu = 0;
+const _cl = new V3(), _cl2 = new V3();
 function closest(a, b, c, out) {
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, L2 = dx * dx + dy * dy + dz * dz || 1e-9;
   const u = _cu = clamp(((c.x - a.x) * dx + (c.y - a.y) * dy + (c.z - a.z) * dz) / L2, 0, 1);
