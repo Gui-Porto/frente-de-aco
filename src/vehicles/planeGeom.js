@@ -13,7 +13,7 @@ export function wingCfg(D, side) {
   const jet = !!D.jet, fr = D.fuseR, ellip = D.key === 'spit9' || D.key === 'p47';
   const dih = (D.dih ?? (jet ? (D.key === 'mig15' ? -2 : 3) : 5.5)) * deg, half = D.span / 2 - fr * 0.55;
   return { side, x0: fr * 0.55, half, c0: D.chord, c1: ellip ? D.tipChord * 0.35 : D.tipChord, zq0: D.wingZ + D.chord * 0.1,
-    sweep: half * Math.tan((D.sweep || 0) * deg) + (ellip ? 0 : (D.chord - D.tipChord) * 0.1), t0: jet ? 0.1 : 0.15, t1: jet ? 0.08 : 0.09,
+    sweep: half * Math.tan((D.sweep || 0) * deg) + (ellip ? 0 : (D.chord - D.tipChord) * 0.1), t0: D.tc ? D.tc[0] : jet ? 0.1 : 0.15, t1: D.tc ? D.tc[1] : jet ? 0.08 : 0.09, // tc: espessura relativa [raiz, ponta]
     dih, y0: -fr * 0.25, ellip, brk: D.wingBreak ? { at: D.wingBreak[0], dih: D.wingBreak[1] * deg } : null };
 }
 export function tailCfg(D, side) {

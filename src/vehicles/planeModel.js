@@ -730,8 +730,9 @@ export function buildPlane(D) {
   const wingDoors = {}, wingL = wing(1), wingR = wing(-1);
   buildBays(add, root, [wingL, wingR], D, BAY, wingPlan(D, 1), fuseG.userData.sec, DM, fuseG.userData.duct);
   // carenagem da raiz (fica na fuselagem: a asa que cai deixa a carenagem)
-  // jato: concordância pequena (os reais quase não têm); grande, vista de lado virava uma segunda asa por cima da asa
-  for (const sd of [1, -1]) add(filletGeometry(wingCfg(sd), fuseG.userData.at, L, jet ? Math.min(0.16, Math.max(0.08, D.chord * 0.035)) : Math.min(0.55, Math.max(0.18, D.chord * 0.14)), 0.72, BAY.main ? [BAY.main.za, BAY.main.zb] : null), pair, root);
+  // só nos pistão: nos jatos (os reais não têm) mesmo pequena ela virava uma lâmina por cima da asa ("asa sobre a asa")
+  // e cobria a insígnia da fuselagem; a raiz da asa já entra na chapa
+  if (!jet) for (const sd of [1, -1]) add(filletGeometry(wingCfg(sd), fuseG.userData.at, L, Math.min(0.55, Math.max(0.18, D.chord * 0.14)), 0.72, BAY.main ? [BAY.main.za, BAY.main.zb] : null), pair, root);
   // ---- canhões (def.guns[i].mount): canos, carenagens, casulos, fendas; a boca é o ponto de tiro (gunPts) ----
   const at = fuseG.userData.at, steel = new THREE.MeshStandardMaterial({ color: 0x2b2c2d, roughness: .4, metalness: .8 });
   const secY = (a, ay) => (ay >= 0 ? a.yc + ay * (a.top - a.yc) : a.yc + ay * a.h);
@@ -957,7 +958,7 @@ export function buildPlane(D) {
   const wi = { x: wp[0], z: wp[2], y: wingY(oL, wp[0], wp[2], 1), yl: wingY(oL, wp[0], wp[2], -1), size: Math.min(cw * 0.62, 1.6), dih: wdih, th: 0.5 };
   const fp = finStation(fc, 0.5, 0.3), mk = D.marks || {};
   planeDecals(D, { fuse: fuseMesh, fuseAt: fuseG.userData.at, wings: [wingL, wingR].map((g, i) => [g.userData.skins[ws > sB ? 1 : 0], wi, i ? -1 : 1]),
-    fin: { mesh: finMesh, p: { y: fp[1], z: fp[2], size: chordAt(fc, 0.5) * 0.62 } }, serial: mk.serial || String(40000 + (D.key.charCodeAt(0) * 97) % 9999), nose: mk.nose && { zf: 0.36, n: mk.nose }, buzz: mk.buzz && { zf: 0.2, txt: mk.buzz }, decalZ: mk.decalZ });
+    fin: { mesh: finMesh, p: { y: fp[1], z: fp[2], size: chordAt(fc, 0.5) * 0.62 } }, serial: mk.serial || String(40000 + (D.key.charCodeAt(0) * 97) % 9999), nose: mk.nose && { zf: 0.36, n: mk.nose }, buzz: mk.buzz && { zf: 0.2, txt: mk.buzz }, decalZ: mk.decalZ, fuseIns: mk.fuse });
   // trem de pouso (aparece com o trem baixado; o hangar também usa)
   // detalhes por dados (planeDetail.js): luz da cauda, anticolisão, antenas, tanques externos, gancho
   DT.tailLight(add, DM, tail, D); DT.beacons(add, DM, root, D, at); DT.antennas(add, DM, root, tail, D, at);
@@ -1066,9 +1067,9 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
     for (const q of [].concat(geo)) doorMesh(q, piv, new THREE.Matrix4().makeTranslation(-hx, -hy, 0));
     doors.push({ piv, ang, seq }); return piv;
   };
-  // carga no eixo (bomba do Fw 190, tanque do MiG-21): as portas do ventre abrem só durante o curso e fecham com o trem
-  // baixado — abertas, penduradas junto ao eixo, elas entravam na bomba
-  const midStore = (D.bombs || []).some(b => b.x.some(x => Math.abs(x) < 0.4)) || (D.drops || []).some(t => t.belly != null);
+  // portas da roda abrem só durante o curso e fecham com o trem baixado: nos jatos (como nos reais — abertas, o poço
+  // com nervuras e as portas penduradas pareciam fendas na asa) e com carga no eixo (bomba do Fw 190: entravam nela)
+  const midStore = !!D.jet || (D.bombs || []).some(b => b.x.some(x => Math.abs(x) < 0.4)) || (D.drops || []).some(t => t.belly != null);
   // separa os triângulos de uma porta pelo centro: keep(cx, cy, cz) → [os que passam, os outros] (null se vazio)
   const splitDoor = (geo, keep) => {
     const ix = geo.index.array, P = geo.attributes.position, A = [], B = [];
