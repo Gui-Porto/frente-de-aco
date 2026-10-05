@@ -145,9 +145,11 @@ function fuselage(D, hole, bays = []) {
   // (grupo 2, escuro). Antes era um toro grosso encostado num cilindro aberto ("lata").
   const nOut = rings.length, noseIn = D.jet && D.intakes !== 'side';
   if (noseIn) {
-    const e = rings[nOut - 1], z = e[0], dz = 0.045 / L * 1;
+    // o duto termina à frente da antepara da cabine: mais fundo, ele passava por dentro da banheira e pela boca se viam
+    // o piso, os pedais e as pernas do piloto
+    const e = rings[nOut - 1], z = e[0], dz = 0.045 / L, deep = hole ? Math.min(1, (z * L - hole.z1 - 0.12) / (48 * 0.045)) : 1;
     for (const [k, sc] of [[0.4, 0.985], [0.2, 0.95], [-0.15, 0.92], [-1, 0.9], [-3, 0.87], [-7, 0.84], [-14, 0.82], [-22, 0.8], [-34, 0.78], [-48, 0.76]])
-      rings.push([z + k * dz, e[1] * sc, e[2] * sc, e[3] * sc, e[4]]);
+      rings.push([z + (k < -1 ? k * deep : k) * dz, e[1] * sc, e[2] * sc, e[3] * sc, e[4]]);
   }
   // jatos: seção elíptica (chapa lisa, arredondada) e mais segmentos; pistão: superelipse de cantos vivos
   const NR = D.jet ? 44 : 32, ex = D.jet ? 1 : 2 / 2.4, pos = [], uv = [], top = [], bot = [], duct = [], deep = [];
@@ -207,7 +209,7 @@ function fuselage(D, hole, bays = []) {
   g.computeVertexNormals();
   g.userData.bayDoors = doors.map(ix => { if (!ix.length) return null; const d = new THREE.BufferGeometry(); d.setAttribute('position', g.attributes.position.clone()); d.setAttribute('uv', g.attributes.uv.clone()); d.setIndex(ix); d.computeVertexNormals(); return d; });
   // fundo do duto (onde fica a face do compressor), em z e meia-largura
-  if (noseIn) { const r = rings[rings.length - 1]; g.userData.duct = { z: r[0] * L, hw: r[1] * fr, h: Math.max(r[2], r[3]) * fr, yc: r[4] * fr, lip: rings[nOut - 1][0] * L }; }
+  if (noseIn) { const r = rings[rings.length - 1]; g.userData.duct = { z: r[0] * L, hw: r[1] * fr, h: Math.max(r[2], r[3]) * fr, yc: r[4] * fr, lip: rings[nOut - 1][0] * L, lipH: Math.min(rings[nOut - 1][2], rings[nOut - 1][3]) * fr }; }
   // amostra da seção numa fração z (para insígnias e acessórios encostarem na chapa)
   // seção exata em z (m): meia-largura, alturas de cima/baixo e centro, em metros; ex = expoente da superelipse
   g.userData.sec = z => { const r = ringAt(z / L); return { hw: r[1] * fr, tp: r[2] * fr, bt: r[3] * fr, yc: r[4] * fr, ex }; };
@@ -385,7 +387,7 @@ export function buildPlane(D) {
   const pair = [paint, under];
   // materiais dos detalhes (planeDetail.js): todos MeshStandard sem textura — mesmo programa dos de cima
   const lamp = (c, e) => new THREE.MeshStandardMaterial({ color: c, emissive: e, emissiveIntensity: 1.6, roughness: .3 });
-  const DM = { dark, glass, skin: paint, tank: paint, bay: new THREE.MeshStandardMaterial({ color: bayColor(D), roughness: .62, metalness: .25 }), bare: new THREE.MeshStandardMaterial({ color: 0xb4b7b8, roughness: .3, metalness: .75 }), steel: new THREE.MeshStandardMaterial({ color: 0x5b5d5f, roughness: .35, metalness: .85 }),
+  const DM = { dark, glass, skin: paint, under, tank: paint, bay: new THREE.MeshStandardMaterial({ color: bayColor(D), roughness: .62, metalness: .25 }), bare: new THREE.MeshStandardMaterial({ color: 0xb4b7b8, roughness: .3, metalness: .75 }), steel: new THREE.MeshStandardMaterial({ color: 0x5b5d5f, roughness: .35, metalness: .85 }),
     heat: new THREE.MeshStandardMaterial({ color: 0x6e6152, roughness: .42, metalness: .85 }), soot: new THREE.MeshStandardMaterial({ color: 0x141312, roughness: .9, metalness: .2 }),
     yellow: new THREE.MeshStandardMaterial({ color: 0xd8b21c, roughness: .55 }), dial: new THREE.MeshStandardMaterial({ color: 0xc9c9bd, roughness: .4 }),
     seat: new THREE.MeshStandardMaterial({ color: 0x3b3e38, roughness: .7, metalness: .3 }), cushion: new THREE.MeshStandardMaterial({ color: 0x4d4536, roughness: .95 }),
@@ -407,11 +409,19 @@ export function buildPlane(D) {
   const sideIn = jet && D.intakes === 'side', duct = fuseG.userData.duct;
   if (jet) {
     if (duct) {
-      // fundo do duto: face do compressor (as pás giram no grupo `prop`), divisória do MiG-15, radar telemétrico do F-86
-      add(new THREE.CircleGeometry(duct.hw * 1.04, 24), ductM, root, 0, duct.yc, duct.z + 0.01);
+      // fundo do duto: face do compressor (DT.compressorFace, mais abaixo: o rotor gira no grupo `prop`), divisória do
+      // MiG-15, radar telemétrico do F-86
       // MiG-15: divisória vertical do duto (real: separa o ar dos dois lados da cabine) — recuada da boca, fina, na cor do duto
-      if (D.key === 'mig15') { const z1 = duct.lip - 0.45, sl = z1 - duct.z, hh = duct.h * 1.86; add(new THREE.BoxGeometry(0.022, hh, sl), ductM, root, 0, duct.yc, duct.z + sl / 2); add(new THREE.CylinderGeometry(0.016, 0.016, hh, 8), ductM, root, 0, duct.yc, z1); }
-      if (D.key === 'f86') { const r = add(new THREE.CapsuleGeometry(0.1, 0.35, 4, 10).rotateX(Math.PI / 2), paint, root, 0, duct.yc + duct.h * 0.78, duct.lip - 0.32); r.scale.y = 0.8; }
+      if (D.key === 'mig15') {
+        // chapa com a altura do duto em cada estação (encosta em cima e embaixo; antes era um retângulo solto no meio
+        // da boca), bordas arredondadas, da face do compressor até 45 cm da boca
+        const z1 = duct.lip - 0.45, rAt = z => duct.h + (duct.lipH * 0.93 - duct.h) * clamp01((z - duct.z) / (duct.lip - duct.z)), sh = new THREE.Shape(), N = 8;
+        for (let i = 0; i <= N; i++) { const z = duct.z + (z1 - duct.z) * i / N; (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(z, -rAt(z) * 0.985 + 0.012); }
+        for (let i = N; i >= 0; i--) { const z = duct.z + (z1 - duct.z) * i / N; sh.lineTo(z, rAt(z) * 0.985 - 0.012); }
+        const pl = new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.012, bevelSegments: 3 }).rotateY(-Math.PI / 2).translate(0.006, 0, 0);
+        add(pl, ductM, root, 0, duct.yc, 0);
+      }
+      if (D.key === 'f86') { const r = add(new THREE.CapsuleGeometry(0.1, 0.35, 8, 24).rotateX(Math.PI / 2), paint, root, 0, duct.yc + duct.h * 0.78, duct.lip - 0.32); r.scale.y = 0.8; }
     } else {
       // radome em ogiva (curto, como o do APQ-120) e entradas laterais em loft, com placa separadora da camada-limite
       const at = fuseG.userData.at, an = at(0.449), R = an.hw * 0.97, RL = L * 0.1, prof = [];
@@ -449,11 +459,7 @@ export function buildPlane(D) {
         const dl = (a, b) => flipLoft(tubeLoftV(duct.slice(a, b)));
         add(dl(0, 6), ductM, root); add(dl(5, 13), soot, root);
         const fz = z0 - DL, fc = new THREE.Vector3(duct[12][1], duct[12][2], fz), Rf = Math.min(duct[12][3], duct[12][4]);
-        { const R = Rf; add(new THREE.CircleGeometry(R * 1.02, 24), soot, root, fc.x, fc.y, fz - 0.05);
-        add(new THREE.ConeGeometry(R * 0.32, R * 0.6, 18).rotateX(Math.PI / 2), fanM, root, fc.x, fc.y, fz + R * 0.2);
-        const bl = [];
-        for (let i = 0; i < 21; i++) bl.push(new THREE.BoxGeometry(R * 0.15, R * 0.72, 0.02).rotateY(0.5).translate(0, R * 0.62, 0).rotateZ(i / 21 * Math.PI * 2));
-        add(mergeGeometries(bl), fanM, root, fc.x, fc.y, fz); }
+        { const rot = new THREE.Group(); rot.position.copy(fc); root.add(rot); DT.compressorFace(add, DM, root, rot, fc.x, fc.y, fz, Rf, fanM); }
         // placa separadora: chapa vertical na fresta, um pouco à frente da boca, com os montantes até a fuselagem
         const fa0 = at(zf / L), px = s * (fa0.hw + 0.04);
         add(metricUV(new RoundedBoxGeometry(0.03, hh0 * 2.08, 1.15, 2, 0.012), 1.15), paint, root, px, cy0, zf - 0.3);
@@ -465,7 +471,7 @@ export function buildPlane(D) {
     for (let i = 0; i < nn; i++) {
       const nx = nn > 1 ? (i - (nn - 1) / 2) * nr * 2.1 : 0;
       const ny = nn > 1 ? -fr * 0.15 : 0, ze = -L * 0.53 - 0.3;
-      DT.nozzle(add, DM, root, nx, ny, ze, nr, D.nozzle);
+      DT.nozzle(add, DM, root, nx, ny, ze, nr, nn > 1 ? { ...D.nozzle, nacelle: 2.6 } : D.nozzle);
       nozzles.push({ x: nx, y: ny, z: ze, r: nr * 0.85 });
     }
   } else {
@@ -821,12 +827,8 @@ export function buildPlane(D) {
   }
   if (sideIn) prop.add(new THREE.Group()); // sem boca no nariz: o grupo existe só para o contrato (último filho)
   else if (jet) {
-    // compressor: cubo e pás (giram com o motor); o último filho é vazio — a pá não some com o motor parado
-    const r = duct.hw, fan = new THREE.MeshStandardMaterial({ color: 0x5c5f61, roughness: .35, metalness: .85 });
-    add(new THREE.ConeGeometry(r * 0.3, r * 0.55, 18).rotateX(Math.PI / 2), D.shockCone ? dark : paint, prop, 0, 0, r * 0.28);
-    const bl = [];
-    for (let i = 0; i < 17; i++) bl.push(new THREE.BoxGeometry(r * 0.16, r * 0.72, 0.02).rotateY(0.5).translate(0, r * 0.62, 0).rotateZ(i / 17 * Math.PI * 2));
-    add(mergeGeometries(bl), fan, prop);
+    // compressor: aletas-guia fixas, rotor e cubo (giram com o motor); o último filho é vazio — a pá não some com o motor parado
+    DT.compressorFace(add, DM, root, prop, 0, duct.yc, duct.z + 0.04, duct.hw * 0.99, D.shockCone ? dark : paint);
     prop.add(new THREE.Group());
   } else {
     // spinner em ogiva com prato traseiro (antes um cone pequeno sumia dentro do capô)
