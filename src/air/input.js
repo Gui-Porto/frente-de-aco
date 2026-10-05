@@ -1,4 +1,4 @@
-import { isDown, pressed, settings } from '../core/settings.js';
+import { isDown, pressed, settings, mouse } from '../core/settings.js';
 // =====================================================================
 // InputSystem + AircraftController da Batalha Aérea.
 // Teclado, mouse e gamepad viram um COMANDO normalizado; o comando é que
@@ -7,6 +7,7 @@ import { isDown, pressed, settings } from '../core/settings.js';
 // =====================================================================
 export const cmd = {
   pitch: 0, roll: 0, yaw: 0, thr: 0,      // -1..1 (eixos; 0 = instrutor decide)
+  thrStep: 0,                             // passos da manete pelo scroll (+ = mais potência)
   fire: false, missile: false, aim: false, // gatilhos
   cm: false, flare: false, chaff: false, ext: false, cam: false, target: false, gear: false, flaps: false, brake: false, wsel: false, rmode: false, rlock: false, rnext: false,
   lookX: 0, lookY: 0,                     // olhar/mira pelo direcional analógico (rad/s)
@@ -17,7 +18,7 @@ const DZ = 0.15, dz = v => (Math.abs(v) < DZ ? 0 : (v - Math.sign(v) * DZ) / (1 
 export function readInput() {
   const k = (a, b) => (isDown(a) ? 1 : 0) - (isDown(b) ? 1 : 0);
   cmd.pitch = k('a_pitch_up', 'a_pitch_dn'); cmd.roll = k('a_roll_r', 'a_roll_l'); cmd.yaw = k('a_yaw_l', 'a_yaw_r');
-  cmd.thr = k('a_thr_up', 'a_thr_dn');
+  cmd.thr = k('a_thr_up', 'a_thr_dn'); cmd.thrStep = -mouse.wheel;
   cmd.fire = isDown('a_guns'); cmd.missile = pressed('a_missile'); cmd.aim = isDown('a_zoom');
   cmd.cm = pressed('a_cm'); cmd.flare = pressed('a_flare'); cmd.chaff = pressed('a_chaff'); cmd.ext = pressed('a_ext');
   cmd.cam = pressed('a_cam'); cmd.target = pressed('a_target');
@@ -49,6 +50,9 @@ export function pilot(p, c, aimDir, dt) {
   // liga o WEP/pós-combustão na hora, e reduzir desliga na hora. O atraso da rotação é do motor (EngineSet).
   if (c.thr > 0) { const was = p.throttle; p.throttle = Math.min(1, p.throttle + dt * THR_RATE * c.thr); if (was >= 1 && p.canBoost) p.wep = true; }
   if (c.thr < 0) { p.throttle = Math.max(0, p.throttle + dt * THR_RATE * c.thr); p.wep = false; }
+  // scroll: 2% por passo; rolar para cima já em 100% liga WEP/PC, para baixo desliga
+  if (c.thrStep > 0) { if (p.throttle >= 1 && p.canBoost) p.wep = true; p.throttle = Math.min(1, p.throttle + 0.02 * c.thrStep); }
+  if (c.thrStep < 0) { p.throttle = Math.max(0, p.throttle + 0.02 * c.thrStep); p.wep = false; }
   if (c.flaps) p.cycleFlaps();
   if (c.gear) p.toggleGear();
   if (c.brake) p.airbrake = !p.airbrake; // H liga/desliga (freio aerodinâmico no ar, freio das rodas no chão)

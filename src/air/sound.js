@@ -1,6 +1,6 @@
 import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
-import { AC, eng, cockpitTone, cockpitVoice, cockpitThump, sndWhoosh, sndSonicBoom, sndMachCross, sndBoostIgnite, sndGear, sndTouch, sndFlaps, soundAt } from '../fx/audio.js';
+import { AC, eng, cockpitTone, cockpitVoice, cockpitThump, sndWhoosh, sndSonicBoom, sndMachCross, sndBoostIgnite, sndCrackle, sndGear, sndTouch, sndFlaps, soundAt } from '../fx/audio.js';
 import { shakeCam } from '../ui/hud.js';
 import { acam } from './camera.js';
 import { clamp } from '../core/util.js';
@@ -25,7 +25,7 @@ export function airAudio(dt) {
   let near = p, nd = 0;
   if (!near) { nd = 1e9; for (const q of planes) { if (!q.alive) continue; const d = q.pos.distanceTo(camera.position); if (d < nd) { nd = d; near = q; } } }
   const vol = !live || S.paused || !near ? 0 : (p ? 1 : 1.6 / (1 + nd / 150)) * (near.engineOn ? 1 : 0.1);
-  engine(near, vol);
+  engine(near, vol, dt);
   gunLoop(p, live && !S.paused && S.state === 'play');
   voices(near, live && !S.paused);
   wind(p, live && !S.paused);
@@ -38,13 +38,15 @@ export function airAudio(dt) {
 }
 function voice(v) { if (v !== undefined) cockpitVoice(v, VOICE_RATE); }
 
-function engine(q, vol) {
+// ganho/frequência suavizados (mudar .value a cada quadro com sorteio dá estalido de 60 Hz)
+const glide = (prm, v, tc = 0.06) => prm.setTargetAtTime(v, AC.currentTime, tc);
+function engine(q, vol, dt) {
   const E = q && q.eng, jet = E && E.jet, sd = E ? E.E.snd || {} : {}, pit = acam.mode === 2 && q === S.player; // cabine: mais abafado
   // pistão no WEP: mais alto e mais "sujo" (a distorção vem do ganho maior entrando no waveshaper)
   eng.air.g.gain.value = E && !jet ? vol * (0.06 + 0.05 * Math.max(0, E.power - 1) * 10) : 0;
   eng.jet.g.gain.value = jet ? vol * 0.09 : 0;
-  // PC: ronco com estalos (ganho tremendo aleatoriamente a cada quadro)
-  eng.ab.g.gain.value = jet ? vol * (sd.ab || 0) * E.ab * (0.75 + Math.random() * 0.5) : 0;
+  // PC: ronco grave (o tremor vem da variação lenta, os estalos são estouros à parte)
+  glide(eng.ab.g.gain, jet ? vol * (sd.ab || 0) * E.ab * (0.85 + 0.3 * Math.random()) : 0, 0.12);
   eng.rumble.g.gain.value = jet ? vol * (0.05 + 0.12 * Math.min(1, E.output)) : 0;
   // gravações: viram a base do som; a síntese fica por baixo (rotação, apito, sub-grave)
   const rp = eng.recP, rj = eng.recJ;
@@ -66,11 +68,13 @@ function engine(q, vol) {
     // PC/WEP com a cara de cada motor (snd.boost); k = quanto está aceso
     const bo = sd.boost, Bn = eng.boost, k = bo ? E.ab * vol : 0, muf = pit ? 0.55 : 1;
     if (Bn) {
-      Bn.log.gain.value = k * 0.16; Bn.lo.frequency.value = (bo ? bo.lo : 300) * muf;
-      Bn.cg.gain.value = k && Math.random() < 0.35 + 0.4 * bo.crack ? k * bo.crack * (0.05 + Math.random() * 0.12) : 0; Bn.cf.frequency.value = 900 + Math.random() * 1800;
-      Bn.hg.gain.value = k ? k * bo.howl[2] * (0.85 + Math.random() * 0.3) * muf : 0; if (bo) { Bn.hf.frequency.value = bo.howl[0] * (0.97 + 0.06 * E.N); Bn.hf.Q.value = bo.howl[1]; }
-      Bn.sg.gain.value = k ? k * bo.hiss * 0.05 * muf : 0;
-      Bn.rg.gain.value = k ? k * bo.rasp * 0.05 : 0; Bn.r1.frequency.value = 46 + 10 * E.ab; Bn.r2.frequency.value = 51 + 12 * E.ab;
+      // body: peso do ronco grave (o J79 é um trovão); a aspereza pulsa devagar em vez de chiar
+      glide(Bn.log.gain, k * 0.16 * (bo ? bo.body || 1 : 1), 0.15); glide(Bn.lo.frequency, (bo ? bo.lo : 300) * muf, 0.2);
+      if (k && Math.random() < dt * 22 * bo.crack) sndCrackle(k * bo.crack * (0.12 + Math.random() * 0.18), muf);
+      glide(Bn.cg.gain, 0);
+      glide(Bn.hg.gain, k ? k * bo.howl[2] * muf : 0, 0.2); if (bo) { glide(Bn.hf.frequency, bo.howl[0] * (0.97 + 0.06 * E.N), 0.2); Bn.hf.Q.value = bo.howl[1]; }
+      glide(Bn.sg.gain, k ? k * bo.hiss * 0.05 * muf : 0, 0.15);
+      glide(Bn.rg.gain, k ? k * bo.rasp * 0.05 : 0, 0.15); Bn.r1.frequency.value = 46 + 10 * E.ab; Bn.r2.frequency.value = 51 + 12 * E.ab;
     }
   } else {
     const f = (sd.f0 || 45) + Math.min(E.power, 1.2) * ((sd.f1 || 85) - (sd.f0 || 45));

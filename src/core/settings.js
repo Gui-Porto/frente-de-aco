@@ -35,10 +35,10 @@ export const ACTIONS = [
   ['a_zoom', 'Avião', 'Zoom / câmera de mira (segurar)', ['Mouse2']],
   // mesmos comandos nas batalhas terrestres e na Batalha Aérea (padrão do War Thunder com mouse aim)
   ['a_missile', 'Avião', 'Disparar míssil ar-ar', ['Space']],
-  ['a_cm', 'Avião', 'Contramedidas (flares + chaff)', ['KeyX']],
+  ['a_cm', 'Avião', 'Contramedidas (flares + chaff)', ['KeyZ']],
   ['a_flare', 'Avião', 'Só flares (contra infravermelho)', ['KeyU']],
   ['a_chaff', 'Avião', 'Só chaff (contra radar)', ['KeyI']],
-  ['a_wsel', 'Avião', 'Selecionar míssil', ['KeyZ']],
+  ['a_wsel', 'Avião', 'Trocar armamento (míssil)', ['KeyX']],
   ['a_rmode', 'Avião', 'Radar: trocar modo', ['KeyN']],
   ['a_rlock', 'Avião', 'Radar: travar / soltar alvo', ['CapsLock']],
   ['a_rnext', 'Avião', 'Radar: trocar alvo', ['KeyY']],
@@ -68,7 +68,7 @@ export function defaults() {
     mouse: { tank: 1.0, sight: 1.0, plane: 1.0, invertY: false },
     graphics: { quality: 'alta' },
     audio: { master: 0.8, sfx: 1.0, engine: 0.8 },
-    bindsV: 4,
+    bindsV: 5,
     gameplay: { tankAssist: true, leadMarker: true, flightMode: 'instrutor', camSmooth: true, hitcam: true },
   };
 }
@@ -101,6 +101,12 @@ if (saved && saved.binds && (saved.bindsV || 1) < 3) {
 if (saved && saved.binds && (saved.bindsV || 1) < 4) {
   if (settings.binds.a_bomb.join() === 'Space' && settings.binds.a_missile.includes('Space')) settings.binds.a_bomb = [...defaults().binds.a_bomb];
   settings.bindsV = 4;
+}
+// v5: Z = contramedidas, X = trocar armamento (configurações antigas deixavam o Z nas duas funções)
+if (saved && saved.binds && (saved.bindsV || 1) < 5) {
+  const d = defaults().binds;
+  for (const id of ['a_cm', 'a_wsel']) settings.binds[id] = [...d[id]];
+  settings.bindsV = 5;
 }
 const listeners = [];
 export function onSettings(fn) { listeners.push(fn); }

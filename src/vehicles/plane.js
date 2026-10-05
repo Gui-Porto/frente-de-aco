@@ -311,7 +311,8 @@ export class Plane {
       if (this.onGround && i !== 1 && i !== 2) continue;
       const [x, y, z] = pts[i];
       const wx = this.pos.x + _pl.x * x + _pu.x * y + _pf.x * z, wy = this.pos.y + _pl.y * x + _pu.y * y + _pf.y * z, wz = this.pos.z + _pl.z * x + _pu.z * y + _pf.z * z;
-      if (wy < H(wx, wz) + 0.2) { this.impact(i); return; }
+      // cauda/barriga encostando devagar não é batida: os patins do groundStep seguram e arrastam (com faísca)
+      if (wy < H(wx, wz) + 0.2) { if ((i === 3 || i === 4) && this.gearMesh && -this.vel.y < (i === 3 ? 9 : 7)) continue; this.impact(i); return; }
     }
     // árvores: voo rasante pode bater na copa (asa inclusa: raio ~ 1/3 da envergadura)
     if (!this.onGround && this.pos.y - H(this.pos.x, this.pos.z) < 30 && treeHit(this.pos.x, this.pos.y, this.pos.z, this.def.span * 0.33)) { this.crash(); return; }
@@ -345,7 +346,7 @@ export class Plane {
     const steer = tail ? -this.rud * 0.3 * clamp(1.2 - V / 25, 0, 1) : this.rud * 0.6 * clamp(1.2 - V / 35, 0.12, 1);
     _gw.set(-this.pr, this.yr, this.rr).applyQuaternion(this.q);
     _gf.copy(_pf).setY(0); if (_gf.lengthSq() < 1e-6) _gf.set(0, 0, 1); _gf.normalize();
-    let any = 0, wheel = 0, comp = 0, nm = 0;
+    let any = 0, wheel = 0, comp = 0, nm = 0, tailW = 0, bellyW = 0;
     for (const [x, y, z, sh, main, nose] of C) {
       _gr.set(0, 0, 0).addScaledVector(_pl, x).addScaledVector(_pu, y).addScaledVector(_pf, z);
       const px = this.pos.x + _gr.x, py = this.pos.y + _gr.y, pz = this.pos.z + _gr.z, d = H(px, pz) - py;
@@ -369,27 +370,56 @@ export class Plane {
         .addScaledVector(_gh, -mu * Fn * clamp(vl / 0.3, -1, 1))
         .addScaledVector(_gl, -muL * Fn * clamp(vs / 1.2, -1, 1));
       F.add(_gt);
+      // chapa raspando no chão: faísca, guincho de metal e desgaste (carga × velocidade) — cauda no cone, barriga na fuselagem
+      const sv = skid ? Math.hypot(_gv.x, _gv.z) : 0;
+      if (sv > 4) {
+        if (Math.random() < h * (12 + sv)) fxSparks(new V3(px, py + 0.15, pz), 3 + Math.min(6, sv / 15 | 0));
+        if (this.isPlayer && sv > 15 && Math.random() < h * 1.5) sndTear(_pt.set(px, py, pz));
+        const w = Fn / (m * G0) * sv / 70 * h;
+        if (z < -L * 0.4) tailW += w; else bellyW += w;
+      }
       _gt.crossVectors(_gr, _gt); // momento no mundo → eixos do corpo (x = asa esq., y = cima, z = nariz)
       Mo[0] += _gt.dot(_pl); Mo[1] += _gt.dot(_pu); Mo[2] += _gt.dot(_pf);
     }
     this.gc = nm ? clamp(comp / nm, 0, 1) : 0; // o modelo afunda o amortecedor do mesmo tanto
+    // desgaste do arrasto: raspão de cauda curto só amassa; arrastar muito tempo rápido corta o cone de cauda.
+    // De barriga, a fuselagem aguenta parar se o toque não foi violento (pouso de barriga de verdade)
+    const bm = this.mods && this.mods.boom;
+    if (tailW && bm && !bm.lost && this.tailOn) { bm.hp -= bm.max * 0.5 * tailW; if (bm.hp <= 0) { bm.dead = true; this.loseTail(); } }
+    if (bellyW) { this.hp.fuse -= this.maxHp.fuse * 0.06 * bellyW; if (this.hp.fuse <= 0) { if (this.isPlayer) showDmg('Fuselagem partiu no arrasto'); this.toWreck(); return true; } }
+    const hasW = C.some(c => c[3] > 0), wasW = this.wheelOn; this.wheelOn = wheel > 0;
     const was = this.onGround; this.onGround = any > 0;
-    if (!this.onGround || was) return false;
-    // ---- primeiro toque ----
-    const belly = wheel === 0, pitch = Math.asin(clamp(_pf.y, -1, 1)), roll = _pl.y, vs = -this.vel.y;
-    // tolerante como no WT: só explode se vier MUITO errado; no meio do caminho é pouso duro (estraga a estrutura)
-    const why = vs > (belly ? 7 : 13) ? 'descendo rápido demais' : Math.abs(roll) > (belly ? 0.35 : 0.6) ? 'asa no chão (inclinado demais)' : pitch < -0.35 ? 'de nariz no chão' : this.ias > (belly ? 330 / 3.6 : this.gearV * 1.2) ? `rápido demais (${Math.round(this.ias * 3.6)} km/h)` : null;
-    if (why) { if (this.isPlayer) showDmg(`Pouso falhou: ${why}`); if (vs > 25) this.crash(); else { if (Math.abs(roll) > 0.35) this.breakTip(roll > 0 ? 'R' : 'L'); this.collapseGear(); this.toWreck(); } return true; }
+    // avaliação do toque: quando as RODAS tocam (cauda raspando antes não é pouso) ou, sem trem, no primeiro contato
+    if (!this.onGround || (hasW ? !this.wheelOn || wasW : was)) return false;
+    const belly = !hasW, pitch = Math.asin(clamp(_pf.y, -1, 1)), roll = _pl.y, vs = -this.vel.y, ar = Math.abs(roll);
+    const side = roll > 0 ? 'R' : 'L', msg = t => { if (this.isPlayer) showDmg(t); };
+    // Pouso forte — o que acontece, por gravidade (vs = razão de descida no toque, m/s):
+    //  > 25: bola de fogo · trem: > 16 (barriga: > 12) ou asa > ~52°: a estrutura parte e vira destroço deslizando
+    //  trem: > 10, muito rápido ou de nariz: o trem quebra e o avião se ARRASTA de barriga até parar (piloto vivo)
+    //  asa > ~32°: a ponta raspa e cai · > 5: pouso duro (estrutura amassada) · abaixo disso: pouso
+    if (vs > 25) { msg('Pouso falhou: bateu forte demais'); this.crash(); return true; }
+    if (vs > (belly ? 12 : 16) || ar > 0.8 || (belly && this.ias > 380 / 3.6)) {
+      msg(`Pouso falhou: ${ar > 0.8 ? 'asa no chão' : vs > 12 ? 'a estrutura partiu' : 'rápido demais de barriga'}`);
+      if (ar > 0.55) this.breakTip(side); this.collapseGear(); this.toWreck(); return true;
+    }
     this.touchT = ST.now; this.touchV = vs;
-    const hard = vs > 5 || this.ias > this.gearV;
-    if (hard) { this.hp.fuse -= this.maxHp.fuse * 0.12 * (1 + Math.max(0, vs - 5) / 4); if (this.hp.fuse <= 0) { this.collapseGear(); this.toWreck(); return true; } }
-    if (belly) { this.engs.forEach((e, i) => { if (e.on && !D.jet) this.engineOut(i); }); } // hélice bate no chão
+    let broke = null;
+    if (!belly) {
+      const fast = this.ias > this.gearV * 1.15;
+      if (vs > 10 || fast) { this.collapseGear(); broke = fast ? `rápido demais (${Math.round(this.ias * 3.6)} km/h): trem quebrou` : 'trem quebrou'; }
+      else if (pitch < -0.3) { this.ripLeg('N'); broke = 'de nariz: bequilha do nariz quebrou'; }
+    }
+    if (ar > 0.55) { this.breakTip(side); if (!belly) this.ripLeg(side); broke = broke || 'ponta da asa raspou'; }
+    const hard = vs > 5 || !!broke;
+    if (hard) { this.hp.fuse -= this.maxHp.fuse * 0.12 * (1 + Math.max(0, vs - 5) / 4); if (this.hp.fuse <= 0) { msg('Pouso falhou: a estrutura partiu'); this.collapseGear(); this.toWreck(); return true; } }
+    if (broke) { msg(`Pouso forte: ${broke} · arrastando`); this.landMsgT = ST.now; }
+    if (belly || !this.gearDown) { this.engs.forEach((e, i) => { if (e.on && !D.jet) this.engineOut(i); }); } // hélice bate no chão
     else {
       // o pneu parado no ar esfola na pista (fumaça) e a cabine sente o tranco
       if (V > 25) for (const sx of [1, -1]) { _pt.set(sx * U.mainX, -U.lift, U.mainZ).applyMatrix4(this.root.matrixWorld); for (let i = 0; i < 3; i++) fxTrail(_pt.clone().add(rv(0.3)), 0xdedcd6, 0.35 + Math.min(vs, 6) * 0.06, 1.6 + Math.random()); }
       if (this.isPlayer) shakeAt(this.pos, 0.25 + Math.min(vs, 10) * 0.12, 50);
     }
-    if (this.isPlayer && (hard || belly || ST.now - (this.landMsgT || -9) > 3)) { this.landMsgT = ST.now; showDmg(belly ? 'Pouso de barriga' : hard ? 'Pouso duro · estrutura danificada' : 'Pouso', !hard && !belly); }
+    if (this.isPlayer && !broke && (hard || belly || ST.now - (this.landMsgT || -9) > 3)) { this.landMsgT = ST.now; showDmg(belly ? 'Pouso de barriga' : hard ? 'Pouso duro · estrutura danificada' : 'Pouso', !hard && !belly); }
     return false;
   }
   // Instrutor (estilo "mouse aim" do WT): leva o VETOR VELOCIDADE à direção pedida.

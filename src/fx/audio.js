@@ -253,6 +253,12 @@ export function sndBoostIgnite(k = 1) {
   thump(t, 0.35 + 0.45 * k, 50 + 15 * (1 - k), 0.5 + 0.3 * k); noiseBurst(t, 0.12 + 0.2 * k, 500, 0.45 + 0.25 * k, 0.8, sfx, 'lowpass', brownBuf, 0.01);
   noiseBurst(t + 0.03, 0.06 * k, 2200, 0.2, 1.2, sfx, 'bandpass');
 }
+// estalo da PC: estouro curto e encorpado (no lugar do ganho sorteado a cada quadro, que zumbia a 60 Hz)
+export function sndCrackle(v, muf = 1) {
+  if (!AC) return; const t = AC.currentTime + rand(0, 0.015);
+  noiseBurst(t, v, rand(500, 1600) * muf, rand(0.03, 0.08), 0.6, engBus, 'lowpass', noiseBuf, 0.002);
+  if (Math.random() < 0.3) thump(t, v * 0.8, rand(55, 80), 0.09, engBus);
+}
 export function audioPause(p) { if (AC) p ? AC.suspend() : AC.resume(); }
 // canhão de tanque: estalo da boca, corpo do disparo, sub-grave e a cauda do vale (reverberação)
 export function sndShot(pos, cal) {
