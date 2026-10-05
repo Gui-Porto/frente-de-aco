@@ -110,11 +110,11 @@ function mergePair(gs) {
 
 // Fuselagem em loft: cada estação tem meia-largura, altura do dorso, profundidade do ventre e
 // deslocamento da linha central (frações de fuseR; z em fração de L). Seção superelíptica (um pouco
-// "quadrada" como chapa sobre cavernas); o dorso segue quase reto até a cauda e o ventre sobe,
-// deixando a cauda em lâmina vertical. Grupo 0 = metade de cima (camuflagem), 1 = ventre.
+// "quadrada" como chapa sobre cavernas); o dorso segue quase reto até a cauda e o ventre sobe até o poste do leme:
+// a cauda termina alta (raiz da deriva em cima, do estabilizador embaixo) — afinando até uma agulha, a empenagem ficava solta. Grupo 0 = metade de cima (camuflagem), 1 = ventre.
 const FUSE = {
-  inline: [[-0.5, .05, .1, .08, .4], [-0.44, .14, .22, .2, .34], [-0.32, .34, .46, .42, .24], [-0.16, .6, .74, .7, .1], [0, .8, .96, .9, 0], [0.12, .88, 1, .98, 0], [0.24, .84, .94, 1.02, -.02], [0.34, .74, .84, .96, -.04], [0.41, 'n.9', 'n.92', 'n.98', -.04], [0.46, 'n.5', 'n.5', 'n.55', -.04]],
-  radial: [[-0.5, .05, .1, .08, .4], [-0.44, .16, .24, .22, .32], [-0.32, .38, .5, .48, .2], [-0.16, .68, .8, .8, .08], [0, .9, .98, .98, 0], [0.14, .98, 1, 1.02, 0], [0.27, 'n1.02', 'n1.02', 'n1.02', 0], [0.38, 'n1', 'n1', 'n1', 0], [0.43, 'n.94', 'n.94', 'n.94', 0], [0.455, 'n.6', 'n.6', 'n.6', 0]],
+  inline: [[-0.5, .09, .3, .27, .36], [-0.44, .17, .3, .28, .32], [-0.32, .34, .46, .42, .24], [-0.16, .6, .74, .7, .1], [0, .8, .96, .9, 0], [0.12, .88, 1, .98, 0], [0.24, .84, .94, 1.02, -.02], [0.34, .74, .84, .96, -.04], [0.41, 'n.9', 'n.92', 'n.98', -.04], [0.46, 'n.5', 'n.5', 'n.55', -.04]],
+  radial: [[-0.5, .09, .3, .27, .34], [-0.44, .18, .32, .3, .3], [-0.32, .38, .5, .48, .2], [-0.16, .68, .8, .8, .08], [0, .9, .98, .98, 0], [0.14, .98, 1, 1.02, 0], [0.27, 'n1.02', 'n1.02', 'n1.02', 0], [0.38, 'n1', 'n1', 'n1', 0], [0.43, 'n.94', 'n.94', 'n.94', 0], [0.455, 'n.6', 'n.6', 'n.6', 0]],
   intake: [[-0.53, .44, .46, .44, .06], [-0.46, .52, .56, .52, .08], [-0.34, .68, .76, .7, .06], [-0.18, .86, .96, .9, .03], [0, .98, 1.06, 1, 0], [0.14, 1, 1.06, 1, 0], [0.28, .92, .98, .94, -.02], [0.38, 'n1.04', 'n1.06', 'n1.04', -.02], [0.46, 'n.98', 'n.98', 'n.98', -.02]],
 };
 // hole (opcional) = abertura da cabine { z0, z1 (m), hw(z) }: dentro dela os vértices do dorso vão para a borda e
@@ -651,8 +651,8 @@ export function buildPlane(D) {
   // radiador sob a asa (Spitfire): carenagem em loft colada ao intradorso — boca com lábio, colmeia escura recuada,
   // corpo que engorda e a aba de saída articulada atrás (antes era uma caixa)
   const radM = new THREE.MeshStandardMaterial({ color: 0x1d1e1c, roughness: .8, metalness: .4 });
-  const radiator = (o, x, zc, par) => {
-    const len = 1.35, secs = [];
+  const radiator = (o, x, zc, par, len = 1.35) => {
+    const secs = [];
     for (let i = 0; i <= 10; i++) {
       const t = i / 10, z = zc + len / 2 - t * len, hw = 0.2 + 0.06 * Math.sin(Math.PI * Math.min(1, t * 1.3)), hh = 0.09 + 0.07 * Math.sin(Math.PI * Math.min(1, t * 1.15)) - 0.05 * t * t;
       secs.push([z, x, wingY(o, x, z, -1) - hh + 0.03, hw, Math.max(0.04, hh)]);
@@ -693,7 +693,8 @@ export function buildPlane(D) {
       const fg = new THREE.ExtrudeGeometry(sh, { depth: 0.01, bevelEnabled: true, bevelSize: 0.006, bevelThickness: 0.006, bevelSegments: 2 }).rotateY(-Math.PI / 2).translate(p0[0] + 0.005, 0, 0);
       add(fg, paint, k < sB ? grp : tip);
     }
-    if (D.key === 'spit9') radiator(o, side * (fr + 1.0), D.wingZ - 0.35, grp); // radiadores sob a asa
+    // radiadores sob a asa, atrás do alojamento do trem (no real a roda deita à frente da longarina e o radiador fica atrás)
+    if (D.key === 'spit9') radiator(o, side * (fr + 1.0), BAY.main.za - 0.06 - 0.55, grp, 1.1);
     // armas de asa sem `mount` (pistão): o cano sai do bordo de ataque na estação de cada arma (g.span) — canhão de
     // 20/23 mm bem para fora com a luva de carenagem, metralhadora só a ponta; antes as asas não tinham arma nenhuma
     for (const gn of D.guns || []) if (!gn.mount) for (const gx of gn.span) {
@@ -989,7 +990,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
     mk(new THREE.CylinderGeometry(rad, rad * 1.15, cyl, 12), mat, p, 0, -cyl / 2, 0);                          // cilindro
     mk(new THREE.CylinderGeometry(rad * 1.35, rad * 1.35, 0.06, 12), mat, p, 0, -cyl + 0.03, 0);               // colar do retentor
     rod(p, [0, -len * 0.12, 0], [0, -len * 0.02, -len * 0.5], rad * 0.6, mat);                                 // braço de arrasto
-    if (side) {
+    if (side && GP.ret !== 'out') { // Spitfire: perna em balanço, sem braço lateral (recolhida, ele ficava pendurado sob a asa)
       // braço lateral articulado (trava a perna baixada): da perna até a estrutura de dentro, com o joelho e o atuador
       const kn = [-side * len * 0.2, -len * 0.27, rad * 0.5], top = [-side * len * 0.36, -rad, 0];
       // espessuras de peça forjada (com 2 cm os braços pareciam fios segurando o trem)
@@ -1060,6 +1061,8 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
     const out = GP.ret === 'out', y0 = GP.bay.y0, len = GP.bay.len;
     const p = strut(s * mx, y0, mz, len, D.jet ? 0.08 : 0.07, mr, D.gear && D.gear.mw || 0.2, 0, false, s);
     const sg = out ? s : -s;
+    // para fora, a perna deita acompanhando o diedro (a asa sobe para a ponta): girando só 90°, a roda ficava sob a asa
+    const ret = Math.PI / 2 + (out ? wingPlan(D, 1).dih : 0);
     // porta da asa presa à perna: desenhada na posição recolhida, então fecha rente quando a perna deita
     // Recolhendo para dentro, a porta da asa é dividida como nos reais: a faixa sobre a perna vai presa nela; o trecho
     // onde a roda deita é uma porta própria com dobradiça na borda de dentro (junto com a do ventre, se houver), que
@@ -1069,7 +1072,10 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
     if (wd && !out) {
       [wd, wheelD] = splitDoor(wd, cx => Math.abs(cx) > GP.bay.xs);
     }
-    if (wd) { p.rotation.z = sg * Math.PI / 2; p.updateMatrix(); doorMesh(wd, p, p.matrix.clone().invert()); p.rotation.z = 0; }
+    // Spitfire: só a carenagem da perna; a roda deita no poço aberto (inteira presa à perna, a porta virava uma placa
+    // do tamanho do alojamento ao lado da roda)
+    if (wd && out) wd = splitDoor(wd, cx => Math.abs(cx) < GP.bay.xs)[0];
+    if (wd) { p.rotation.z = sg * ret; p.updateMatrix(); doorMesh(wd, p, p.matrix.clone().invert()); p.rotation.z = 0; }
     // porta do ventre (roda dentro da fuselagem): dobradiça na borda de dentro, abre para baixo
     const fg = fd(s > 0 ? 'L' : 'R');
     if (fg || wheelD) {
@@ -1082,7 +1088,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
       }
       hingeDoor([fg, wheelD].filter(Boolean), hx, hy, -s * Math.PI * 0.5);
     }
-    legs.push({ name: s > 0 ? 'L' : 'R', p, ax: 'z', sg, cov: !!(wd || fg || wheelD) });
+    legs.push({ name: s > 0 ? 'L' : 'R', p, ax: 'z', sg, ret, cov: !out && !!(wd || fg || wheelD) });
   }
   const ny = GP.nbay.y0, twinN = !!(D.gear && D.gear.twinN), pn = strut(0, ny, nz, GP.nbay.len, 0.06, nr, twinN ? 0.12 : 0.14, 0, D.jet && !twinN, 0, twinN);
   // nariz/bequilha: duas portas laterais (a chapa partida no eixo), dobradiça na borda de fora
@@ -1096,14 +1102,14 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
       hingeDoor(h, sd * w, fuseBottom(bays.sec, sd * w * 0.999, zc) ?? ny, sd * Math.PI * 0.5);
     }
   }
-  legs.push({ name: 'N', p: pn, ax: 'x', sg: 1, cov: !!ng }); // nariz e bequilha recolhem para trás, para dentro da fuselagem
+  legs.push({ name: 'N', p: pn, ax: 'x', sg: 1, cov: !!ng, fixed: !D.jet }); // nariz recolhe para trás, para dentro da fuselagem; bequilha é fixa
   // k: posição comandada; legK(nome) → posição daquela perna (null = arrancada). As portas do ventre abrem no
   // primeiro quarto do curso (e fecham no último, recolhendo)
   g.userData.anim = (k, legK) => {
     for (const L of legs) {
-      const kk = legK ? legK(L.name, k) : k;
+      let kk = legK ? legK(L.name, k) : k; if (L.fixed && kk != null) kk = 1;
       if (kk == null) { L.p.visible = false; continue; }
-      L.p.rotation[L.ax] = L.sg * (1 - kk) * Math.PI / 2;
+      L.p.rotation[L.ax] = L.sg * (1 - kk) * (L.ret || Math.PI / 2);
       L.p.visible = true;
       // recolhida (porta fechada por cima): a perna some dos passes de desenho (camada 1); a porta presa nela fica
       const hid = kk === 0 && L.cov;

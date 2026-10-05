@@ -791,7 +791,8 @@ export class Plane {
   // trem arrancado: as pernas viram destroço
   collapseGear() { for (const n of ['L', 'R', 'N']) if (this.legPos(n) > 0.3) this.ripLeg(n); }
   // posição de cada perna do trem ('L', 'R', 'N'): a comandada; travada fica onde parou; arrancada = null
-  legPos(n) { const m = this.mods && this.mods['gear' + n]; return !m ? this.gear : m.lost ? null : m.dead ? m.stuck : this.gear; }
+  // bequilha dos pistão é fixa (Spitfire IX, Fw 190 e Il-2 deixam a roda para fora): sempre baixada, até ser arrancada
+  legPos(n) { const m = this.mods && this.mods['gear' + n], k = n === 'N' && !this.def.jet ? 1 : this.gear; return !m ? k : m.lost ? null : m.dead && k !== 1 ? m.stuck : k; }
   // extensão média (arrasto) e trem em condição de pouso (principais — e o do nariz no jato — todo baixados)
   get gearOut() { let s = 0; for (const n of ['L', 'R', 'N']) s += this.legPos(n) || 0; return s / 3; }
   get gearDown() { return ['L', 'R', ...(this.def.jet ? ['N'] : [])].every(n => (this.legPos(n) ?? 0) > 0.98); }
