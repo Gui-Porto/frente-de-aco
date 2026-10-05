@@ -60,6 +60,14 @@ Tudo por dados, sem `if (key === …)`: entrada em `PLANES` (`data/vehicles.js`:
 
 **Instrutor do mouse** (`Plane.steerTo`, medido com `airMouse → updateAirCamera → simulate`): integral do profundor com anti-windup (só perto da mira e sem limitador atuando), amortecimento de arfagem relativo à taxa da mira. Ao mexer nos ganhos, meça curva contínua + parada do mouse e tremor: o MiG-21/F-4E ainda balançam um pouco depois de curva forte.
 
+## Modelos e mapa — armadilhas já pagas
+
+- Fuselagem: anéis anti-horários vistos do nariz → tampa da cauda `cap(0, true)`; trocada, ela some de trás e se vê o interior. Jato: bocal no centro da ÚLTIMA seção da cauda e do tamanho dela (sem "reboco" visível); o F-4E leva `def.boom` (cone de cauda sobre os bocais, segura a empenagem).
+- Pistão: cauda termina alta no poste do leme (não em agulha) e a bequilha é fixa (`legPos('N')` = 1, sem alojamento). Portas da roda abrem só durante o curso e fecham com o trem baixado.
+- Interior visível (dutos, entradas) sempre fosco (`ductM`): metálico espelhava o céu e parecia vazado. Toda casca aberta vista por dentro precisa de forro com face para dentro.
+- Terreno: a malha de fora NÃO afunda (só na emenda com a de dentro) — afundada, o chão desenhado ficava abaixo da física. Bases de hélice ficam 3,5 km para o lado: o vale/corredor da base de jato enterrava a pista.
+- Limitadores do instrutor (G e estol) têm amortecimento pela taxa (`nRate`, `aRate`); sem ele o avião quicava no limite com W/teclado.
+
 ## Renderização — decisões importantes
 
 - **Sem bloom**: o céu Preetham tem brilho HDR muito acima de 1; o UnrealBloom deixava a tela leitosa ("neblina estourada"). Se reativar, teste isolando passes.
