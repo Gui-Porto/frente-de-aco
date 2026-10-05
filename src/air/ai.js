@@ -68,7 +68,8 @@ export class FighterBrain {
     // só reage a míssil que consegue perceber: guiamento no RWR, alerta do MAW ou a fumaça à vista
     const m = incomingTo(p); this.missile = m && perceives(p, m) ? m : null;
     // contramedidas: flares contra míssil chegando, chaff quando alguém está colado na cauda
-    if (this.missile && this.missile.pos.distanceTo(p.pos) < 2200 && Math.random() < d.missileP) dropCM(p);
+    // uma salva a cada ~1,2 s quando o míssil já está perto (antes: uma a cada 0,4 s desde 2,2 km — nenhum míssil acertava)
+    if (this.missile && this.missile.pos.distanceTo(p.pos) < 1500) { if (S.now > (this.cmNext ?? 0)) { this.cmNext = S.now + 1.2; if (Math.random() < d.missileP) dropCM(p); } }
     else if (this.threat && p.chaff > 0 && Math.random() < 0.12 * d.missileP) dropCM(p);
     if (this.role === 'bomber') return;
     // chaff do alvo confunde a pontaria (perde o alvo por um instante)

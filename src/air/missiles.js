@@ -47,12 +47,12 @@ export class Missile {
     for (let s = 0; s < n && !this.dead; s++) {
       const V = Math.max(this.vel.length(), 1);
       _f.copy(this.vel).divideScalar(V);
-      // flares: cada flare novo dentro do campo do buscador tem uma chance de roubar o míssil
+      // flares: cada SALVA nova dentro do campo do buscador tem uma chance (M.flareRes) de roubar o míssil
       const sarh = M.seeker === 'sarh';
       if (this.tracking && this.target && !this.target.isFlare && !sarh) for (const fl of flares) {
-        if (this.seen.has(fl)) continue; this.seen.add(fl);
+        if (this.seen.has(fl.grp)) continue; this.seen.add(fl.grp);
         _rel.copy(fl.pos).sub(this.pos); const d = _rel.length();
-        if (d < 3000 && _rel.dot(_f) / d > Math.cos(M.gimbal * Math.PI / 180) && Math.random() < (M.flareRes ?? 0.55)) { this.target = fl; break; }
+        if (d < 3000 && _rel.dot(_f) / d > Math.cos(M.gimbal * Math.PI / 180) && Math.random() < (M.flareRes ?? 0.3)) { this.target = fl; break; }
       }
       const tg = this.target;
       // buscador: precisa ver o alvo dentro do gimbal, em relação ao eixo do míssil
@@ -84,10 +84,11 @@ export class Missile {
       _a.addScaledVector(_f, (burn ? M.thrust / M.mass : 0) - drag);
       this.vel.addScaledVector(_a, h);
       _q.copy(this.pos).addScaledVector(this.vel, h);
-      // espoleta de proximidade: menor distância ao alvo dentro do passo
+      // espoleta de proximidade: dentro do raio, espera a máxima aproximação (o ponto mais próximo cair DENTRO do
+      // passo); antes detonava no primeiro passo que entrava no raio e o erro típico ficava em 7–9 m
       if (tg && tg.alive) {
         const cpa = closest(this.pos, _q, tg.pos, _cp);
-        if (cpa < M.fuse && this.t > 0.4) { this.detonate(_cp, cpa); return; }
+        if (cpa < M.fuse && this.t > 0.4 && _cu < 1) { this.detonate(_cp, cpa); return; }
       }
       // colisão com outro avião (passa raspando por quem não era o alvo)
       for (const p of planes) if (p !== tg && p !== this.owner && p.alive && p.pos.distanceTo(_q) < p.def.span * 0.4) { this.detonate(_q, 0, p); return; }
@@ -123,10 +124,11 @@ export class Missile {
     }
   }
 }
-// distância mínima entre o segmento a→b e o ponto c (ponto mais próximo em `out`)
+// distância mínima entre o segmento a→b e o ponto c (ponto mais próximo em `out`; fração do segmento em _cu)
+let _cu = 0;
 function closest(a, b, c, out) {
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, L2 = dx * dx + dy * dy + dz * dz || 1e-9;
-  const u = clamp(((c.x - a.x) * dx + (c.y - a.y) * dy + (c.z - a.z) * dz) / L2, 0, 1);
+  const u = _cu = clamp(((c.x - a.x) * dx + (c.y - a.y) * dy + (c.z - a.z) * dz) / L2, 0, 1);
   out.set(a.x + dx * u, a.y + dy * u, a.z + dz * u);
   return out.distanceTo(c);
 }
@@ -163,9 +165,10 @@ export function dropCM(p) {
   p.cmT = S.now; sndCm(p.pos);
   if (p.flares > 0) {
     p.flares--; p.flareUntil = S.now + 2.5;
+    const grp = {};
     for (const s of [1, -1]) {
       _a.set(s * 14, -10, 0).applyQuaternion(p.q);
-      flares.push({ pos: p.pos.clone(), vel: p.vel.clone().multiplyScalar(0.55).add(_a), alive: true, t: 0, team: p.team, isFlare: true });
+      flares.push({ pos: p.pos.clone(), vel: p.vel.clone().multiplyScalar(0.55).add(_a), alive: true, t: 0, team: p.team, isFlare: true, grp });
     }
   }
   if (p.chaff > 0) {
