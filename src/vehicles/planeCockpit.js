@@ -213,11 +213,12 @@ export function buildCockpit(ctx) {
     // capota antirreflexo: casca arqueada do topo do painel para a frente, até onde o para-brisa deixa (não fura o vidro)
     // cada vértice fica 2 cm para dentro do vidro naquela estação (o para-brisa afina para a frente: antes a chapa
     // reta passava pelos lados e pela frente da capota)
-    let zE = zP; while (zE < zP + 0.5 && ctx.canopyW(zE + 0.02, yTop + 0.02) > 0.12) zE += 0.02;
+    let zE = zP; while (zE < zP + 0.32 && ctx.canopyW(zE + 0.02, yTop + 0.02) > 0.12) zE += 0.02; // até 32 cm: maior virava uma mesa
     const gl = Math.max(0.12, zE - zP + 0.04), gw = hwP(yTop) * 2 + 0.03, by = yTop - 0.04, bz = zP + gl / 2 - 0.05;
     const brow = new THREE.BoxGeometry(gw, 0.025, gl, 12, 1, 6), bp = brow.attributes.position;
     for (let k = 0; k < bp.count; k++) {
-      const u = bp.getX(k) / (gw / 2), y = bp.getY(k) + 0.05 * (1 - u * u), z = bp.getZ(k) + bz, xm = Math.max(0.02, ctx.canopyW(z, y + by) - 0.02);
+      // capuz: arqueado e caindo para a frente, acompanhando o para-brisa (reto, parecia uma tábua sobre o painel)
+      const u = bp.getX(k) / (gw / 2), z = bp.getZ(k) + bz, y = bp.getY(k) + 0.05 * (1 - u * u) - Math.max(0, z - zP) * 0.45, xm = Math.max(0.02, ctx.canopyW(z, y + by) - 0.02);
       bp.setY(k, y); if (z > zP && Math.abs(bp.getX(k)) > xm) bp.setX(k, Math.sign(bp.getX(k)) * xm);
     }
     brow.computeVertexNormals();

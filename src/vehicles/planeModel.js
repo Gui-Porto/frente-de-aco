@@ -475,6 +475,16 @@ export function buildPlane(D) {
         const fa0 = at(zf / L), px = s * (fa0.hw + 0.04);
         add(metricUV(new RoundedBoxGeometry(0.03, hh0 * 2.08, 1.15, 2, 0.012), 1.15), paint, root, px, cy0, zf - 0.3);
         for (const dy of [-0.6, 0, 0.6]) add(new THREE.BoxGeometry(0.05, 0.03, 0.5), ductM, root, s * (fa0.hw + 0.012), cy0 + dy * hh0, zf - 0.45);
+        // furos de sangria da camada-limite na placa (os dois lados) e a rampa variável por dentro, na parede de dentro do
+        // duto, inclinada para o meio e também perfurada — o que se vê olhando a entrada do F-4
+        const holes = [], dot = new THREE.CircleGeometry(0.014, 8);
+        for (let i = 0; i < 7; i++) for (let j = 0; j < 9; j++) for (const f of [1, -1]) holes.push(dot.clone().rotateY(f * s * Math.PI / 2).translate(px + f * 0.017, cy0 + (j - 4) * hh0 * 0.2, zf - 0.08 - i * 0.12));
+        const xr = s * (Math.abs(cx0) - hw0 + th + 0.05), ramp = new THREE.Group(); ramp.position.set(xr, cy0, z0 - 0.62); ramp.rotation.y = s * 0.1; root.add(ramp);
+        add(new THREE.BoxGeometry(0.025, (hh0 - th) * 1.9, 1.1), ductM, ramp);
+        for (let i = 0; i < 6; i++) for (let j = 0; j < 7; j++) holes.push(dot.clone().rotateY(-s * Math.PI / 2).applyMatrix4(new THREE.Matrix4().makeRotationY(s * 0.1)).translate(xr - s * 0.014, cy0 + (j - 3) * (hh0 - th) * 0.25, z0 - 0.2 - i * 0.15));
+        add(mergeGeometries(holes), DM.soot, root);
+        // lábio de metal nu (bordo de ataque da entrada, sem pintura no real)
+        add(tubeLoft(lip.map(q => [q[0] + 0.004, q[1], q[2], q[3] + 0.004, q[4] + 0.004]).slice(0, 4), 0.38), DM.bare, root);
       }
     }
     // cone de cauda sobre os bocais (def.boom: z em frações de L, y/w/h em frações de fuseR): o F-4 real leva o
@@ -721,13 +731,25 @@ export function buildPlane(D) {
     for (const gn of D.guns || []) if (!gn.mount) for (const gx of gn.span) {
       if (gx <= fr) continue;
       const W = GUNS[gn.w], sw = (gx - o.x0) / o.half; if (sw <= 0 || sw >= 1) continue;
-      const pl = station(o, sw, 0), par = sw > sB ? tip : grp, big = W.cal >= 20, r = W.cal / 1000 * (big ? 1.1 : 1.2), out = big ? 0.42 : 0.1;
-      const lt = station(o, sw, 0.04); // um pouco atrás do bordo de ataque (dentro do perfil)
-      for (const [r0, len, m, zt] of [[r, 0.3 + out, DM.steel, pl[2] + out], ...(big ? [[r * 2.4, 0.26, paint, pl[2] + 0.1]] : []), [r * 1.6, 0.05, DM.steel, pl[2] + 0.01]]) {
-        const tb = add(new THREE.CylinderGeometry(m === paint ? r0 * 0.75 : r0, r0, len, 12).rotateX(Math.PI / 2), m, par, pl[0], (pl[1] + lt[1]) / 2, zt - len / 2);
-        tb.castShadow = true;
+      const pl = station(o, sw, 0), par = sw > sB ? tip : grp, big = W.cal >= 20, r = W.cal / 1000 * (big ? 1.1 : 1.2);
+      const lt = station(o, sw, 0.04), y = (pl[1] + lt[1]) / 2, z0 = pl[2], tb = (r0, r1, len, m, zt) => add(new THREE.CylinderGeometry(r1, r0, len, 14).rotateX(Math.PI / 2), m, par, pl[0], y, zt - len / 2);
+      if (big) {
+        // canhão: luva de carenagem saindo do bordo de ataque, cano longo com a mola de recuo (anéis) e o freio de boca
+        const out = 0.46;
+        tb(r * 2.4, r * 1.9, 0.3, paint, z0 + 0.12);                                   // luva (carenagem)
+        tb(r, r, out + 0.3, DM.steel, z0 + out);                                         // cano
+        for (let k = 0; k < 4; k++) tb(r * 1.45, r * 1.45, 0.025, DM.steel, z0 + 0.16 + k * 0.045); // mola de recuo
+        tb(r * 1.5, r * 1.5, 0.09, dark, z0 + out + 0.04);                               // freio de boca
+        add(new THREE.BoxGeometry(r * 3.2, r * 0.5, 0.035), black, par, pl[0], y, z0 + out + 0.015); // janelas do freio
+        add(new THREE.CircleGeometry(r * 0.6, 10), black, par, pl[0], y, z0 + out + 0.042);
+      } else {
+        // metralhadora: tubo de sopro rente ao bordo de ataque e o cano para fora com o quebra-chamas cônico
+        const out = 0.2;
+        tb(r * 2.1, r * 2.1, 0.06, DM.steel, z0 + 0.02);                                 // tubo de sopro
+        tb(r * 1.05, r * 1.05, out + 0.1, DM.steel, z0 + out);                           // cano
+        tb(r * 1.1, r * 1.55, 0.06, dark, z0 + out + 0.05);                              // quebra-chamas
+        add(new THREE.CircleGeometry(r * 0.75, 10), black, par, pl[0], y, z0 + out + 0.052);
       }
-      add(new THREE.CircleGeometry(r * 0.6, 10), black, par, pl[0], pl[1], pl[2] + out + 0.002);
     }
     DT.navLight(add, DM, tip, station(o, 1, 0.3), side); // luz de navegação (vermelha à esquerda, verde à direita)
     return grp;
@@ -771,8 +793,18 @@ export function buildPlane(D) {
         const R = M.pod.r; y = a.yc - a.h - R * (M.pod.blend ? 0.25 : 0.62);
         fairing(R, M.pod.len + 0.25, R * 0.72, x, y, z, paint);
         add(new THREE.CircleGeometry(R * 0.66, 18), black, root, x, y, z - 0.03);                         // boca escura
+        // boca do M61: lábio de aço, luva do cano com as janelas do difusor de gases e a braçadeira dos seis canos
+        add(new THREE.TorusGeometry(R * 0.68, R * 0.05, 6, 24), DM.steel, root, x, y, z - 0.02);
+        if (M.cluster) {
+          const sh = add(DT.latheZ([V2(M.rr * 2.1, -0.32), V2(M.rr * 2.1, -0.02), V2(M.rr * 1.9, 0)], 18), DM.steel, root, x, y, z - 0.05);
+          for (let k = 0; k < 6; k++) { const a2 = k / 6 * Math.PI * 2; add(new THREE.BoxGeometry(0.012, M.rr * 0.7, 0.18), black, root, x + Math.cos(a2) * M.rr * 2.12, y + Math.sin(a2) * M.rr * 2.12, z - 0.2).rotation.z = a2 + Math.PI / 2; }
+          add(new THREE.TorusGeometry(M.rr * 1.5, 0.012, 5, 18), steel, root, x, y, z + 0.02);
+        }
+        // painéis de acesso e as fendas de purga da gôndola (os gases do disparo saem por elas)
+        for (const sd of [1, -1]) for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.012, R * 0.28, 0.07), black, root, x + sd * R * 0.97, y - R * 0.15, z - 0.9 - k * 0.11);
         if (!M.pod.blend) add(new RoundedBoxGeometry(0.07, a.yc - a.h - y + 0.05, M.pod.len * 0.6, 2, 0.02), paint, root, x, (y + a.yc - a.h) / 2 + 0.02, z - M.pod.len * 0.55); // pilone
         for (let k = 0; k < 3; k++) add(new THREE.BoxGeometry(R * 0.5, 0.012, 0.05), black, root, x, y - R * 0.98, z - 0.6 - k * 0.12); // fendas de ventilação
+        if (M.pod.blend) add(new THREE.BoxGeometry(0.01, R * 0.5, M.pod.len * 0.55), black, root, x, y - R * 0.55, z - M.pod.len * 0.5).position.x += 0; // junta do painel
       }
       if (M.fair) {
         // carenagem do canhão sob o nariz: encostada na chapa (antes um tubo solto abaixo dela)
@@ -794,7 +826,7 @@ export function buildPlane(D) {
         for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.004, 0.012, 0.05), black, root, x + Math.cos(k * Math.PI / 2) * M.r * 1.26, y + Math.sin(k * Math.PI / 2) * M.r * 1.26, z + M.len - 0.05); // fendas
         add(new THREE.CylinderGeometry(M.r * 1.45, M.r * 1.45, 0.02, 12).rotateX(Math.PI / 2), DM.steel, root, x, y, z - 0.38); // braçadeira do cano
       }
-      const tip = z + M.len, bl = M.port ? 0.62 : Math.max(M.len, 0) + 0.45; // F-86: o cano sai ~20 cm da calha (antes 4 cm: parecia só um furo)
+      const tip = z + Math.max(M.len, 0.02), bl = M.port ? 0.62 : Math.max(M.len, 0) + 0.45; // F-86: o cano sai ~20 cm da calha (antes 4 cm: parecia só um furo)
       if (M.cluster) for (let i = 0; i < M.cluster; i++) { const t = i / M.cluster * Math.PI * 2; tube(M.r, M.r, bl, steel, x + Math.cos(t) * M.rr, y + Math.sin(t) * M.rr, tip); }
       else for (const dx of M.twin ? [-M.twin / 2, M.twin / 2] : [0]) {
         tube(M.r, M.r, bl, M.port ? DM.steel : steel, x + dx, y, tip); // F-86: aço mais claro, contrasta com a calha escura
@@ -805,6 +837,18 @@ export function buildPlane(D) {
       return [x, y, tip + 0.1];
     });
   });
+  // metralhadoras do capô (Fw 190: MG 131 sobre o motor; span ≤ raio da fuselagem): calha escura no dorso do capô com o
+  // cano saindo na frente dela — antes não eram desenhadas
+  for (const gn of D.guns || []) if (!gn.mount) for (const gx of gn.span) {
+    if (gx > fr) continue;
+    const W = GUNS[gn.w], r = W.cal / 1000 * 1.2;
+    for (const sx of gn.n > 1 && gx > 0 ? [1, -1] : [Math.sign(gx) || 1]) {
+      const zm = L * 0.31, a = at(zm / L), x = sx * Math.abs(gx), y = a.yc + (a.top - a.yc) * Math.sqrt(Math.max(0, 1 - (x / a.hw) ** 2));
+      const n = hullN(a, x, y), tr = flush(slotG(0.07, 0.55), black, x, y, zm - 0.32, n);
+      tube(r * 1.2, r * 1.2, 0.5, steel, x + n.x * r * 0.9, y + n.y * r * 0.9, zm + 0.12);
+      tube(r * 1.25, r * 1.7, 0.06, dark, x + n.x * r * 0.9, y + n.y * r * 0.9, zm + 0.16);
+    }
+  }
   // F-86: placa antichama de aço sem pintura em volta das três bocas de cada lado (bem visível no avião real)
   (D.guns || []).forEach(g => {
     const M = g.mount; if (!M || !M.port || !M.blast) return;
