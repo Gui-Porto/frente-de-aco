@@ -119,7 +119,9 @@ export function updateAirCamera(dt) {
   let sh = S.shake + acam.hit * 0.8;
   if (own) {
     if (v.firing) sh += 0.08 + (v.guns[0].W.cal > 20 ? 0.12 : 0);
-    const as = v.def.clmax / v.def.cla; if (Math.abs(v.alpha) > as * 0.85) sh += 0.25;
+    // buffet gradual de 75% a 100% do ângulo de estol: o limitador segura em 86%, e o degrau liga/desliga em 85%
+    // trepidava a tela a cada frame no W/S
+    const as = v.def.clmax / v.def.cla; sh += 0.18 * clamp((Math.abs(v.alpha) / as - 0.75) / 0.25, 0, 1);
     if (ias > v.def.vne * 0.92) sh += 0.3;
     sh += speedK * 0.04;
     sh += (v.brakeK || 0) * Math.min(1, ias / 200) * 0.35; // freio aerodinâmico aberto: buffet dos painéis

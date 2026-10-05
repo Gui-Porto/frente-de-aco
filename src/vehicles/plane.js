@@ -160,7 +160,9 @@ export class Plane {
   // desmaiado: sem comando nenhum (manche solto, sem disparar); 0..1 para escurecer a tela
   // escurecimento da tela: desmaiado = quase preto (0,85: ainda se vê o vulto; entra em 0,3 s, sai no último 1,2 s);
   // acordado = visão de túnel pela carga, no máximo 0,7 (o centro nunca some antes do desmaio). `gRed`: veio de G negativo (redout)
-  get blackout() { const g = Math.max(0, (this.gStress - 0.2) / 0.8) ** 1.3 * 0.7; return this.koT > 0 ? Math.max(g, Math.min(0.85, this.koAge / 0.3, this.koT / 1.2)) : g; }
+  // + escurecimento imediato pelo G do momento (de 3 G abaixo do limiar até 2 G acima: 0..0,4): puxando no limite
+  // do avião já se sente o G, mesmo sem acumular carga para desmaiar
+  get blackout() { const g = Math.max(Math.max(0, (this.gStress - 0.2) / 0.8) ** 1.3 * 0.7, clamp((this.n - (this.gT ?? 6) + 3) / 5, 0, 1) * 0.4); return this.koT > 0 ? Math.max(g, Math.min(0.85, this.koAge / 0.3, this.koT / 1.2)) : g; }
   physics(dt) {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
@@ -270,9 +272,9 @@ export class Plane {
     // Limiar 6 G (pistão) / 6,5 G (jato): com 5 G o pistão (que vive a ~5,7 G sustentado em curva) apagava mais que o jato.
     // Só puxada forte acumula: pistão a 8 G ~4,5 s até o desmaio, 7 G ~8 s; jato a 9 G ~3,7 s. Negativo (redout): abaixo de −3 G.
     // Curvas seguidas ainda somam, mas solto o manche recupera em ~3 s.
-    const gT = (this.eng.jet ? 6.5 : 6) - (this.wounded ? 1 : 0);
+    const gT = this.gT = (this.eng.jet ? 6.5 : 6) - (this.wounded ? 1 : 0);
     const gx = this.n > gT ? (this.n - gT) * 0.1 + 0.02 : this.n < -3 ? (-3 - this.n) * 0.15 : this.n > gT - 1.5 ? -0.08 : -0.3;
-    if (this.n > gT) this.gRed = false; else if (this.n < -3) this.gRed = true;
+    if (this.n > gT - 2) this.gRed = false; else if (this.n < -3) this.gRed = true;
     // combustível: consumo do motor + vazamentos; seco = motor apaga
     const leak = fuelLeak(this);
     fuelStep(this, this.engineOn ? this.eng.flow : 0, dt);
