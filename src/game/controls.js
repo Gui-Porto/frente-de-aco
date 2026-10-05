@@ -91,9 +91,9 @@ function controlPlane(p, dt) {
   if (isDown('a_thr_up')) { p.throttle = Math.min(1, p.throttle + dt * 0.6); if (p.throttle >= 1) wepHold += dt; } else wepHold = 0;
   if (isDown('a_thr_dn')) { p.throttle = Math.max(0, p.throttle - dt * 0.6); p.wep = false; }
   if (wepHold > 0.5) p.wep = true;
-  // scroll = manete, 1% por passo (para cima acelera; em 100% liga o WEP)
-  if (mouse.wheel < 0) { if (p.throttle >= 1) p.wep = true; p.throttle = Math.min(1, p.throttle - 0.01 * mouse.wheel); }
-  if (mouse.wheel > 0) { p.throttle = Math.max(0, p.throttle - 0.01 * mouse.wheel); p.wep = false; }
+  // scroll = manete, 2% por passo (para cima acelera; em 100% liga o WEP)
+  if (mouse.wheel < 0) { if (p.throttle >= 1) p.wep = true; p.throttle = Math.min(1, p.throttle - 0.02 * mouse.wheel); }
+  if (mouse.wheel > 0) { p.throttle = Math.max(0, p.throttle - 0.02 * mouse.wheel); p.wep = false; }
   if (pressed('a_flaps')) p.cycleFlaps();
   p.airbrake = isDown('a_airbrake');
   const kx = (isDown('a_roll_r') ? 1 : 0) - (isDown('a_roll_l') ? 1 : 0);

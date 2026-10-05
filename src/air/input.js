@@ -50,9 +50,9 @@ export function pilot(p, c, aimDir, dt) {
   // liga o WEP/pós-combustão na hora, e reduzir desliga na hora. O atraso da rotação é do motor (EngineSet).
   if (c.thr > 0) { const was = p.throttle; p.throttle = Math.min(1, p.throttle + dt * THR_RATE * c.thr); if (was >= 1 && p.canBoost) p.wep = true; }
   if (c.thr < 0) { p.throttle = Math.max(0, p.throttle + dt * THR_RATE * c.thr); p.wep = false; }
-  // scroll: 1% por passo; rolar para cima já em 100% liga WEP/PC, para baixo desliga
-  if (c.thrStep > 0) { if (p.throttle >= 1 && p.canBoost) p.wep = true; p.throttle = Math.min(1, p.throttle + 0.01 * c.thrStep); }
-  if (c.thrStep < 0) { p.throttle = Math.max(0, p.throttle + 0.01 * c.thrStep); p.wep = false; }
+  // scroll: 2% por passo; rolar para cima já em 100% liga WEP/PC, para baixo desliga
+  if (c.thrStep > 0) { if (p.throttle >= 1 && p.canBoost) p.wep = true; p.throttle = Math.min(1, p.throttle + 0.02 * c.thrStep); }
+  if (c.thrStep < 0) { p.throttle = Math.max(0, p.throttle + 0.02 * c.thrStep); p.wep = false; }
   if (c.flaps) p.cycleFlaps();
   if (c.gear) p.toggleGear();
   if (c.brake) p.airbrake = !p.airbrake; // H liga/desliga (freio aerodinâmico no ar, freio das rodas no chão)
