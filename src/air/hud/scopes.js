@@ -1,4 +1,4 @@
-import { AIRFIELDS } from '../../world/terrain.js';
+import { activeFields } from '../../world/terrain.js';
 import { S, planes } from '../../core/state.js';
 import { clamp } from '../../core/util.js';
 import { RADAR_MODE, B } from '../battle.js';
@@ -148,7 +148,7 @@ export function tacMap(v, T) {
   if (o && o.base) { const [bx, by] = to(o.base.x, o.base.z); g.fillStyle = C.ally; g.fillRect(bx - 4, by - 4, 8, 8); }
   g.save(); g.beginPath(); g.arc(x, y, R, 0, 7); g.clip();
   // pistas: a sua em azul, a inimiga em vermelho
-  for (const a of AIRFIELDS) { const [ax, ay] = to(a.x, a.z - a.len / 2), [bx, by] = to(a.x, a.z + a.len / 2); g.strokeStyle = a.team === v.team ? C.ally : C.enemy; g.lineWidth = 3; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
+  for (const a of activeFields()) { const [ax, ay] = to(a.x, a.z - a.len / 2), [bx, by] = to(a.x, a.z + a.len / 2); g.strokeStyle = a.team === v.team ? C.ally : C.enemy; g.lineWidth = 3; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
   g.lineWidth = 1;
   const rd = v.sys && v.sys.radar && !v.sys.radar.ranging ? v.sys.radar : null;
   for (const e of planes) {

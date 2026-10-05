@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { scene, camera } from '../core/render.js';
 import { S, S as ST, planes } from '../core/state.js'; // ST: em physics() `S` é a área da asa
 import { V3, QUAT, UP, clamp, lerp, rand, rv } from '../core/util.js';
-import { H, AIRLIMIT, AIRFIELDS } from '../world/terrain.js';
+import { H, AIRLIMIT, activeFields } from '../world/terrain.js';
 import { obstNear, addCrater, treeHit } from '../world/scenery.js';
 import { PLANES, GUNS, MISSILES, RHO, G, beltRounds } from '../data/vehicles.js';
 import { EngineSet, ENGINES } from '../air/systems/engine.js';
@@ -317,7 +317,7 @@ export class Plane {
     if (!this.onGround && this.pos.y - H(this.pos.x, this.pos.z) < 30 && treeHit(this.pos.x, this.pos.y, this.pos.z, this.def.span * 0.33)) { this.crash(); return; }
     for (const b of obstNear(this.pos.x - 6, this.pos.z - 6, this.pos.x + 6, this.pos.z + 6)) if (this.pos.x > b.mn[0] && this.pos.x < b.mx[0] && this.pos.z > b.mn[2] && this.pos.z < b.mx[2] && this.pos.y < b.mx[1]) { this.crash(); return; }
     // fora da arena conta tempo, exceto no corredor de pouso/decolagem das bases (a cabeceira fica perto do limite)
-    const nearBase = AIRFIELDS.some(a => Math.abs(this.pos.x - a.x) < 800 && Math.abs(this.pos.z - a.z) < a.len / 2 + 3500);
+    const nearBase = activeFields().some(a => Math.abs(this.pos.x - a.x) < 800 && Math.abs(this.pos.z - a.z) < a.len / 2 + 3500);
     if (!nearBase && Math.max(Math.abs(this.pos.x), Math.abs(this.pos.z)) > (ST.airLimit || AIRLIMIT)) this.oobT += dt; else this.oobT = 0;
     if (this.oobT > 15 && this.alive) destroyVehicle(this, null, 'oob');
   }

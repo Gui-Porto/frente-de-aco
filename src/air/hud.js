@@ -6,7 +6,7 @@ import { V3, clamp } from '../core/util.js';
 import { drawScore } from '../ui/hud.js';
 import { $ } from '../core/util.js';
 import { B, wear } from './battle.js';
-import { AIRFIELDS } from '../world/terrain.js';
+import { homeField } from '../world/terrain.js';
 import { LOCK, LOCK_LABEL, leadPoint } from './targeting.js';
 import { missiles } from './missiles.js';
 import { acam, CAM_MODES } from './camera.js';
@@ -69,7 +69,7 @@ export function updateAirHUD(dt) {
 
 // ---------- base aérea: marcador da pista e barra de reparo/rearme ----------
 function baseHud(p) {
-  const a = AIRFIELDS.find(f => f.team === p.team), R = B.refit; if (!a) return;
+  const a = homeField(p.team), R = B.refit; if (!a) return;
   _b.set(a.x, a.h + 6, a.z); const d = _b.distanceTo(p.pos);
   const need = wear(p) > 0.04 || p.guns.every(q => q.ammo < q.max * 0.25) || p.fuel < p.fuelMax * 0.2;
   if (d > 900) {
