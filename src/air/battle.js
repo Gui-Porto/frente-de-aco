@@ -80,7 +80,7 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
-    this.weapon = 1; this.marked = null; this.radarPending = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.killCard = this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
+    this.weapon = 1; this.marked = null; this.radarPending = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
@@ -105,7 +105,7 @@ export const B = {
       pl.who.assists = (pl.who.assists || 0) + 1; pl.who.score += 40;
       if (pl === this.player) { this.stats.assists++; showDmg('Assistência · +40', true); }
     }
-    if (k === this.player) { this.stats.kills++; this.flash('ABATIDO', 3); this.killCard = { at: S.now, v, cause, sum: hitSummary(v, k) }; }
+    if (k === this.player) { this.stats.kills++; this.flash('ALVO DESTRUÍDO', 3); }
     // você caiu: quem, com o quê e o que você levou (fica na tela até a próxima vida/fim)
     if (v === this.player) this.deathCard = { at: S.now, k, cause, sum: hitSummary(v, null), kw: k ? hitSummary(v, k).weapons : [] };
     addFeed(k, v, cause);
