@@ -451,6 +451,9 @@ export function buildPlane(D) {
           secs.push([z, s * (xin + hw), fa.yc - 0.12 + 0.07 * t, hw, hh]);
         }
         add(tubeLoft(secs, 0.38), paint, root);
+        // forro de dentro da carenagem (escuro, face para dentro) até onde o duto fecha: a parede de fora não tem face por
+        // dentro e, onde o duto é mais estreito que a boca, via-se através dela
+        add(flipLoft(tubeLoft(secs.slice(0, 8).map(([z, cx, cy, hw, hh]) => [z - 0.01, cx, cy, hw - 0.045, hh - 0.045]), 0.38)), ductM, root);
         const [z0, cx0, cy0, hw0, hh0] = secs[0], th = 0.05, lip = [];
         for (let k = 0; k <= 6; k++) { const a = Math.PI * k / 6, f = (1 - Math.cos(a)) / 2; lip.push([z0 + 0.03 * Math.sin(a), cx0, cy0, hw0 - th * f, hh0 - th * f]); }
         add(tubeLoft(lip, 0.38), paint, root);
@@ -666,7 +669,8 @@ export function buildPlane(D) {
   // fixos entre os comandos, tudo numa malha; cada comando vira uma peça articulada (hinge)
   // r0..r1: trecho da envergadura (a asa vem em dois pedaços: raiz e ponta, que se solta sozinha)
   const cutSurface = (o, cf, moving, parent, fin, r0 = 0, r1 = 1) => {
-    const gs = [wingGeometry(Object.assign({}, o, { sub: { s0: r0, s1: r1, a: 0, b: cf }, cap0: r0 > 0 }))];
+    // deriva: a raiz também fecha — atrás do fim da fuselagem ela passa por cima do bocal e, aberta, via-se dentro dela
+    const gs = [wingGeometry(Object.assign({}, o, { sub: { s0: r0, s1: r1, a: 0, b: cf }, cap0: r0 > 0 || fin }))];
     if (gs[0].userData.bayDoor) wingDoors[o.side > 0 ? 'L' : 'R'] = gs[0].userData.bayDoor;
     const sp = moving.map(m => [m[1], m[2]]).sort((p, q) => p[0] - q[0]);
     let s0 = r0;
