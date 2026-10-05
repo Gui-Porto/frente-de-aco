@@ -80,11 +80,12 @@ export class Plane {
       while (pts.length < g.n) pts.push(...pts.slice(0, g.n - pts.length));
       // cinta escolhida no hangar (jogador) ou padrão/ar-ar (IA)
       const beltName = (this.beltSel && this.beltSel[gi]) || (this.isPlayer ? 'Padrão' : Math.random() < 0.5 ? 'Padrão' : 'Ar-ar');
-      this.guns.push({ W, pts: pts.slice(0, g.n), ammo: g.ammo * g.n, max: g.ammo * g.n, acc: 0, k: 0, heat: 0, jam: false, beltName, belt: beltRounds(W, beltName) });
+      this.guns.push({ W, pts: pts.slice(0, g.n), ammo: g.ammo * g.n, max: g.ammo * g.n, acc: 0, k: 0, heat: 0, heatT: clamp(0.25 * g.ammo / (W.rpm / 60), 4, 8), jam: false, beltName, belt: beltRounds(W, beltName) });
     });
     this.bombs = []; this.rockets = 0;
     if (this.ordOn) { for (const b of D.bombs) for (let i = 0; i < b.n; i++) this.bombs.push(b); this.rockets = D.rockets ? D.rockets.n : 0; }
     else for (const m of [...this.bombMeshes, ...this.rocketMeshes]) m.visible = false;
+    this.ord0 = { bombs: this.bombs.length, rockets: this.rockets }; // carga de saída (o rearme só faz sentido se gastou)
     // estantes de mísseis (uma por tipo) e o selecionado; malhas na mesma ordem do modelo
     let mi = 0;
     this.racks = (D.missiles || []).map(r => ({ w: r.w, M: MISSILES[r.w], n: r.n, max: r.n, meshes: this.missileMeshes.slice(mi, mi += r.n) }));
@@ -528,9 +529,9 @@ export class Plane {
     if (!this.alive || !this.pilot) return;
     const gunsOK = powered(this, 'guns'); // disparo pneumático (Spitfire) ou elétrico (Fw 190)
     for (const g of this.guns) {
-      // aquecimento do cano: ~14 s de rajada contínua travam a arma até esfriar
+      // aquecimento do cano: trava depois de ~1/4 do pente em rajada contínua (4–8 s; antes 14 s para todas) até esfriar
       const shooting = this.firing && g.ammo > 0 && !g.jam && !g.broken && gunsOK;
-      g.heat = clamp(g.heat + (shooting ? dt / 14 : -dt / 9), 0, 1);
+      g.heat = clamp(g.heat + (shooting ? dt / g.heatT : -dt / 9), 0, 1);
       if (g.heat >= 1) g.jam = true; else if (g.jam && g.heat < 0.35) g.jam = false;
       if (!shooting) { g.acc = Math.min(g.acc, 1); continue; }
       g.acc += dt * g.W.rpm / 60 * g.pts.length;
