@@ -195,7 +195,9 @@ function fuselage(D, hole, bays = []) {
   }
   // tampas: cauda sempre; nariz só nos motores a pistão (o jato tem a entrada de ar aberta)
   const cap = (j, flip) => { const ci = pos.length / 3, r = rings[j]; pos.push(0, r[4] * fr, r[0] * L); uv.push(0.5, j ? 1 : 0); for (let k = 0; k < NR; k++) { const a = j * row + k; (k < NR / 2 ? top : bot).push(...(flip ? [ci, a + 1, a] : [ci, a, a + 1])); } };
-  if (!D.jet) { cap(0, false); cap(nOut - 1, true); }
+  // jato: a cauda também fecha (o bocal sai da tampa); aberta, o vão escuro entre a chapa e o bocal parecia uma tomada de ar
+  cap(0, false);
+  if (!D.jet) cap(nOut - 1, true);
   else if (D.intakes === 'side') cap(nOut - 1, true); // nariz fechado (radome); entradas de ar nas laterais
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
@@ -270,6 +272,9 @@ function tubeLoftV(secs) {
   g.setIndex(idx); g.computeVertexNormals(); return g;
 }
 // inverte as faces (o mesmo loft visto por dentro: duto)
+// UV da caixa (0..1 por face) em metros, como o resto da chapa: sem isso os painéis da textura viravam uma grade miúda
+function metricUV(g, size) { const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * size * 0.22, uv.getY(i) * size * 0.22); return g; }
+const clamp01 = v => Math.max(0, Math.min(1, v));
 function flipLoft(g) { const ix = g.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; } g.computeVertexNormals(); return g; }
 // pá de hélice: haste redonda na raiz, corda máxima a ~40% (pá "remo" dos anos 40), ponta arredondada;
 // seção em perfil (NACA, bordo de ataque no sentido do giro) torcida de ~50° na raiz a ~15° na ponta. Raiz em y = 0.
@@ -430,24 +435,29 @@ export function buildPlane(D) {
         for (let k = 0; k <= 6; k++) { const a = Math.PI * k / 6, f = (1 - Math.cos(a)) / 2; lip.push([z0 + 0.03 * Math.sin(a), cx0, cy0, hw0 - th * f, hh0 - th * f]); }
         add(tubeLoft(lip, 0.38), paint, root);
         // duto: do lábio para trás e para dentro (centro do motor), seção ficando redonda; os primeiros 40% claros
-        const ex = s * (fr * 0.36 * 1.05), ey = -fr * 0.15, R = fr * 0.33, duct = [];
+        // carenagem externa na estação z (borda de fora e meia-altura): o duto não pode passar dela
+        const podAt = z => { const t = clamp01((zf - z) / (zf - zb)), i = Math.min(11, Math.floor(t * 12)), f = t * 12 - i, A = secs[i], B = secs[i + 1]; return { out: Math.abs(A[1] + (B[1] - A[1]) * f) + A[3] + (B[3] - A[3]) * f, hh: A[4] + (B[4] - A[4]) * f }; };
+        const DL = 1.9, ey = -fr * 0.15, R = fr * 0.33, duct = [];
         for (let k = 0; k <= 12; k++) {
-          const t = k / 12, e = t * t * (3 - 2 * t), hw = (hw0 - th) * (1 - e) + R * e, hh = (hh0 - th) * (1 - e) + R * e, z = z0 - t * 3.0;
-          // o duto vai para o eixo do motor, mas sem entrar na fuselagem: dentro dele a chapa clara de fora aparecia
-          const cx = s * Math.max(Math.abs(cx0 + (ex - cx0) * e), at(z / L).hw + hw + 0.012);
-          duct.push([z, cx, cy0 + (ey - cy0) * e, hw, hh, 0.38 + 0.62 * e]);
+          const t = k / 12, e = t * t * (3 - 2 * t), z = z0 - t * DL, pa = podAt(z), xin = at(z / L).hw + 0.012, xout = pa.out - th - 0.01;
+          // o duto vai para o eixo do motor, mas sem entrar na fuselagem (a chapa clara de fora aparecia) nem sair
+          // pela carenagem (a face do compressor furava a lateral)
+          let hw = (hw0 - th) * (1 - e) + R * e; const hh = Math.min((hh0 - th) * (1 - e) + R * e, pa.hh - th - 0.01);
+          hw = Math.min(hw, (xout - xin) / 2);
+          const cx = s * Math.min(Math.max(Math.abs(cx0), xin + hw), xout - hw);
+          duct.push([z, cx, cy0 + (ey - cy0) * e * 0.5, hw, hh, 0.38 + 0.62 * e]);
         }
         const dl = (a, b) => flipLoft(tubeLoftV(duct.slice(a, b)));
         add(dl(0, 6), ductM, root); add(dl(5, 13), soot, root);
-        const fz = z0 - 3.0, fc = new THREE.Vector3(duct[12][1], duct[12][2], fz);
-        add(new THREE.CircleGeometry(R * 1.02, 24), soot, root, fc.x, fc.y, fz - 0.05);
+        const fz = z0 - DL, fc = new THREE.Vector3(duct[12][1], duct[12][2], fz), Rf = Math.min(duct[12][3], duct[12][4]);
+        { const R = Rf; add(new THREE.CircleGeometry(R * 1.02, 24), soot, root, fc.x, fc.y, fz - 0.05);
         add(new THREE.ConeGeometry(R * 0.32, R * 0.6, 18).rotateX(Math.PI / 2), fanM, root, fc.x, fc.y, fz + R * 0.2);
         const bl = [];
         for (let i = 0; i < 21; i++) bl.push(new THREE.BoxGeometry(R * 0.15, R * 0.72, 0.02).rotateY(0.5).translate(0, R * 0.62, 0).rotateZ(i / 21 * Math.PI * 2));
-        add(mergeGeometries(bl), fanM, root, fc.x, fc.y, fz);
+        add(mergeGeometries(bl), fanM, root, fc.x, fc.y, fz); }
         // placa separadora: chapa vertical na fresta, um pouco à frente da boca, com os montantes até a fuselagem
         const fa0 = at(zf / L), px = s * (fa0.hw + 0.04);
-        add(new RoundedBoxGeometry(0.03, hh0 * 2.08, 1.15, 2, 0.012), paint, root, px, cy0, zf - 0.3);
+        add(metricUV(new RoundedBoxGeometry(0.03, hh0 * 2.08, 1.15, 2, 0.012), 1.15), paint, root, px, cy0, zf - 0.3);
         for (const dy of [-0.6, 0, 0.6]) add(new THREE.BoxGeometry(0.05, 0.03, 0.5), ductM, root, s * (fa0.hw + 0.012), cy0 + dy * hh0, zf - 0.45);
       }
     }
@@ -742,11 +752,15 @@ export function buildPlane(D) {
       // estabilizador todo móvel: a metade inteira gira num eixo lateral a ~40% da corda da raiz. A raiz fica fora da
       // chapa com folga para o giro (a fuselagem afina para trás: vale a maior largura ao longo da corda da raiz),
       // a ponta no mesmo lugar — antes a raiz nascia no eixo do avião e varria a fuselagem ao defletir
-      let xr = 0; for (let k = 0; k <= 8; k++) { const p = station(o, 0, k / 8); for (const dy of [-0.18, 0, 0.18]) xr = Math.max(xr, skinW(p[2], p[1] + dy * o.c0)); }
-      const k0 = Math.max(0, (xr + 0.03 - o.x0) / o.half), c0 = chordAt(o, k0); // mesma planta, só sem o trecho de dentro
+      // raiz rente à chapa NO EIXO (40% da corda): para a frente ela fica por dentro da fuselagem (escondida, gira lá
+      // dentro); antes a folga valia a parte mais larga da corda e a raiz ficava descolada, com vão visível
+      const pq = station(o, 0, 0.4); let xr = 0; for (const dy of [-0.06, 0, 0.06]) xr = Math.max(xr, skinW(pq[2], pq[1] + dy * o.c0));
+      const k0 = Math.max(0, (xr + 0.006 - o.x0) / o.half), c0 = chordAt(o, k0); // mesma planta, só sem o trecho de dentro
       Object.assign(o, { x0: o.x0 + k0 * o.half, zq0: o.zq0 - o.sweep * k0, y0: o.y0 + k0 * o.half * Math.tan(o.dih), c0, sweep: o.sweep * (1 - k0), half: o.half * (1 - k0) });
       const P0 = new THREE.Vector3(...station(o, 0, 0.4)), pivot = new THREE.Group(); pivot.position.copy(P0); tail.add(pivot);
       add(wingGeometry(o).translate(-P0.x, -P0.y, -P0.z), pair, pivot);
+      // carenagem do eixo na chapa (fixa): cobre a junta raiz/fuselagem, como nos reais
+      const fb = add(new THREE.SphereGeometry(1, 16, 10), paint, tail, s * (xr - 0.02), P0.y, P0.z + o.c0 * 0.05); fb.scale.set(0.07, 0.07, Math.min(0.45, o.c0 * 0.25));
       surf['elev' + sd] = { pivot, axis: new THREE.Vector3(1, 0, 0), max: 12 * deg, base: new THREE.Quaternion() };
     } else cutSurface(o, 0.68, [['elev' + sd, Math.max(0.04, clearS(o, 0.68)), 0.95, 25]], tail);
   }

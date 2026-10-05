@@ -18,7 +18,7 @@ export const latheZ = (pts, seg = 28) => new THREE.LatheGeometry(pts, seg).rotat
 export function nozzle(add, M, par, x, y, ze, r, n = {}) {
   const len = n.len || 0.55;
   // carenagem: do raio da fuselagem (um pouco maior) para o lábio, com bordo arredondado
-  add(latheZ([V(r * 0.9, ze - 0.005), V(r * 0.97, ze + 0.01), V(r, ze + 0.05), V(r * 1.04, ze + len * 0.6), V(r * 1.08, ze + len)]), n.petals ? M.dark : M.heat, par, x, y, 0);
+  add(latheZ([V(r * 0.9, ze - 0.005), V(r * 0.97, ze + 0.01), V(r, ze + 0.05), V(r * 1.04, ze + len * 0.6), V(r * 1.08, ze + len)]), M.heat, par, x, y, 0); // metal nu queimado (escuro, de cima, parecia uma tomada de ar)
   // parede interna (escura) até o fundo
   add(latheZ([V(r * 0.78, ze + len * 1.3), V(r * 0.86, ze + 0.06), V(r * 0.9, ze - 0.004)]), M.soot, par, x, y, 0);
   // cone de saída da turbina (aponta para trás) e fundo
