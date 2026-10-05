@@ -43,19 +43,20 @@ export class Missile {
   }
   // Alvo rente ao chão (como no WT): o buscador se embaralha. Semiativo: o eco do solo e o reflexo do alvo no chão
   // (multipercurso) puxam a mira para baixo, entre o alvo e a "imagem" dele, com tremor — o míssil oscila, às vezes
-  // perde o alvo ou mergulha no chão. Pior quanto mais baixo o alvo (< 150 m) e quanto mais o míssil olha para baixo.
-  // Infravermelho sofre pouco (só o fundo quente do solo, < 60 m): tremor lateral pequeno.
+  // perde o alvo ou mergulha no chão. Pior quanto mais baixo o alvo (< 50 m) e quanto mais o míssil olha para baixo.
+  // Infravermelho sofre pouco (só o fundo quente do solo, < 25 m): tremor lateral pequeno.
   clutter(tg, sarh, h) {
-    const agl = tg.pos.y - H(tg.pos.x, tg.pos.z), top = sarh ? 150 : 60;
+    const agl = tg.pos.y - H(tg.pos.x, tg.pos.z), top = sarh ? 50 : 25;
     if (!tg.eng || agl >= top) return tg.pos;
     const c = 1 - Math.max(0, agl) / top, look = clamp((this.pos.y - tg.pos.y) / Math.max(1, this.pos.distanceTo(tg.pos)) * 3 + 0.5, 0.3, 1);
     this.wob = (this.wob || rand(0, 9)) + h * rand(2, 5);
     const w = Math.sin(this.wob) * 0.5 + Math.sin(this.wob * 2.7) * 0.5;
     if (sarh) {
-      if (Math.random() < h * 0.35 * c * look) this.tracking = false; // sumiu no eco do solo
-      return _cl.copy(tg.pos).add(_cl2.set(w * 14 * c, -(Math.max(0, agl) + 6) * c * look * (0.55 + 0.45 * w), Math.sin(this.wob * 1.9) * 14 * c));
+      // a puxada para baixo oscila entre quase nada e ~60% da altura: parte das vezes o míssil ainda acerta
+      if (Math.random() < h * 0.18 * c * look) this.tracking = false; // sumiu no eco do solo
+      return _cl.copy(tg.pos).add(_cl2.set(w * 8 * c, -(Math.max(0, agl) + 4) * c * look * (0.3 + 0.3 * w), Math.sin(this.wob * 1.9) * 8 * c));
     }
-    return _cl.copy(tg.pos).add(_cl2.set(w * 6 * c, 0, Math.sin(this.wob * 1.9) * 6 * c));
+    return _cl.copy(tg.pos).add(_cl2.set(w * 4 * c, 0, Math.sin(this.wob * 1.9) * 4 * c));
   }
   update(dt) {
     const M = this.M; this.t += dt;
