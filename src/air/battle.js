@@ -111,6 +111,7 @@ export const B = {
     addFeed(k, v, cause);
     // explosão no ar quando a estrutura cede (o resto cai em chamas até o solo)
     if (cause === 'structure' || cause === 'wing' || cause === 'tail' || cause === 'fire') {
+      if (v.breakup) v.breakup(cause === 'fire' || cause === 'structure' ? 0.55 : 0.3); // estrutura cedendo: o avião se desmancha
       fxExplosion(v.pos.clone(), 1.4);
       for (let i = 0; i < 14; i++) spawnP({ pos: v.pos.clone(), vel: rv(25).add(v.vel), life: rand(1, 2.2), size: .6, size1: .2, tex: TEX.fire, add: true, color: 0xff9a40, grav: 9.8, drag: .25 });
     }

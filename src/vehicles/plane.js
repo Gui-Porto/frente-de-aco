@@ -95,6 +95,7 @@ export class Plane {
     if (D.rwr) this.sys.rwr = new Rwr(D.rwr);
     if (D.maw) this.sys.maw = new Maw(D.maw);
     // componentes internos, combustível, contramedidas e extintor
+    this.loose = []; this.root.traverse(o => { if (o.userData.loose) this.loose.push(o); }); this.canopyOff = false;
     this.mods = planeModules(D); this.fitPilot(); this.fitGuns(); this.fuel = this.fuelMax = fuelOf(D); fuelInit(this, this.fuelMax); this.wounded = false;
     // cada motor com a própria integridade (o F-4 volta com um só); hp.engine = média, para HUD/fumaça
     this.engs = Array.from({ length: D.engines || 1 }, (_, i) => ({ hp: D.hpParts.engine, on: true, x: this.mods['eng' + i] ? this.mods['eng' + i].c[0] : 0 }));
@@ -160,6 +161,7 @@ export class Plane {
   physics(dt) {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
+    if (!this.alive && this.pos.y - H(this.pos.x, this.pos.z) > 20) this.shedStep(dt); // abatido, caindo: desmancha no ar
     if (this.koT > 0) { this.elev = this.ail = this.rud = 0; this.firing = false; }
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
     const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.racks.reduce((s, r) => s + r.n * r.M.mass, 0) - (this.fuelMax - this.fuel);
@@ -611,10 +613,19 @@ export class Plane {
   }
   // acerto: o piloto ouve cada impacto na chapa; lascas saem do ponto de entrada (granada arranca mais)
   // explosão (blastR): rombos e painéis grandes arrancados (fxBlast); tiro: furo exato onde entrou
-  hitFx(lp, he, ld, blastR) {
+  hitFx(lp, he, ld, blastR, dmg = 1, am = null) {
     if (this.isPlayer) sndHit(he);
-    if (lp && blastR) return fxBlast(this, lp, blastR);
-    const at = lp && fxHole(this, lp, ld, he);
+    if (lp && blastR) {
+      // explosão: as peças soltas no raio levam o estrago (capota, painéis, tanques…) e os rombos
+      _pt.set(lp[0], lp[1], lp[2]).applyMatrix4(this.root.matrixWorld);
+      for (const o of this.loose.slice()) { const d = o.getWorldPosition(_pw).distanceTo(_pt); if (d < blastR * 1.2) this.hurtPiece(o, dmg * (1 - d / (blastR * 1.2)), true); }
+      return fxBlast(this, lp, blastR);
+    }
+    // explosiva com a estrutura já castigada arranca o painel (aparece o interior)
+    const weak = he && this.hp && Object.keys(this.hp).some(k => this.hp[k] < this.maxHp[k] * 0.55);
+    const hit = lp && fxHole(this, lp, ld, he, 3, 0, { cal: am && am.cal, inc: am && am.inc > 0.2, pen: am && am.pen, panel: he && (weak || Math.random() < 0.15) });
+    if (hit) this.hurtPiece(hit.object, dmg, he);
+    const at = hit && hit.point;
     if (at && he && Math.random() < 0.3) fxFlakes(this, at, 1, true);
     if (lp && (he || Math.random() < 0.4)) fxFlakes(this, _pt.set(lp[0], lp[1], lp[2]).applyMatrix4(this.root.matrixWorld), he ? 2 + Math.floor(Math.random() * 3) : 1);
   }
@@ -627,6 +638,39 @@ export class Plane {
     const d = spawnDebris(obj, this.vel.clone().add(rv(5)), rv(5), [Math.max(h.x, 0.05), Math.max(h.y, 0.05), Math.max(h.z, 0.05)], [c.x, c.y, c.z], mass);
     d.body.setLinearDamping(mass < 100 ? 1.4 : 0.7); // arrasto: peça leve freia rápido e fica para trás
     return d;
+  }
+  // peças soltas (userData.loose: capota, radome, tanques, painéis de acesso, freios): o acerto na malha sobe até a
+  // peça e gasta a vida dela; zerou, ela se solta e cai como destroço
+  hurtPiece(obj, dmg, he) {
+    let o = obj; while (o && o !== this.root && !o.userData.loose) o = o.parent;
+    if (!o || o === this.root || o.userData.off) return;
+    o.userData.lhp = (o.userData.lhp ?? o.userData.loose.hp) - dmg * (he ? 1.6 : 1);
+    if (o.userData.lhp <= 0) this.shedPiece(o);
+  }
+  shedPiece(o) {
+    if (o.userData.off || !o.parent) return; o.userData.off = true;
+    const L = o.userData.loose; this.loose = this.loose.filter(x => x !== o);
+    if (L.k === 'brake' && this.brakes) this.brakes = this.brakes.filter(b => b.pivot !== o);
+    if (L.k === 'canopy') this.canopyOff = true;
+    const at = o.getWorldPosition(new V3());
+    if (L.k === 'tank' && Math.random() < 0.3) fxBurn(at.clone(), 1.6);
+    fxFlakes(this, at, L.k === 'hatch' ? 1 : 2, true);
+    const d = this.detach(o, L.mass);
+    // a capota e os painéis saem levantados pelo vento relativo
+    if (d && d.body && (L.k === 'canopy' || L.k === 'hatch')) { this.axes(); const v = d.body.linvel(); d.body.setLinvel({ x: v.x + _pu.x * 8, y: v.y + _pu.y * 8, z: v.z + _pu.z * 8 }, true); }
+  }
+  // avião morto ainda no ar: vai soltando pedaços na queda (mais rápido pegando fogo); k = chance de cada peça sair já
+  breakup(k = 0.5) {
+    for (const o of this.loose.slice()) if (Math.random() < k) this.shedPiece(o);
+    for (const n in this.surf || {}) if (Math.random() < k * 0.5 && this.mods[n]) this.ripSurface(this.mods[n]);
+  }
+  shedStep(dt) {
+    if ((this.shedT = (this.shedT ?? rand(0.4, 1)) - dt * (this.fire > 0 ? 2 : 1)) > 0) return;
+    this.shedT = rand(0.6, 1.6);
+    const opts = this.loose.map(o => () => this.shedPiece(o));
+    for (const n in this.surf || {}) opts.push(() => this.mods[n] && this.ripSurface(this.mods[n]));
+    for (const sd of ['L', 'R']) if (this.tipOn[sd] && this.wingOn[sd] && Math.random() < 0.3) opts.push(() => this.breakTip(sd));
+    if (opts.length) opts[Math.floor(Math.random() * opts.length)]();
   }
   // superfícies articuladas que estão dentro de `grp` deixam de ser animadas (vão embora com ele)
   dropSurfIn(grp) { for (const n in this.surf || {}) { let o = this.surf[n].pivot; while (o && o !== grp) o = o.parent; if (o) delete this.surf[n]; } }

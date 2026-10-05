@@ -95,7 +95,8 @@ export function drops(add, M, root, D, at, wingCfg, wingL, wingR, sB) {
         par = T.ws > sB ? (side > 0 ? wingL : wingR).userData.tip : side > 0 ? wingL : wingR;
         x = p0[0]; top = p0[1] - tw; y = top - r - (T.ph ?? 0.14); z = p0[2] + (T.dz || 0); pz = p0[2]; pl = Math.min(c * 0.55, T.len * 0.45);
       }
-      for (const g of dropTank(T)) add(g, M.tank, par, x, y, z);
+      const tk = new THREE.Group(); par.add(tk); tk.userData.loose = { k: 'tank', hp: 7, mass: 90 }; // alijável: peça solta
+      for (const g of dropTank(T)) add(g, M.tank, tk, x, y, z);
       add(new THREE.BoxGeometry(0.07, top - y - r + 0.06, pl), M.skin, par, x, (top + y + r) / 2, pz);       // pilone
     }
   }

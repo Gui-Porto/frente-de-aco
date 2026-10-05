@@ -117,7 +117,7 @@ export function hitPlaneModules(pl, lp, ld, am, dmg, pen, by, shell) {
   pl.damage(shell, dmg * 0.55, by, false); // furos na estrutura
   recordHit(pl, 'skin_' + shell, SKIN[shell], 'skin', dmg * 0.55, by, am);
   // lascas de chapa: granada explosiva arranca mais; bala comum de vez em quando
-  if (pl.hitFx) pl.hitFx(lp, (am.tnt || am.he || 0) > 0, ld); // lascas de chapa e o som do acerto (plane.js)
+  if (pl.hitFx) pl.hitFx(lp, (am.tnt || am.he || 0) > 0, ld, 0, dmg, am); // marcas, lascas, peças soltas e o som do acerto (plane.js)
   if (pl.gone) return;
   // até onde o projétil vai por dentro: granada de espoleta explode logo atrás da chapa; perfurante (e a APHE,
   // que explode depois) atravessa metros de avião conforme a perfuração
@@ -145,7 +145,7 @@ export function hitPlaneModules(pl, lp, ld, am, dmg, pen, by, shell) {
 }
 // Explosão próxima (míssil, bomba, granada antiaérea) em coordenadas locais
 export function blastPlaneModules(pl, lx, ly, lz, R, dmg, by, am = { name: 'Explosão', tnt: 1 }) {
-  if (pl.hitFx && dmg > 1) pl.hitFx([lx, ly, lz], true, null, R);
+  if (pl.hitFx && dmg > 1) pl.hitFx([lx, ly, lz], true, null, R, dmg);
   for (const m of Object.values(pl.mods)) { const dd = boxDist(m, lx, ly, lz); if (dd < R) applyMod(pl, m, dmg * (1 - dd / R), by, am); }
 }
 const inside = (m, p) => p[0] > m.mn[0] && p[0] < m.mx[0] && p[1] > m.mn[1] && p[1] < m.mx[1] && p[2] > m.mn[2] && p[2] < m.mx[2];

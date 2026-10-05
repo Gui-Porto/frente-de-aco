@@ -418,7 +418,8 @@ export function buildPlane(D) {
       // radome em ogiva (curto, como o do APQ-120) e entradas laterais em loft, com placa separadora da camada-limite
       const at = fuseG.userData.at, an = at(0.449), R = an.hw * 0.97, RL = L * 0.1, prof = [];
       for (let i = 0; i <= 14; i++) { const t = i / 14; prof.push(new THREE.Vector2(Math.max(R * Math.pow(1 - t, 0.6) * (1 + 0.12 * Math.sin(Math.PI * t)), 0.001), t * RL)); } // ogiva com ponta
-      add(new THREE.LatheGeometry(prof, 28).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x6a6e66, roughness: .55 }), root, 0, an.yc, L * 0.45 - 0.02);
+      const rdm = new THREE.Group(); root.add(rdm); rdm.userData.loose = { k: 'nose', hp: 12, mass: 45 }; // radome: peça solta
+      add(new THREE.LatheGeometry(prof, 28).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x6a6e66, roughness: .55 }), rdm, 0, an.yc, L * 0.45 - 0.02);
       // entradas laterais: carenagem externa em loft afastada da chapa (fresta da placa separadora), lábio
       // arredondado de 5 cm e o duto POR DENTRO (paredes com face para dentro) que desce e vai para o eixo do
       // motor, de seção retangular arredondada a circular, até a face do compressor com cubo e pás
@@ -480,14 +481,16 @@ export function buildPlane(D) {
   const fat = fuseG.userData.at, cAt = fat(C.z), cy = cAt.top - 0.06, fex = jet ? 1 : 2 / 2.4;
   // altura da chapa (seção superelíptica da fuselagem) sob o ponto (x, z) da capota, no referencial dela
   const sf = (x, z) => { const a = fat((czc + z) / L), c = Math.min(1, Math.abs(x) / a.hw) ** (1 / fex); return a.yc + (a.top - a.yc) * Math.sqrt(Math.max(0, 1 - c * c)) ** fex - cy - 0.012; };
-  add(canopyGeometry(C.len, C.w, C.h, C.flat, sf), glass, root, 0, cy, czc);
+  // capota num grupo próprio (vidro, arcos e espelho): peça solta — sai inteira (userData.loose, plane.js)
+  const canopyG = new THREE.Group(); root.add(canopyG); canopyG.userData.loose = { k: 'canopy', hp: 9, mass: 60 };
+  add(canopyGeometry(C.len, C.w, C.h, C.flat, sf), glass, canopyG, 0, cy, czc);
   const frameM = jet ? paint : dark;
-  for (const t of C.frames) add(canopyFrame(C.len, C.w, C.h, t, jet ? 0.016 : 0.02, C.flat, sf), frameM, root, 0, cy, czc);
+  for (const t of C.frames) add(canopyFrame(C.len, C.w, C.h, t, jet ? 0.016 : 0.02, C.flat, sf), frameM, canopyG, 0, cy, czc);
   for (const sd of [1, -1]) add(canopySill(C.len, C.w, C.h, C.flat, sf, sd, jet ? 0.022 : 0.026), frameM, root, 0, cy, czc);
   // jato: espelho retrovisor no topo do arco do para-brisa, com o suporte
   if (jet) {
     const P = [0, 0, 0]; canopyPoint(C.len, C.w, C.h, C.frames[0] + 0.015, Math.PI / 2, P, C.flat, sf);
-    const mir = new THREE.Group(); mir.position.set(0, cy + P[1] - 0.045, czc + P[2] - 0.03); mir.rotation.x = -0.15; root.add(mir);
+    const mir = new THREE.Group(); mir.position.set(0, cy + P[1] - 0.045, czc + P[2] - 0.03); mir.rotation.x = -0.15; canopyG.add(mir);
     add(new RoundedBoxGeometry(0.13, 0.042, 0.012, 2, 0.005), frameM, mir);
     add(new THREE.PlaneGeometry(0.12, 0.033).rotateY(Math.PI), DM.dark, mir, 0, 0, -0.007);
     add(new THREE.CylinderGeometry(0.005, 0.005, 0.03, 5), frameM, mir, 0, 0.03, 0.004);
@@ -665,10 +668,12 @@ export function buildPlane(D) {
   // carenagem torneada: cauda afinando, corpo, frente arredondada até a boca (raio rf) em zf; comprimento len
   const fairing = (R, len, rf, x, y, zf, m) => { const P = [], z0 = zf - len; for (let i = 0; i <= 16; i++) { const t = i / 16, z = z0 + t * len; const r = t < 0.3 ? R * Math.sin(t / 0.3 * Math.PI / 2) ** 0.7 : t > 0.85 ? R - (R - rf) * ((t - 0.85) / 0.15) ** 1.6 : R; P.push(V2(Math.max(r, 0.004), z)); } return add(DT.latheZ(P, 20), m, root, x, y, 0); };
   const hullPatch = (th0, th1, z0, z1, off) => { // pedaço da chapa entre os ângulos th0..th1 e z0..z1, afastado `off` da chapa
-    const NU = 8, NV = 6, pos = [], idx = [];
-    for (let v = 0; v <= NV; v++) { const z = z0 + (z1 - z0) * v / NV, a = at(z / L); for (let u = 0; u <= NU; u++) { const th = th0 + (th1 - th0) * u / NU, c = Math.cos(th), sn = Math.sin(th), hh = sn >= 0 ? a.top - a.yc : a.h; const px = a.hw * c, py = a.yc + hh * sn, n = hullN(a, px, py); pos.push(px + n.x * off, py + n.y * off, z); } }
+    const NU = 8, NV = 6, pos = [], uvs = [], idx = [];
+    for (let v = 0; v <= NV; v++) { const z = z0 + (z1 - z0) * v / NV, a = at(z / L); for (let u = 0; u <= NU; u++) { const th = th0 + (th1 - th0) * u / NU, c = Math.cos(th), sn = Math.sin(th), hh = sn >= 0 ? a.top - a.yc : a.h; const px = a.hw * c, py = a.yc + hh * sn, n = hullN(a, px, py); pos.push(px + n.x * off, py + n.y * off, z);
+      // UV da própria fuselagem (arco a partir do ventre, em metros): a tampa continua a pintura e os painéis de onde saiu
+      uvs.push(Math.acos(Math.max(-1, Math.min(1, -sn))) / Math.PI * Math.PI * (a.hw + (a.top - a.yc + a.h) / 2) * 0.5 * 0.22, z * 0.22); } }
     for (let v = 0; v < NV; v++) for (let u = 0; u < NU; u++) { const p0 = v * (NU + 1) + u, p1 = p0 + 1, p2 = p0 + NU + 1, p3 = p2 + 1; idx.push(p0, p1, p2, p1, p3, p2); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array(pos.length / 3 * 2).fill(0), 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
   };
   const flipG = g => { const ix = g.index.array; for (let k = 0; k < ix.length; k += 3) { const t = ix[k + 1]; ix[k + 1] = ix[k + 2]; ix[k + 2] = t; } g.computeVertexNormals(); return g; };
   const gunPts = (D.guns || []).map(g => {
@@ -732,7 +737,7 @@ export function buildPlane(D) {
     if (b.ws != null) {
       // asa (F-4E): placa sob o intradorso, nervuras e atuador
       const o = wingCfg(sd), p = station(o, b.ws, b.cf), c = chordAt(o, b.ws), x = p[0], z = p[2] + b.len / 2, y = p[1] - (o.t0 + (o.t1 - o.t0) * b.ws) * c * 0.5 - 0.02, par = sd > 0 ? wingL : wingR;
-      piv.position.set(x, y, z); par.add(piv);
+      piv.position.set(x, y, z); par.add(piv); piv.userData.loose = { k: 'brake', hp: 6, mass: 12 };
       add(new RoundedBoxGeometry(b.w, 0.03, b.len, 2, 0.01).translate(0, 0, -b.len / 2), under, piv);
       for (const k of [-0.3, 0, 0.3]) add(new THREE.BoxGeometry(0.02, 0.05, b.len * 0.9), ductM, piv, k * b.w, 0.035, -b.len / 2);
       add(new THREE.CylinderGeometry(0.018, 0.018, 0.3, 6), steel, piv, 0, 0.15, -b.len * 0.55);
@@ -745,7 +750,7 @@ export function buildPlane(D) {
     const thM = side ? (b.ax > 0 ? Math.atan2(b.ay, 1) : Math.PI - Math.atan2(b.ay, 1)) : -Math.PI / 2 + b.ax * 0.9;
     const t0 = thM - dth, t1 = thM + dth, cth = Math.cos(thM), sth = Math.sin(thM), hhM = sth >= 0 ? a.top - a.yc : a.h;
     const P0 = new THREE.Vector3(a.hw * cth, a.yc + hhM * sth, z0);
-    piv.position.copy(P0); root.add(piv);
+    piv.position.copy(P0); root.add(piv); piv.userData.loose = { k: 'brake', hp: 6, mass: 12 };
     const outer = flipG(hullPatch(t0, t1, z0, z1, 0.012)), inner = hullPatch(t0, t1, z0, z1, -0.008); // o loft sai com a face para dentro
     for (const g of [outer, inner]) g.translate(-P0.x, -P0.y, -P0.z);
     add(outer, side ? paint : under, piv); add(inner, ductM, piv);
@@ -755,6 +760,22 @@ export function buildPlane(D) {
     const act = add(new THREE.CylinderGeometry(0.02, 0.02, 0.32, 6), steel, piv, -nI.x * 0.17, -nI.y * 0.17, -b.len * 0.6); act.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), nI);
     add(flipG(hullPatch(t0, t1, z0, z1, -0.02)), ductM, root);                                                 // vão
     brakes.push({ pivot: piv, axis: side ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0), max: -(side ? sd : 1) * b.deg * deg });
+  }
+  // ---- painéis de acesso (jatos): tampa por cima de um fundo escuro com nervuras (fica na fuselagem). Peças soltas:
+  // acerto/explosão arranca a tampa e aparece o interior — o avião vai se desmanchando (userData.loose, plane.js)
+  if (jet) {
+    // fora da cabine e longe da insígnia da fuselagem (a tampa cobriria o decalque)
+    const dz = (D.marks && D.marks.decalZ) ?? -0.2, hatchZ = [0.33, 0.06, -0.12, -0.3].filter(zf => { const z = zf * L; return (z < hole.z0 - 0.3 || z > hole.z1 + 0.3) && Math.abs(zf - dz) > 0.11; });
+    const ribs = [], hz = Math.min(0.62, L * 0.045), dth = 0.2;
+    for (const zf of hatchZ) for (const sd of [1, -1]) {
+      const thc = sd > 0 ? 0.85 : Math.PI - 0.85, z0 = zf * L + hz / 2, z1 = zf * L - hz / 2, t0 = thc - dth, t1 = thc + dth;
+      const pick = flipG; // o loft sai com a face para dentro nos dois lados
+      add(pick(hullPatch(t0, t1, z0, z1, 0.004)), ductM, root);
+      for (const k of [-0.5, 0, 0.5]) { const a = at(zf), th = thc + k * dth, c = Math.cos(th), sn = Math.sin(th), hh = sn >= 0 ? a.top - a.yc : a.h; ribs.push(new THREE.BoxGeometry(0.01, 0.01, hz * 0.9).translate(a.hw * c, a.yc + hh * sn, zf * L)); }
+      const hg = new THREE.Group(); root.add(hg); hg.userData.loose = { k: 'hatch', hp: 4, mass: 6 };
+      add(pick(hullPatch(t0, t1, z0, z1, 0.011)), paint, hg);
+    }
+    if (ribs.length) add(mergeGeometries(ribs), steel, root);
   }
   // empenagem: estabilizador e deriva também com perfil
   const tail = new THREE.Group(); root.add(tail);
@@ -864,6 +885,7 @@ export function buildPlane(D) {
   // une as peças estáticas por material (menos draw calls); superfícies que se soltam ou somem ficam à parte
   const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes]);
   for (const grp of [root, wingL, wingR, wingL.userData.tip, wingR.userData.tip, tail]) mergeStatic(grp, keep);
+  root.traverse(o => { if (o.userData.loose) mergeStatic(o, keep); });
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
   return { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };
 }
