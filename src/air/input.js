@@ -70,10 +70,14 @@ export function pilot(p, c, aimDir, dt) {
     // de asa rolavam o avião — "bambo" a cada W/S, pior nos de hélice.
     const r = 1 - Math.exp(-dt * 6);
     const glim = Math.min(p.def.glim - 1.5, 10);
-    p.elev += (p.limitElev(c.pitch, { glim }) - p.elev) * r;           // sem estol e dentro do G, como o instrutor
+    // sem estol e dentro do G, como o instrutor: a rampa vai no comando e o limitador por cima, sem atraso
+    // (limitador dentro da rampa: o F-86 a 1200 km/h quicava 6,9↔9,6 G no W — "sobe e desce" no limite)
+    p.pitchCmd = (p.pitchCmd ?? p.elev) + (c.pitch - (p.pitchCmd ?? p.elev)) * r;
+    p.elev = p.limitElev(p.pitchCmd, { glim });
     p.ail += ((c.roll || clamp(-2.5 * p.rr, -1, 1)) - p.ail) * r;      // solto: segura a inclinação (amortece rolagem)
     p.rud += ((c.yaw || clamp(-1.6 * p.yr, -1, 1)) - p.rud) * r;       // solto: anula a guinada
   } else {
+    p.pitchCmd = null; // a próxima tecla parte do profundor atual
     // instrutor: nariz (linha das armas) no círculo do mouse, resposta mais viva que a da IA.
     // lead 0,1 s: com o integral e a inclinação de curva da mira, 0,3 deixava o nariz ~3° À FRENTE do círculo em curva
     p.steerTo(aimDir, dt, { glim: Math.min(p.def.glim - 1.5, 10), groundAssist: !p.gearCmd, nose: true, // pouso é do piloto: o círculo leva o nariz também com trem baixado
