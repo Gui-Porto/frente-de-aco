@@ -87,8 +87,8 @@ export const PLANES = {
       { id: 'turbo', k: 'turbo', n: 'Turbocompressor', z: -0.3, y: -0.6, s: [0.35, 0.3, 0.45] }, { id: 'oilc', k: 'cool', n: 'Radiadores de óleo', z: 0.26, y: -0.75, s: [0.55, 0.18, 0.35] },
       { id: 'hyd', k: 'act', n: 'Hidráulico', does: ['flaps'], z: -0.12, y: -0.1, s: [0.3, 0.2, 0.3] }],
     guns: [{ w: 'M2', n: 8, span: [1.9, 2.6, 3.0, 3.4], z: 0.9, ammo: 425 }],
-    bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.0, -2.0] }],
-    rockets: { name: 'M8/HVAR', m: 61, tnt: 3.5, v: 330, n: 6 }
+    bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.95, -2.95] }], // por fora da perna do trem, como no real
+    rockets: { name: 'M8/HVAR', m: 61, tnt: 3.5, v: 330, n: 6, mount: 'tube3', d: 0.114, len: 0.84 }
   },
   il2: {
     key: 'il2', type: 'plane', gear: { track: 3.85, ret: 'in' }, name: 'Il-2 (1942)', short: 'Il-2', nation: 'URSS', year: 1942, color: 0x3d4a2c, sp: 340,
@@ -102,7 +102,7 @@ export const PLANES = {
       { id: 'pneu', k: 'act', n: 'Pneumático', does: ['flaps'], z: -0.18, y: 0, s: [0.25, 0.25, 0.3] }],
     guns: [{ w: 'VYa', n: 2, span: [2.4], z: 0.6, ammo: 150 }, { w: 'ShKAS', n: 2, span: [2.0], z: 0.6, ammo: 750 }],
     bombs: [{ name: 'FAB-100', m: 100, tnt: 40, d: 0.27, n: 4, x: [1.5, -1.5, 2.2, -2.2] }],
-    rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 350, n: 8 }
+    rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 350, n: 8, d: 0.082, len: 0.86 }
   },
   fw190: {
     key: 'fw190', type: 'plane', gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,

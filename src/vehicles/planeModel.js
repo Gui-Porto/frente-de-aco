@@ -431,16 +431,7 @@ export function buildPlane(D) {
     if (duct) {
       // fundo do duto: face do compressor (DT.compressorFace, mais abaixo: o rotor gira no grupo `prop`), divisória do
       // MiG-15, radar telemétrico do F-86
-      // MiG-15: divisória vertical do duto (real: separa o ar dos dois lados da cabine) — recuada da boca, fina, na cor do duto
-      if (D.key === 'mig15') {
-        // chapa com a altura do duto em cada estação (encosta em cima e embaixo; antes era um retângulo solto no meio
-        // da boca), bordas arredondadas, da face do compressor até 45 cm da boca
-        const z1 = duct.lip - 0.45, rAt = z => duct.h + (duct.lipH * 0.93 - duct.h) * clamp01((z - duct.z) / (duct.lip - duct.z)), sh = new THREE.Shape(), N = 8;
-        for (let i = 0; i <= N; i++) { const z = duct.z + (z1 - duct.z) * i / N; (i ? sh.lineTo.bind(sh) : sh.moveTo.bind(sh))(z, -rAt(z) * 0.985 + 0.012); }
-        for (let i = N; i >= 0; i--) { const z = duct.z + (z1 - duct.z) * i / N; sh.lineTo(z, rAt(z) * 0.985 - 0.012); }
-        const pl = new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.012, bevelSegments: 3 }).rotateY(-Math.PI / 2).translate(0.006, 0, 0);
-        add(pl, ductM, root, 0, duct.yc, 0);
-      }
+      // (MiG-15 sem a divisória do duto: vista pela boca, parecia uma placa solta na frente do compressor)
       if (D.key === 'f86') { const r = add(new THREE.CapsuleGeometry(0.1, 0.35, 8, 24).rotateX(Math.PI / 2), paint, root, 0, duct.yc + duct.h * 0.78, duct.lip - 0.32); r.scale.y = 0.8; }
     } else {
       // radome em ogiva (curto, como o do APQ-120) e entradas laterais em loft, com placa separadora da camada-limite
@@ -935,11 +926,34 @@ export function buildPlane(D) {
     for (const dz of [-1, 1]) add(new THREE.CylinderGeometry(0.012, 0.012, ph + b.d * 0.3, 6), steel, root, x + b.d * 0.3, py - ph / 2 - b.d * 0.1, z + dz * len * 0.18); // escoras
     bombMeshes.push(m);
   }
-  const rocketMeshes = [];
-  if (D.rockets) for (let i = 0; i < D.rockets.n; i++) {
-    const side = i % 2 ? -1 : 1, k = Math.floor(i / 2), x = side * (D.span * 0.22 + k * 0.45), z = D.wingZ + .2, py = under0(x, z), y = py - 0.13 - 0.06;
-    rocketMeshes.push(add(new THREE.CylinderGeometry(.06, .06, 1.4, 10).rotateX(Math.PI / 2), dark, root, x, y, z));
-    for (const dz of [0.45, -0.35]) add(new THREE.BoxGeometry(0.035, 0.15, 0.1), steel, root, x, py - 0.07, z + dz);        // postes de lançamento
+  // foguetes: def.rockets.mount = 'tube3' (P-47: lançador M10 de três tubos por asa, por fora da perna do trem) ou
+  // trilhos (Il-2: RS-82 pendurados um a um). O foguete tem corpo, ogiva e empenas; o tubo/trilho fica no avião
+  const rocketMeshes = [], RK = D.rockets;
+  if (RK) {
+    const d = RK.d || 0.09, rl = RK.len || 0.9, rocketG = (() => { const P = [V2(d * 0.42, -rl / 2), V2(d / 2, -rl / 2 + 0.03), V2(d / 2, rl / 2 - d * 1.6), V2(d * 0.3, rl / 2 - d * 0.5), V2(0.001, rl / 2)], g = [DT.latheZ(P, 14)];
+      for (let k = 0; k < 4; k++) g.push(new THREE.BoxGeometry(0.006, d * 1.1, d * 1.4).translate(0, d * 0.55, -rl / 2 + d * 0.75).rotateZ(Math.PI / 4 + k * Math.PI / 2));
+      return mergeGeometries(g.map(q => { q = q.index ? q.toNonIndexed() : q; q.deleteAttribute('uv'); return q; })); })();
+    const out = BAY.main ? BAY.main.xo + 0.75 : 0;
+    if (RK.mount === 'tube3') {
+      const per = Math.ceil(RK.n / 2), tr = d * 0.62, tl = RK.tube || 3.05, Q = [[-1, 1], [1, 1], [0, -1]];
+      for (const side of [1, -1]) {
+        const x = side * Math.max(D.span * 0.3, out), z = D.wingZ + 0.15, py = under0(x, z), cy = py - 0.14 - tr * 2.2;
+        add(new THREE.BoxGeometry(0.06, py - cy - tr, 0.55), under, root, x, (py + cy + tr) / 2 + 0.02, z);                 // pilone
+        for (let i = 0; i < per; i++) {
+          const [qx, qy] = Q[i % 3], tx = x + qx * tr * 1.05, ty = cy + qy * tr * 0.95;
+          add(DT.latheZ([V2(tr * 0.86, -tl / 2), V2(tr, -tl / 2), V2(tr, tl / 2), V2(tr * 0.86, tl / 2)], 16), dark, root, tx, ty, z);   // tubo (plástico/aço, parede fina)
+          add(new THREE.CircleGeometry(tr * 0.86, 14).rotateY(Math.PI), DM.soot, root, tx, ty, z - tl / 2 + 0.08);                       // fundo escuro de trás
+          rocketMeshes.push(add(rocketG, steel, root, tx, ty, z + tl / 2 - rl / 2 - 0.12));                                              // foguete dentro, ogiva na boca
+        }
+        for (const dz of [-0.9, 0, 0.9]) { const b = add(new THREE.TorusGeometry(tr * 2.15, 0.012, 5, 20), steel, root, x, cy + tr * 0.32, z + dz); b.scale.set(1.05, 1, 1); } // cintas
+        for (const dz of [-0.3, 0.3]) for (const sx of [-1, 1]) add(new THREE.CylinderGeometry(0.012, 0.012, py - cy, 6), steel, root, x + sx * tr * 1.4, (py + cy) / 2, z + dz); // escoras
+      }
+    } else for (let i = 0; i < RK.n; i++) {
+      const side = i % 2 ? -1 : 1, k = Math.floor(i / 2), x = side * (Math.max(D.span * 0.22, out) + k * 0.36), z = D.wingZ + .25, py = under0(x, z), y = py - 0.08 - d / 2;
+      add(new THREE.BoxGeometry(0.03, 0.035, rl * 1.15), steel, root, x, y + d / 2 + 0.015, z);                                       // trilho
+      for (const dz of [0.32, -0.32]) add(new THREE.BoxGeometry(0.03, py - y - d / 2, 0.06), steel, root, x, (py + y + d / 2) / 2, z + dz * rl); // postes
+      rocketMeshes.push(add(rocketG, steel, root, x, y, z));
+    }
   }
   // mísseis por estante (def.missiles = [{ w, n, belly? }]); dimensões do próprio míssil.
   // belly: semiembutidos sob a fuselagem (Sparrow do F-4); senão pilones sob a asa, de dentro para fora
@@ -1081,9 +1095,9 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
     for (const q of [].concat(geo)) doorMesh(q, piv, new THREE.Matrix4().makeTranslation(-hx, -hy, 0));
     doors.push({ piv, ang, seq }); return piv;
   };
-  // portas da roda abrem só durante o curso e fecham com o trem baixado: nos jatos (como nos reais — abertas, o poço
-  // com nervuras e as portas penduradas pareciam fendas na asa) e com carga no eixo (bomba do Fw 190: entravam nela)
-  const midStore = !!D.jet || (D.bombs || []).some(b => b.x.some(x => Math.abs(x) < 0.4)) || (D.drops || []).some(t => t.belly != null);
+  // portas da roda abrem só durante o curso e fecham com o trem baixado (como em quase todos os reais): abertas, o poço
+  // com nervuras e as portas penduradas pareciam fendas na asa (MiG-15), placas soltas (P-47) e entravam na bomba (Fw 190)
+  const midStore = true;
   // separa os triângulos de uma porta pelo centro: keep(cx, cy, cz) → [os que passam, os outros] (null se vazio)
   const splitDoor = (geo, keep) => {
     const ix = geo.index.array, P = geo.attributes.position, A = [], B = [];
