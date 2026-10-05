@@ -814,6 +814,12 @@ export function buildPlane(D) {
         // carenagem do canhão sob o nariz: encostada na chapa (antes um tubo solto abaixo dela)
         y = a.yc - a.h * Math.sqrt(Math.max(0, 1 - (x / a.hw) ** 2)) - M.fair.r * 0.4;
         fairing(M.fair.r, M.fair.len, M.r * 1.6, x, y, z, paint);
+        add(new THREE.TorusGeometry(M.r * 1.6, 0.012, 6, 18), DM.bare, root, x, y, z - 0.005);                      // anel de aço na boca da carenagem
+        add(new THREE.BoxGeometry(M.fair.r * 0.55, 0.012, 0.32), black, root, x, y - M.fair.r * 0.97, z - M.fair.len * 0.45); // calha de ejeção dos estojos
+        add(new THREE.BoxGeometry(M.fair.r * 0.4, 0.012, 0.2), black, root, x, y - M.fair.r * 0.95, z - M.fair.len * 0.7);  // calha dos elos
+        // chapa antichama de aço sem pintura na fuselagem, à frente/acima da boca (o sopro dos disparos queima a pintura)
+        const th = Math.atan2((y - a.yc) / a.h, x / a.hw), pg = hullPatch(th - 0.3, th + 0.3, z - 0.45, z + 0.12, 0.006);
+        add(flipG(pg), DM.bare, root);
       }
       if (M.port) {
         // calha do F-86: boca retangular arredondada com lábio de aço, fundo escuro que afunda para a frente, o cano
@@ -835,7 +841,19 @@ export function buildPlane(D) {
       else for (const dx of M.twin ? [-M.twin / 2, M.twin / 2] : [0]) {
         tube(M.r, M.r, bl, M.port ? DM.steel : steel, x + dx, y, tip); // F-86: aço mais claro, contrasta com a calha escura
         if (M.port) tube(M.r * 1.35, M.r * 1.35, 0.05, steel, x + dx, y, tip); // anel da boca
-        if (M.brake) { tube(M.r * 1.7, M.r * 1.7, 0.22, steel, x + dx, y, tip); for (const yy of [-1, 1]) add(new THREE.BoxGeometry(M.r * 3.6, 0.02, 0.05), black, root, x + dx, y + yy * M.r * 0.6, tip - 0.08); } // freio de boca com janelas
+        else {
+          // cano de canhão: raiz mais grossa (luva do cano) e anéis de reforço ao longo dele
+          tube(M.r * 1.35, M.r * 1.25, bl * 0.35, DM.steel, x + dx, y, tip - bl * 0.65);
+          for (let k = 1; k <= 3; k++) tube(M.r * 1.22, M.r * 1.22, 0.02, DM.steel, x + dx, y, tip - bl * (0.15 + 0.15 * k));
+          if (!M.brake && !M.cluster) { // NR-23: quebra-chamas com fendas
+            tube(M.r * 1.3, M.r * 1.4, 0.11, steel, x + dx, y, tip + 0.06);
+            for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.008, M.r * 0.9, 0.06), black, root, x + dx + Math.cos(k * Math.PI / 2) * M.r * 1.38, y + Math.sin(k * Math.PI / 2) * M.r * 1.38, tip + 0.02).rotation.z = k * Math.PI / 2;
+          }
+        }
+        if (M.brake) { // N-37: freio de boca de várias câmaras (anéis com as janelas entre eles)
+          tube(M.r * 1.7, M.r * 1.7, 0.24, steel, x + dx, y, tip + 0.02);
+          for (let k = 0; k < 3; k++) { tube(M.r * 1.82, M.r * 1.82, 0.02, steel, x + dx, y, tip - 0.02 - k * 0.07); for (const yy of [-1, 1]) add(new THREE.BoxGeometry(M.r * 3.7, 0.022, 0.04), black, root, x + dx, y + yy * M.r * 0.75, tip - 0.05 - k * 0.07); }
+        }
         add(new THREE.CircleGeometry(M.r * 0.6, 10), black, root, x + dx, y, tip + 0.002);
       }
       return [x, y, tip + 0.1];
@@ -861,6 +879,14 @@ export function buildPlane(D) {
     for (const sd of new Set(M.b.map(b => Math.sign(b[0])))) {
       const pg = hullPatch(sd > 0 ? t0 : Math.PI - t1, sd > 0 ? t1 : Math.PI - t0, z - 0.42, z + 0.16, 0.008);
       add(sd > 0 ? pg : flipG(pg), DM.bare, root);
+    }
+  });
+  // F-86: calhas de ejeção dos estojos no ventre, três de cada lado atrás das armas
+  (D.guns || []).forEach(g => {
+    const M = g.mount; if (!M || !M.port) return;
+    for (const sd of [1, -1]) for (let k = 0; k < 3; k++) {
+      const z = M.zf * L - 0.75 - k * 0.16, a = at(z / L), x = sd * a.hw * 0.42, y = a.yc - a.h * Math.sqrt(Math.max(0, 1 - 0.42 ** 2));
+      flush(slotG(0.05, 0.12), black, x, y, z, hullN(a, x, y));
     }
   });
   // ---- freios aerodinâmicos (def.brake) ----
