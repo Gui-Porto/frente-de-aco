@@ -418,9 +418,12 @@ export function buildPlane(D) {
     hw: z => { const P = [0, 0, 0]; canopyPoint(C.len, C.w, C.h, Math.min(1, Math.max(0, (czc + C.len / 2 - z) / C.len)), 0, P, C.flat, null); return Math.abs(P[0]) * 0.9; } };
   // alojamentos do trem: a fuselagem sai uma vez sem eles só para dar a seção (onde a asa encontra o ventre)
   const F0 = fuselage(D, hole), GP = gearPlan(D), BAY = gearBays(D, GP, wingPlan(D, 1), F0.userData.sec);
-  // tubeiras: uma central ou várias lado a lado (def.nozzles); a tampa da cauda abre um furo do tamanho da parede interna
-  const nn = D.nozzles || 1, nr = nn > 1 ? fr * 0.36 : F0.userData.at(-0.52).hw * 0.9;
-  const NZ = jet ? Array.from({ length: nn }, (_, i) => ({ x: nn > 1 ? (i - (nn - 1) / 2) * nr * 2.1 : 0, y: nn > 1 ? -fr * 0.15 : 0 })) : [];
+  // tubeiras: uma central ou várias lado a lado (def.nozzles). O bocal fica no centro da ÚLTIMA seção da cauda (que
+  // fica acima do eixo) e com a carenagem do tamanho dela: cobre a ponta da fuselagem inteira, sem "reboco" em volta.
+  // Bimotor: os dois lado a lado ocupando a largura e a altura do fim da fuselagem
+  const tS = F0.userData.sec(-0.53 * L + 0.01), tCy = tS.yc + (tS.tp - tS.bt) / 2, tH = (tS.tp + tS.bt) / 2, nn = D.nozzles || 1;
+  const nr = nn > 1 ? Math.min(tS.hw / 2.05, tH) / 1.02 : Math.max(tS.hw, tH) / 1.02;
+  const NZ = jet ? Array.from({ length: nn }, (_, i) => ({ x: nn > 1 ? (i - (nn - 1) / 2) * nr * 2.05 : 0, y: tCy })) : [];
   const fuseG = fuselage(D, hole, BAY.fuse, jet ? NZ.map(n => ({ ...n, r: nr * 0.84 })) : null), fuseMesh = add(fuseG, [paint, under, ductM, DM.soot]);
   if (fuseG.userData.tailCap) add(fuseG.userData.tailCap, under);
   const sideIn = jet && D.intakes === 'side', duct = fuseG.userData.duct;
@@ -482,6 +485,17 @@ export function buildPlane(D) {
         add(metricUV(new RoundedBoxGeometry(0.03, hh0 * 2.08, 1.15, 2, 0.012), 1.15), paint, root, px, cy0, zf - 0.3);
         for (const dy of [-0.6, 0, 0.6]) add(new THREE.BoxGeometry(0.05, 0.03, 0.5), ductM, root, s * (fa0.hw + 0.012), cy0 + dy * hh0, zf - 0.45);
       }
+    }
+    // cone de cauda sobre os bocais (def.boom: z em frações de L, y/w/h em frações de fuseR): o F-4 real leva o
+    // estabilizador e o leme nele, além do fim dos bocais — sem ele a empenagem ficava solta atrás da fuselagem
+    if (D.boom) {
+      const B = D.boom, secs = [], N = 12;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N, z = (B.z0 + (B.z1 - B.z0) * t) * L, tp = clamp01((t - 0.55) / 0.45), k = 1 - 0.75 * tp ** 1.3;
+        secs.push([z, 0, (B.y + B.h * 0.4 * tp) * fr, B.w * fr * (0.45 + 0.55 * k), B.h * fr * Math.max(0.12, k)]);
+      }
+      add(tubeLoft(secs, 0.8), paint, root);
+      const e = secs[N]; add(new THREE.SphereGeometry(1, 12, 8), paint, root, 0, e[2], e[0]).scale.set(e[3], e[4], 0.1);
     }
     // tubeiras: uma central ou várias lado a lado (def.nozzles)
     for (let i = 0; i < nn; i++) {

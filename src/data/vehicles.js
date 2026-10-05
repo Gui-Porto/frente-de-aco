@@ -193,7 +193,7 @@ export const PLANES = {
     fuse: [[-0.53, .72, .42, .5, -.1], [-0.46, .78, .5, .56, -.08], [-0.36, .86, .62, .66, -.04], [-0.2, .95, .86, .82, 0], [0, 1, 1, .95, 0], [0.14, .92, 1.02, .9, 0], [0.26, .7, .92, .78, .02], [0.36, .52, .7, .62, 0], [0.45, 'n1', 'n1', 'n1', 0]],
     canopy: { z: 0.27, len: 5.0, w: 0.48, h: 0.74, frames: [0.2, 0.5, 0.76], seats: [0.34, 0.74], flat: 0.8, rearDy: -0.03 }, smoke: 0.8,
     // bocais com pétalas da pós-combustão, lâminas UHF/IFF, anticolisão em cima e embaixo, gancho e tanques de 370 gal nos pilones externos
-    nozzle: { len: 0.7, petals: 18, petalLen: 0.5 }, antennas: [{ k: 'blade', zf: 0.04, ay: 1, h: 0.3, len: 0.42 }, { k: 'blade', zf: 0.02, ay: -1, h: 0.24, len: 0.34 }],
+    nozzle: { len: 0.7, petals: 18, petalLen: 0.5 }, boom: { z0: -0.4, z1: -0.575, y: 0.33, w: 0.36, h: 0.3 }, antennas: [{ k: 'blade', zf: 0.04, ay: 1, h: 0.3, len: 0.42 }, { k: 'blade', zf: 0.02, ay: -1, h: 0.24, len: 0.34 }],
     beacons: [[-0.12, 1], [0.15, -1]], hook: true, drops: [{ ws: 0.8, len: 4.3, d: 0.66 }],
     // 7 células na fuselagem (em três blocos) + tanques integrais nas asas; dois J79; estabilizador todo móvel;
     // PC-1 e PC-2 movem os comandos, o utilitário move flaps e freios
@@ -287,20 +287,20 @@ export const MISSILES = {
     form: { nose: { kind: 'ir', len: 0.3, dome: 0.55 }, canards: { at: 0.3, root: 0.26, tip: 0.04, span: 0.45 }, wings: { at: 2.38, root: 0.4, tip: 0.14, span: 0.56, roller: 0.09 },
       bands: { warhead: { at: 0.72, w: 0.04 }, motor: { at: 1.25, w: 0.04 } }, nozzle: { len: 0.06, r: 0.8 } } },
   AIM9J: { name: 'AIM-9J Sidewinder', short: 'AIM-9J', mass: 78, d: 0.127, len: 3.02, thrust: 15500, burn: 3.0, cd: 0.42,
-    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 20, nav: 4, fuse: 11, warhead: 4.5, rearAspect: 110, flareRes: 0.18, seeker: 'ir',
+    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 20, nav: 4, fuse: 11, warhead: 4.5, rearAspect: 110, flareRes: 0.18, smoke: { k: 0.92 }, seeker: 'ir',
     form: { nose: { kind: 'ir', len: 0.28, dome: 0.6 }, canards: { at: 0.28, root: 0.3, tip: 0.06, span: 0.56 }, wings: { at: 2.55, root: 0.42, tip: 0.15, span: 0.64, roller: 0.09 },
       bands: { warhead: { at: 0.78, w: 0.04 }, motor: { at: 1.35, w: 0.04 } }, nozzle: { len: 0.06, r: 0.8 } } },
   R3S: { name: 'R-3S (K-13)', short: 'R-3S', mass: 75, d: 0.127, len: 2.84, thrust: 17000, burn: 2.2, cd: 0.45,
-    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 14, nav: 3.8, fuse: 12, warhead: 4.5, rearAspect: 90, flareRes: 0.3, seeker: 'ir',
+    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 14, nav: 3.8, fuse: 12, warhead: 4.5, rearAspect: 90, flareRes: 0.3, smoke: { color: 0xc8c3b6 }, seeker: 'ir',
     form: { nose: { kind: 'ir', len: 0.33, dome: 0.5 }, canards: { at: 0.33, root: 0.24, tip: 0.05, span: 0.42 }, wings: { at: 2.4, root: 0.38, tip: 0.13, span: 0.53, roller: 0.09 },
       bands: { warhead: { at: 0.74, w: 0.04 }, motor: { at: 1.28, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } },
   // semiativos: não têm buscador próprio de aquisição — exigem o radar do lançador travado (STT) até o impacto
   AIM7E: { name: 'AIM-7E Sparrow', short: 'AIM-7E', mass: 197, d: 0.203, len: 3.66, thrust: 26000, burn: 3.6, cd: 0.4,
-    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 18, nav: 4, fuse: 14, warhead: 9, seeker: 'sarh', doppler: true, notch: 25, chaffRes: 0.25,
+    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 18, nav: 4, fuse: 14, warhead: 9, smoke: { k: 1.12, puff: 1.3 }, seeker: 'sarh', doppler: true, notch: 25, chaffRes: 0.25,
     form: { nose: { kind: 'ogive', len: 0.62 }, wings: { at: 1.2, root: 0.66, tip: 0.08, span: 1.02 }, tails: { at: 3.18, root: 0.44, tip: 0.18, span: 0.81 },
       bands: { warhead: { at: 1.95, w: 0.05 }, motor: { at: 2.35, w: 0.05 } }, nozzle: { len: 0.05, r: 0.75 } } },
   R3R: { name: 'R-3R (K-13R)', short: 'R-3R', mass: 83, d: 0.127, len: 3.1, thrust: 17500, burn: 2.4, cd: 0.44,
-    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 15, nav: 3.8, fuse: 12, warhead: 5, seeker: 'sarh', chaffRes: 0.3,
+    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 15, nav: 3.8, fuse: 12, warhead: 5, smoke: { color: 0xc8c3b6 }, seeker: 'sarh', chaffRes: 0.3,
     form: { nose: { kind: 'ogive', len: 0.42 }, canards: { at: 0.5, root: 0.24, tip: 0.05, span: 0.42 }, wings: { at: 2.65, root: 0.4, tip: 0.13, span: 0.53, roller: 0.09 },
       bands: { warhead: { at: 0.98, w: 0.04 }, motor: { at: 1.5, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } }
 };
