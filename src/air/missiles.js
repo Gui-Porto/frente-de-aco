@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { scene } from '../core/render.js';
+import { scene, camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
 import { V3, clamp, rand, rv } from '../core/util.js';
 import { H } from '../world/terrain.js';
@@ -35,7 +35,7 @@ export class Missile {
     // chama no bocal e rastro do tamanho do motor (Sparrow deixa fumaça mais grossa que o Sidewinder)
     this.sm = smokeOf(M); this.tailZ = missileTail(M);
     this.flame = new THREE.Sprite(FLARE); this.flame.position.set(0, 0, -this.tailZ - this.sm.flame * 0.2); this.flame.scale.setScalar(1e-4); this.mesh.add(this.flame);
-    this.trail = new Trail({ life: this.sm.life, w0: this.sm.w0, w1: this.sm.w1, alpha: 0.92, step: 4, color: 0xd6d2ca });
+    this.trail = new Trail({ life: this.sm.life, w0: this.sm.w0, w1: this.sm.w1, alpha: 0.92, step: 4, color: this.sm.color }); this.puffT = 0;
     // semiativos (Sparrow/R-3R) são EJETADOS e acendem ~0,35 s depois; IR sai acesa do trilho
     this.ign = M.seeker === 'sarh' ? 0.35 : 0; this.burning = !this.ign; this.spin = Math.random() * 6;
     if (!this.ign && owner) for (let i = 0; i < 6; i++) spawnP({ pos: this.pos.clone().add(rv(0.4)), vel: owner.vel.clone().multiplyScalar(0.6).add(rv(4)), life: rand(1.2, 2.2), size: 1.2, size1: 4, color: 0xdedbd4, op: 0.5, drag: 2 });
@@ -136,6 +136,11 @@ export class Missile {
     if (this.burning) {
       const k = 1 + (Math.random() - 0.5) * 0.35; this.flame.scale.setScalar(this.sm.flame * k);
       this.trail.push(_q.copy(this.pos).addScaledVector(_f, -this.tailZ - 0.3), S.now);
+      // volume perto do motor: baforadas que incham e ficam para trás (a fita sozinha, vista de perto, era chapada)
+      if ((this.puffT -= dt) <= 0 && this.pos.distanceToSquared(camera.position) < 2500 * 2500) {
+        this.puffT = 0.03 / this.sm.puff;
+        spawnP({ pos: _q.clone().add(rv(0.3)), vel: this.vel.clone().multiplyScalar(0.04).add(rv(2.5)), life: rand(1.2, 2.2), size: this.sm.w0 * 0.8, size1: this.sm.w0 * 3.4, color: this.sm.color, op: 0.42, drag: 1.6, rise: 0.4 });
+      }
     } else this.flame.scale.setScalar(1e-4);
   }
   detonate(at, miss, hitPlane) {

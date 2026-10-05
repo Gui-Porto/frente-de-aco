@@ -63,15 +63,16 @@ export function updateAirHUD(dt) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, V.W / 2, V.H - 40, 15, C.ally, 'center', UI);
   }
   tacMap(v, T);
-  gdark(live ? Math.max(p.blackout, B.fadeK || 0) : 0); // G (visão de túnel → desmaio) ou troca de tela pós-reparo
+  const fade = B.fadeK || 0, g = live ? p.blackout : 0;
+  gdark(Math.max(g, fade), g > fade && p.gRed); // G (visão de túnel → desmaio; vermelho em G negativo) ou troca de tela pós-reparo
 }
 // escurecimento: as bordas fecham primeiro (visão de túnel) e em 1 a tela fica toda preta; só reescreve o estilo quando muda
 let _gd = -1;
-function gdark(k) {
-  k = Math.round(Math.min(1, k) * 100) / 100; if (k === _gd) return; _gd = k;
-  const el = $('#gdark'), r = 62 * (1 - k);
+function gdark(k, red) {
+  k = Math.round(Math.min(1, k) * 100) / 100; const key = k + (red ? 2 : 0); if (key === _gd) return; _gd = key;
+  const el = $('#gdark'), r = 62 * (1 - k), c = red ? '110,0,0' : '0,0,0';
   el.style.opacity = Math.min(1, k * 1.8);
-  el.style.background = `radial-gradient(ellipse at center, rgba(0,0,0,${(k * k).toFixed(3)}) ${(r * 0.5).toFixed(1)}%, #000 ${(r + 16).toFixed(1)}%)`;
+  el.style.background = `radial-gradient(ellipse at center, rgba(${c},${(k * k).toFixed(3)}) ${(r * 0.5).toFixed(1)}%, rgb(${c}) ${(r + 16).toFixed(1)}%)`;
 }
 
 // ---------- base aérea: marcador da pista e barra de reparo/rearme ----------

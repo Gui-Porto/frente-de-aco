@@ -13,7 +13,7 @@ export function wingCfg(D, side) {
   const jet = !!D.jet, fr = D.fuseR, ellip = D.key === 'spit9' || D.key === 'p47';
   const dih = (D.dih ?? (jet ? (D.key === 'mig15' ? -2 : 3) : 5.5)) * deg, half = D.span / 2 - fr * 0.55;
   return { side, x0: fr * 0.55, half, c0: D.chord, c1: ellip ? D.tipChord * 0.35 : D.tipChord, zq0: D.wingZ + D.chord * 0.1,
-    sweep: half * Math.tan((D.sweep || 0) * deg) + (ellip ? 0 : (D.chord - D.tipChord) * 0.1), t0: jet ? 0.1 : 0.15, t1: jet ? 0.08 : 0.09,
+    sweep: half * Math.tan((D.sweep || 0) * deg) + (ellip ? 0 : (D.chord - D.tipChord) * 0.1), t0: D.tc ? D.tc[0] : jet ? 0.1 : 0.15, t1: D.tc ? D.tc[1] : jet ? 0.08 : 0.09, // tc: espessura relativa [raiz, ponta]
     dih, y0: -fr * 0.25, ellip, brk: D.wingBreak ? { at: D.wingBreak[0], dih: D.wingBreak[1] * deg } : null };
 }
 export function tailCfg(D, side) {
@@ -74,7 +74,8 @@ export function gearPlan(D) {
   // borda da frente em |x|: nunca passa do bordo de ataque (perto do munhão só cabe a perna, a roda deita mais para dentro)
   bay.zbx = x => Math.max(Math.min(bay.zb, le(x) - 0.06), mz + 0.12);
   // recolhendo para dentro: |x| da borda de fora da roda deitada — divide a porta da asa em porta da perna e da roda
-  if (ret === 'in') bay.xs = mx - (len + mr * 0.9 - shrink - mr - 0.05);
+  // para fora (Spitfire): |x| onde a roda começa — dali para fora o alojamento fica aberto (a roda aparece, como no real)
+  bay.xs = ret === 'in' ? mx - (len + mr * 0.9 - shrink - mr - 0.05) : mx + (len + mr * 0.9 - mr - 0.05);
   // nariz do jato: pivô abaixo do eixo (o duto de ar passa por cima do alojamento); a perna encurta o mesmo tanto
   const ny = D.jet ? -D.fuseR * (D.intakes === 'side' ? 0.42 : 0.8) : 0, nlen = nl - nr * 1.9 + ny;
   const nbay = { za: nz - nlen - nr * 1.9 - 0.06, zb: nz + 0.1, w: Math.max(0.15, (D.jet ? 0.14 : 0.1) / 2 + 0.08), len: nlen, y0: ny };

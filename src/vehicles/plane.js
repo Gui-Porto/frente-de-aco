@@ -158,13 +158,20 @@ export class Plane {
     for (const [o, k] of this._det) o.layers.set(lv >= k ? 1 : 0);
   }
   // desmaiado: sem comando nenhum (manche solto, sem disparar); 0..1 para escurecer a tela
-  // escurecimento da tela: desmaiado = preto (entra em 0,3 s; sai no último 1,2 s); acordado = visão de túnel pela carga
-  get blackout() { const g = Math.max(0, (this.gStress - 0.3) / 0.7) ** 1.4 * 0.9; return this.koT > 0 ? Math.max(g, Math.min(1, this.koAge / 0.3, this.koT / 1.2)) : g; }
+  // escurecimento da tela: desmaiado = quase preto (0,85: ainda se vê o vulto; entra em 0,3 s, sai no último 1,2 s);
+  // acordado = visão de túnel pela carga, no máximo 0,7 (o centro nunca some antes do desmaio). `gRed`: veio de G negativo (redout)
+  get blackout() { const g = Math.max(0, (this.gStress - 0.2) / 0.8) ** 1.3 * 0.7; return this.koT > 0 ? Math.max(g, Math.min(0.85, this.koAge / 0.3, this.koT / 1.2)) : g; }
   physics(dt) {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
     if (!this.alive && this.pos.y - H(this.pos.x, this.pos.z) > 20) this.shedStep(dt); // abatido, caindo: desmancha no ar
-    if (this.koT > 0) { this.elev = this.ail = this.rud = 0; this.firing = false; }
+    // desmaiado: o manche vai relaxando sozinho a partir de onde estava (o avião segue suave, sem controle); ao voltar a
+    // si, o comando do piloto volta em rampa. Antes ia a zero de uma vez: o nariz desabava e voltava — "quicava"
+    const kc = this._koC || (this._koC = [0, 0, 0]);
+    if (this.koT > 0) { kc[0] *= Math.exp(-dt * 0.9); kc[1] *= Math.exp(-dt * 2.5); kc[2] *= Math.exp(-dt * 2.5); [this.elev, this.ail, this.rud] = kc; this.firing = false; this.koWake = 1.5; }
+    else if (this.koWake > 0) { this.koWake = Math.max(0, this.koWake - dt); const w = 1 - this.koWake / 1.5; this.elev = kc[0] + (this.elev - kc[0]) * w; this.ail = kc[1] + (this.ail - kc[1]) * w; this.rud = kc[2] + (this.rud - kc[2]) * w; }
+    else { kc[0] = this.elev; kc[1] = this.ail; kc[2] = this.rud; }
+    const n0 = this.n, a0 = this.alpha;
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
     const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.racks.reduce((s, r) => s + r.n * r.M.mass, 0) - (this.fuelMax - this.fuel);
     const A = ctrlAuthority(this);
@@ -255,12 +262,17 @@ export class Plane {
       this.q.x += _pq.x; this.q.y += _pq.y; this.q.z += _pq.z; this.q.w += _pq.w; this.q.normalize();
     }
     if (Math.random() < dt * 0.3) this.dropSign = Math.random() < .5 ? 1 : -1;
+    this.nRate = (this.nRate || 0) * 0.6 + 0.4 * (this.n - n0) / Math.max(dt, 1e-3); // taxa do G (G/s), filtrada: amortece o limitador
+    this.aRate = (this.aRate || 0) * 0.6 + 0.4 * (this.alpha - a0) / Math.max(dt, 1e-3); // idem, ângulo de ataque (rad/s)
     // fisiologia do piloto: G SUSTENTADO acima da tolerância acumula carga (gStress 0..1). A tela vai escurecendo das
     // bordas para o centro (visão de túnel, `blackout`) e em 1 o piloto DESMAIA: alguns segundos sem controle, o avião
     // segue solto, depois ele volta a si. Sem texto nenhum — só a tela. Jato tem traje anti-G (+1 G); ferido apaga antes.
-    // 9 G no jato: ~3,7 s até apagar; 11 G: ~1,7 s. Negativo: abaixo de −3 G.
-    const gT = (this.eng.jet ? 7.5 : 6.5) - (this.wounded ? 1.5 : 0);
-    const gx = this.n > gT ? (this.n - gT) * 0.16 + 0.03 : this.n < -3 ? (-3 - this.n) * 0.2 : this.n > gT - 1.5 ? -0.12 : -0.3;
+    // Limiar 6 G (pistão) / 6,5 G (jato): com 5 G o pistão (que vive a ~5,7 G sustentado em curva) apagava mais que o jato.
+    // Só puxada forte acumula: pistão a 8 G ~4,5 s até o desmaio, 7 G ~8 s; jato a 9 G ~3,7 s. Negativo (redout): abaixo de −3 G.
+    // Curvas seguidas ainda somam, mas solto o manche recupera em ~3 s.
+    const gT = (this.eng.jet ? 6.5 : 6) - (this.wounded ? 1 : 0);
+    const gx = this.n > gT ? (this.n - gT) * 0.1 + 0.02 : this.n < -3 ? (-3 - this.n) * 0.15 : this.n > gT - 1.5 ? -0.08 : -0.3;
+    if (this.n > gT) this.gRed = false; else if (this.n < -3) this.gRed = true;
     // combustível: consumo do motor + vazamentos; seco = motor apaga
     const leak = fuelLeak(this);
     fuelStep(this, this.engineOn ? this.eng.flow : 0, dt);
@@ -271,7 +283,7 @@ export class Plane {
       if (this.koT <= 0) this.gStress = 0.55; // acorda ainda meio apagado: a visão volta aos poucos
     } else {
       this.gStress = clamp(this.gStress + gx * dt, 0, 1);
-      if (this.gStress >= 1 && this.alive && this.pilot) { this.koT = 4 + Math.random() * 3; this.koAge = 0; this.gStress = 1; }
+      if (this.gStress >= 1 && this.alive && this.pilot) { this.koT = 2.5 + Math.random() * 1.5; this.koAge = 0; this.gStress = 1; }
     }
     // limites estruturais
     if (this.alive) {
@@ -520,8 +532,10 @@ export class Plane {
   limitElev(elev, opts = {}) {
     const D = this.def, as = D.clmax / D.cla, aLim = as * (opts.aoa ?? 0.86 + this.flaps * 0.08);
     // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
-    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
-    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
+    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr - 1.5 * Math.max(0, this.aRate || 0));
+    // limite de G com amortecimento pela taxa do G: só proporcional, o G passava, o limitador cortava, caía e voltava
+    // (no W direto o F-86 ia 10,6 → 6,3 → 9,8 → 7,5 G — o avião "quicava" no limite)
+    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25 - 0.09 * Math.max(0, this.nRate || 0));
     elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
     return Math.max(elev, (-(opts.gneg || 2.5) - this.n) * 0.6 - 0.25);                 // limite de G negativo
   }
@@ -791,7 +805,8 @@ export class Plane {
   // trem arrancado: as pernas viram destroço
   collapseGear() { for (const n of ['L', 'R', 'N']) if (this.legPos(n) > 0.3) this.ripLeg(n); }
   // posição de cada perna do trem ('L', 'R', 'N'): a comandada; travada fica onde parou; arrancada = null
-  legPos(n) { const m = this.mods && this.mods['gear' + n]; return !m ? this.gear : m.lost ? null : m.dead ? m.stuck : this.gear; }
+  // bequilha dos pistão é fixa (Spitfire IX, Fw 190 e Il-2 deixam a roda para fora): sempre baixada, até ser arrancada
+  legPos(n) { const m = this.mods && this.mods['gear' + n], k = n === 'N' && !this.def.jet ? 1 : this.gear; return !m ? k : m.lost ? null : m.dead && k !== 1 ? m.stuck : k; }
   // extensão média (arrasto) e trem em condição de pouso (principais — e o do nariz no jato — todo baixados)
   get gearOut() { let s = 0; for (const n of ['L', 'R', 'N']) s += this.legPos(n) || 0; return s / 3; }
   get gearDown() { return ['L', 'R', ...(this.def.jet ? ['N'] : [])].every(n => (this.legPos(n) ?? 0) > 0.98); }

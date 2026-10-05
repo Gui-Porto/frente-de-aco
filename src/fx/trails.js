@@ -23,7 +23,7 @@ const tex = (() => {
 })();
 const MAT = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
 export const trails = [];
-const _t = new THREE.Vector3(), _c = new THREE.Vector3(), _s = new THREE.Vector3();
+const _t = new THREE.Vector3(), _c = new THREE.Vector3(), _s = new THREE.Vector3(), _pv = new THREE.Vector3(), _q = new THREE.Vector3();
 
 export class Trail {
   // o: { life (s), w0, w1 (largura inicial/final), color, alpha, step (m entre amostras) }
@@ -53,7 +53,7 @@ export class Trail {
   // reconstrói a fita: largura e alfa pela idade de cada amostra
   update(now, dt) {
     const g = this.mesh.geometry, P = g.attributes.position.array, C = g.attributes.color.array, U = g.attributes.uv.array;
-    let k = 0, alive = 0;
+    let k = 0, alive = 0, has = false;
     for (let j = 0; j < this.n; j++) {
       const i = (this.head - this.n + j + N) % N, age = now - this.t[i], f = age / this.life;
       if (f >= 1) continue;
@@ -63,9 +63,17 @@ export class Trail {
       const jn = j < this.n - 1 ? (i + 1) % N : (i - 1 + N) % N;
       _t.set(this.p[jn * 3] - this.p[i * 3], this.p[jn * 3 + 1] - this.p[i * 3 + 1], this.p[jn * 3 + 2] - this.p[i * 3 + 2]);
       if (j === this.n - 1) _t.negate();
-      _c.copy(camera.position).sub(_s);
-      _t.cross(_c); const L = _t.length() || 1;
-      const w = (this.w0 + (this.w1 - this.w0) * Math.sqrt(f)) / L;
+      _c.copy(camera.position).sub(_s).normalize(); _t.normalize();
+      // lado = tangente × câmera, CONTÍNUO de uma amostra para a outra: com a câmera quase na linha do rastro (atrás do
+      // míssil) o sinal virava de amostra em amostra e a fita se torcia em gravatas — o míssil "distorcido" no ar.
+      // Mantém o sentido da amostra anterior e, quase de ponta, puxa para o lado dela (projetado no plano da tela)
+      _t.cross(_c); const s = _t.length();
+      if (has) {
+        _q.copy(_pv).addScaledVector(_c, -_pv.dot(_c)); if (_q.lengthSq() > 1e-8) _q.normalize();
+        if (s > 1e-6) { _t.divideScalar(s); if (_t.dot(_q) < 0) _t.negate(); const b = Math.min(1, s / 0.3); _t.multiplyScalar(b).addScaledVector(_q, 1 - b); } else _t.copy(_q);
+      } else if (s > 1e-6) _t.divideScalar(s); else _t.set(0, 1, 0).cross(_c);
+      _t.normalize(); _pv.copy(_t); has = true;
+      const w = this.w0 + (this.w1 - this.w0) * Math.sqrt(f);
       P[k * 6] = _s.x + _t.x * w; P[k * 6 + 1] = _s.y + _t.y * w; P[k * 6 + 2] = _s.z + _t.z * w;
       P[k * 6 + 3] = _s.x - _t.x * w; P[k * 6 + 4] = _s.y - _t.y * w; P[k * 6 + 5] = _s.z - _t.z * w;
       // alfa: nasce forte, some com a idade; a ponta mais nova (perto do motor) um pouco mais clara
