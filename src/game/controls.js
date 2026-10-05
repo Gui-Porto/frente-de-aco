@@ -104,7 +104,7 @@ function controlPlane(p, dt) {
     const r = 1 - Math.exp(-dt * 6);
     p.elev += (kp - p.elev) * r; p.ail += (kx - p.ail) * r; p.rud += (ky - p.rud) * r;
   } else {
-    p.steerTo(cam.aimDir, dt, { glim: 9, groundAssist: true });
+    p.steerTo(cam.aimDir, dt, { glim: 9 });
     if (kx) p.ail = kx; if (ky) p.rud = ky; if (kp) p.elev = kp;
   }
   p.firing = isDown('a_guns');

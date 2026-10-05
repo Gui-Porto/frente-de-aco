@@ -516,11 +516,6 @@ export class Plane {
     else this.iY = (this.iY || 0) * Math.exp(-dt * 4);
     this.rud = clamp(K * kr * yawErr * (1 - w * 0.7) - ky * this.yr + (nose ? 4 * this.iY : 0), -1, 1);
     elev = this.limitElev(elev, opts);
-    // proteção perto do solo (assistência arcade): não deixa mergulhar abaixo de ~60 m sem querer
-    if (opts.groundAssist) {
-      const agl = this.pos.y - H(this.pos.x, this.pos.z), sink = -this.vel.y;
-      if (agl < 40 + sink * 2.2 && _pf.y < 0.1) elev = Math.max(elev, 0.6);
-    }
     // no chão: mira no horizonte ou abaixo = fica rolando (sem puxar); mira acima = roda e decola
     // no chão: mira no horizonte ou abaixo = rola sem puxar; bequilha: empurra para levantar a cauda na corrida (decola
     // na atitude certa, não de três pontos perto do estol); triciclo: pouco, senão bate a roda do nariz

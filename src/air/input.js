@@ -80,7 +80,7 @@ export function pilot(p, c, aimDir, dt) {
     p.pitchCmd = null; // a próxima tecla parte do profundor atual
     // instrutor: nariz (linha das armas) no círculo do mouse, resposta mais viva que a da IA.
     // lead 0,1 s: com o integral e a inclinação de curva da mira, 0,3 deixava o nariz ~3° À FRENTE do círculo em curva
-    p.steerTo(aimDir, dt, { glim: Math.min(p.def.glim - 1.5, 10), groundAssist: !p.gearCmd, nose: true, // pouso é do piloto: o círculo leva o nariz também com trem baixado
+    p.steerTo(aimDir, dt, { glim: Math.min(p.def.glim - 1.5, 10), nose: true, // sem assistência perto do chão (pedido do jogador): o círculo leva o nariz até lá
       gain: 1.3, lead: 0.1 });
   }
 }

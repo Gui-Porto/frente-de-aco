@@ -296,12 +296,15 @@ export function sndBoom(pos, big) {
 }
 export function sndPing(pos) { const a = at(pos, 0.6); if (!a) return; ping(a.t, Math.min(a.vol, .5), 2600, 700, .4, out(a, 0.6)); }
 export function sndClank(pos) { const a = at(pos, 1); if (!a) return; const o = out(a, 0.6); noiseBurst(a.t, Math.min(a.vol, 1), 3500, .25, 4, o); thump(a.t, Math.min(a.vol, .6), 220, .15, o); }
-// chapa rasgando (peça arrancada do avião): guincho metálico + estalo
+// chapa rasgando (peça arrancada do avião): estrondo grave de estrutura cedendo, rebites estourando em sequência e
+// um rangido curto de chapa. Antes era um sawtooth varrendo 1,4→0,3 kHz em cima de ruído agudo (soava "laser")
 export function sndTear(pos) {
   const a = at(pos, 1.6); if (!a) return; const o = out(a, 0.8), v = Math.min(a.vol, 0.9);
-  noiseBurst(a.t, v, 2600, 0.5, 5, o, 'bandpass', noiseBuf, 0.02);
-  ping(a.t, v * 0.25, rand(900, 1400), rand(300, 500), 0.45, o, 'sawtooth');
-  thump(a.t, v * 0.6, 120, 0.2, o);
+  noiseBurst(a.t, v * 0.8, 650, 0.4, 0.8, o, 'lowpass', brownBuf, 0.004);            // estrutura cedendo
+  thump(a.t, v * 0.5, 85, 0.25, o);
+  noiseBurst(a.t + 0.02, v * 0.3, rand(450, 750), 0.35, 4, o, 'bandpass', noiseBuf, 0.05); // rangido da chapa
+  for (let i = 0, n = 4 + (Math.random() * 4 | 0); i < n; i++)                         // rebites estourando
+    noiseBurst(a.t + rand(0, 0.28), v * rand(0.15, 0.35), rand(1400, 3800), rand(0.02, 0.05), 3, o, 'bandpass', noiseBuf, 0.002);
 }
 // bala inimiga passando perto: estalo supersônico gravado (de quem estava do lado de lá da .50)
 export function sndSnap(pos) { const a = at(pos, 1); if (!a) return; const k = ['snap1', 'snap2', 'snap3'].filter(n => SMP[n]); if (k.length) playRec(SMP[k[Math.floor(Math.random() * k.length)]], null, 0.55, rand(0.9, 1.15), out(a, 0.2)); }
