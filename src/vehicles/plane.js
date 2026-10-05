@@ -158,8 +158,9 @@ export class Plane {
     for (const [o, k] of this._det) o.layers.set(lv >= k ? 1 : 0);
   }
   // desmaiado: sem comando nenhum (manche solto, sem disparar); 0..1 para escurecer a tela
-  // escurecimento da tela: desmaiado = preto (entra em 0,3 s; sai no último 1,2 s); acordado = visão de túnel pela carga
-  get blackout() { const g = Math.max(0, (this.gStress - 0.12) / 0.88) ** 1.2 * 0.92; return this.koT > 0 ? Math.max(g, Math.min(1, this.koAge / 0.3, this.koT / 1.2)) : g; }
+  // escurecimento da tela: desmaiado = quase preto (0,85: ainda se vê o vulto; entra em 0,3 s, sai no último 1,2 s);
+  // acordado = visão de túnel pela carga, no máximo 0,7 (o centro nunca some antes do desmaio). `gRed`: veio de G negativo (redout)
+  get blackout() { const g = Math.max(0, (this.gStress - 0.2) / 0.8) ** 1.3 * 0.7; return this.koT > 0 ? Math.max(g, Math.min(0.85, this.koAge / 0.3, this.koT / 1.2)) : g; }
   physics(dt) {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
@@ -266,11 +267,12 @@ export class Plane {
     // fisiologia do piloto: G SUSTENTADO acima da tolerância acumula carga (gStress 0..1). A tela vai escurecendo das
     // bordas para o centro (visão de túnel, `blackout`) e em 1 o piloto DESMAIA: alguns segundos sem controle, o avião
     // segue solto, depois ele volta a si. Sem texto nenhum — só a tela. Jato tem traje anti-G (+1 G); ferido apaga antes.
-    // Limiar 5 G (pistão) / 6 G (jato): com 7,5/6,5 quase nenhum avião sustentava G acima (Fw 190/P-47 chegam a ~5,7 G,
-    // MiG-21/F-4E a ~7 G) e o jogador nunca apagava. Pistão a 8 G: ~2,6 s; 7 G: ~3,6 s. Jato a 9 G: ~2,4 s. Negativo: abaixo de −3 G.
-    // Recupera devagar: curvas seguidas somam (antes −0,3/s zerava logo).
-    const gT = (this.eng.jet ? 6 : 5) - (this.wounded ? 1 : 0);
-    const gx = this.n > gT ? (this.n - gT) * 0.13 + 0.02 : this.n < -3 ? (-3 - this.n) * 0.2 : this.n > gT - 1.5 ? -0.06 : -0.18;
+    // Limiar 6 G (pistão) / 6,5 G (jato): com 5 G o pistão (que vive a ~5,7 G sustentado em curva) apagava mais que o jato.
+    // Só puxada forte acumula: pistão a 8 G ~4,5 s até o desmaio, 7 G ~8 s; jato a 9 G ~3,7 s. Negativo (redout): abaixo de −3 G.
+    // Curvas seguidas ainda somam, mas solto o manche recupera em ~3 s.
+    const gT = (this.eng.jet ? 6.5 : 6) - (this.wounded ? 1 : 0);
+    const gx = this.n > gT ? (this.n - gT) * 0.1 + 0.02 : this.n < -3 ? (-3 - this.n) * 0.15 : this.n > gT - 1.5 ? -0.08 : -0.3;
+    if (this.n > gT) this.gRed = false; else if (this.n < -3) this.gRed = true;
     // combustível: consumo do motor + vazamentos; seco = motor apaga
     const leak = fuelLeak(this);
     fuelStep(this, this.engineOn ? this.eng.flow : 0, dt);
@@ -281,7 +283,7 @@ export class Plane {
       if (this.koT <= 0) this.gStress = 0.55; // acorda ainda meio apagado: a visão volta aos poucos
     } else {
       this.gStress = clamp(this.gStress + gx * dt, 0, 1);
-      if (this.gStress >= 1 && this.alive && this.pilot) { this.koT = 4 + Math.random() * 3; this.koAge = 0; this.gStress = 1; }
+      if (this.gStress >= 1 && this.alive && this.pilot) { this.koT = 2.5 + Math.random() * 1.5; this.koAge = 0; this.gStress = 1; }
     }
     // limites estruturais
     if (this.alive) {
