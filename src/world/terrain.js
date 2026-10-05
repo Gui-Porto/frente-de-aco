@@ -5,7 +5,7 @@ import { clamp, lerp, sstep, hash2, rand } from '../core/util.js';
 // =====================================================================
 // Terreno analítico: a física consulta H(x,z) diretamente
 // =====================================================================
-export const LIMIT = 360, INNER = 900, OUTER = 9000, AIRLIMIT = 3200;
+export const LIMIT = 360, INNER = 900, OUTER = 15000, AIRLIMIT = 3200; // OUTER: malha detalhada de ±7,5 km (arenas maiores)
 export const POINTS = [{ id: 'A', x: -190, z: 25 }, { id: 'B', x: 0, z: 0 }, { id: 'C', x: 190, z: -25 }];
 export const SPAWN = { 1: { x: 0, z: 300, yaw: Math.PI }, '-1': { x: 0, z: -300, yaw: 0 } };
 export const AIRSPAWN = { 1: { x: 0, z: 2400, y: 1300, yaw: Math.PI }, '-1': { x: 0, z: -2400, y: 1300, yaw: 0 } };
@@ -205,7 +205,7 @@ function terrainMesh(size, seg, drop, holeR, macro = false) {
   return m;
 }
 terrainMesh(INNER, 300, 0, 0);
-terrainMesh(OUTER, 460, 1.4, INNER / 2 - 24, true); // ~20 m por quadrado: com 35 m os morros cortavam por cima do avião rente
+terrainMesh(OUTER, 520, 1.4, INNER / 2 - 24, true); // ~29 m por quadrado, sem afundar: com 35 m os morros cortavam por cima do avião rente
 // anel distante até o horizonte (56 km, 200 m por quadrado): as serras fecham a vista e não há mais borda nem vazio
 // no fim do mapa; afundado e por baixo da malha externa na emenda
 terrainMesh(56000, 280, 6, OUTER / 2 - 250, true);
