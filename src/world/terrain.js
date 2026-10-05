@@ -183,8 +183,10 @@ function terrainMesh(size, seg, drop, holeR, macro = false) {
   const pos = g.attributes.position, col = new Float32Array(pos.count * 3), sp = new Float32Array(pos.count * 3), c = new THREE.Color(), w = [0, 0, 0];
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
-    const ed = holeR ? 0 : sstep(INNER / 2 - 50, INNER / 2, Math.max(Math.abs(x), Math.abs(z))) * 1.4;
-    pos.setY(i, H(x, z) - drop - ed);
+    // malha de fora: afunda só na emenda com a de dentro (onde as duas se sobrepõem). Afundada inteira (1,4 m), o
+    // chão desenhado ficava abaixo do que a física usa: o avião rodava "flutuando" e batia antes de tocar o chão
+    const ed = holeR ? 0 : sstep(INNER / 2 - 50, INNER / 2, Math.max(Math.abs(x), Math.abs(z))) * 1.4, M = Math.max(Math.abs(x), Math.abs(z));
+    pos.setY(i, H(x, z) - (holeR && drop < 3 ? drop * (1 - sstep(holeR + 30, holeR + 90, M)) : drop) - ed);
     groundSample(x, z, c, w, macro);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; sp[i * 3] = w[0]; sp[i * 3 + 1] = w[1]; sp[i * 3 + 2] = w[2];
   }
@@ -203,7 +205,7 @@ function terrainMesh(size, seg, drop, holeR, macro = false) {
   return m;
 }
 terrainMesh(INNER, 300, 0, 0);
-terrainMesh(OUTER, 260, 1.4, INNER / 2 - 24, true);
+terrainMesh(OUTER, 460, 1.4, INNER / 2 - 24, true); // ~20 m por quadrado: com 35 m os morros cortavam por cima do avião rente
 // anel distante até o horizonte (56 km, 200 m por quadrado): as serras fecham a vista e não há mais borda nem vazio
 // no fim do mapa; afundado e por baixo da malha externa na emenda
 terrainMesh(56000, 280, 6, OUTER / 2 - 250, true);

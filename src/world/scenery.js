@@ -229,15 +229,42 @@ export let treeMesh;
   });
   scene.add(treeMesh);
   const far = [];
-  for (let i = 0; i < 40000 && far.length < 5200; i++) {
+  for (let i = 0; i < 100000 && far.length < 9000; i++) {
     const x = srand() * 9000 - 4500, z = srand() * 9000 - 4500;
     if (Math.max(Math.abs(x), Math.abs(z)) < INNER / 2 || runwayClear(x, z)) continue;
     if (Math.sin(x * 0.004) * Math.cos(z * 0.0035) + Math.sin(x * 0.011 + z * 0.007) * 0.5 < 0.55) continue;
     far.push([x, z, 0.9 + srand() * 0.7]);
   }
   const fm = new THREE.InstancedMesh(oak, vegMat(), far.length);
-  far.forEach(([x, z, sc], i) => { p.set(x, H(x, z) - 1.6, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc * 1.4, sc * 1.4, sc * 1.4); m.compose(p, q, s); fm.setMatrixAt(i, m); col.setScalar(rand(.75, 1.2)); fm.setColorAt(i, col); regTree(x, z, 2.6 * sc, H(x, z) - 1.6 + 9 * sc * 1.4); });
-  fm.castShadow = true; scene.add(fm);
+  far.forEach(([x, z, sc], i) => { p.set(x, H(x, z) - 0.3, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc * 1.4, sc * 1.4, sc * 1.4); m.compose(p, q, s); fm.setMatrixAt(i, m); col.setScalar(rand(.75, 1.2)); fm.setColorAt(i, col); regTree(x, z, 2.6 * sc, H(x, z) - 0.3 + 9 * sc * 1.4); });
+  fm.castShadow = false; scene.add(fm); // sem sombra: o passe de sombra desenhava as milhares de árvores de fora inteiras
+}
+// Sítios fora do campo de batalha (Normandia): casa de pedra e celeiro, às vezes um galpão, espalhados pelo mapa
+// inteiro. Dão escala no voo baixo (antes, fora do campo dos tanques, só havia chão pintado). Colisão com avião
+// (obstNear), sem colisor Rapier (os tanques não vão até lá).
+{
+  const prism = (w, h, l) => { const g = new THREE.CylinderGeometry(1, 1, l, 3).rotateX(Math.PI / 2).rotateZ(Math.PI); g.scale(w / 1.732, h / 1.5, 1); return g; };
+  const wall = [0.56, 0.52, 0.45], roof = [0.28, 0.13, 0.09], slate = [0.22, 0.23, 0.25], wood = [0.25, 0.18, 0.12];
+  const house = mergeColored([[new THREE.BoxGeometry(7, 4.6, 10).translate(0, 2.3, 0), wall], [prism(7.6, 3.4, 10.6).translate(0, 4.6 + 1.13, 0), slate], [new THREE.BoxGeometry(0.8, 2.2, 0.8).translate(1.8, 6.6, 3), wall]]);
+  const barn = mergeColored([[new THREE.BoxGeometry(10, 5.5, 18).translate(0, 2.75, 0), wood], [prism(11, 4.2, 18.6).translate(0, 5.5 + 1.4, 0), roof]]);
+  const kinds = [[house, 5.2, 8.5], [barn, 9.5, 11]], lists = [[], []];
+  const free = (x, z) => Math.max(Math.abs(x), Math.abs(z)) > INNER / 2 + 60 && !runwayClear(x, z) && !AIRFIELDS.some(a => onAirfield(a, x, z, 260));
+  for (let i = 0; i < 4000 && lists[0].length < 320; i++) {
+    const x = srand() * 9600 - 4800, z = srand() * 9600 - 4800, yaw = srand() * 6.28;
+    if (!free(x, z) || Math.abs(H(x + 8, z) - H(x - 8, z)) + Math.abs(H(x, z + 8) - H(x, z - 8)) > 4) continue;
+    lists[0].push([x, z, yaw]);
+    if (srand() < 0.7) { const d = 16 + srand() * 10, a = yaw + 1.2 + srand(); lists[1].push([x + Math.cos(a) * d, z + Math.sin(a) * d, yaw + (srand() < 0.5 ? 0 : Math.PI / 2)]); }
+  }
+  const m = new THREE.Matrix4(), q = new QUAT(), s = new V3(1, 1, 1), p = new V3(), col = new THREE.Color();
+  kinds.forEach(([geo, r, top], k) => {
+    const L = lists[k], im = new THREE.InstancedMesh(geo, vegMat(), L.length);
+    L.forEach(([x, z, yaw], i) => {
+      const y0 = Math.min(H(x - r, z - r), H(x + r, z - r), H(x - r, z + r), H(x + r, z + r)) - 0.4;
+      p.set(x, y0, z); q.setFromAxisAngle(UP, yaw); m.compose(p, q, s); im.setMatrixAt(i, m); col.setScalar(rand(0.82, 1.15)); im.setColorAt(i, col);
+      regObst({ mn: [x - r, y0, z - r], mx: [x + r, y0 + top, z + r] }, false);
+    });
+    im.receiveShadow = true; scene.add(im);
+  });
 }
 export function resetTrees() {
   const m = new THREE.Matrix4(), s = new V3(), p = new V3();
