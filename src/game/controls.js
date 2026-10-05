@@ -65,7 +65,7 @@ export function controlPlayer(dt) {
   $('#mini').classList.toggle('big', isDown('map'));
   const p = S.player;
   if (!p || !p.alive || S.state !== 'play' || S.paused) { if (p && p.type !== 'plane') { p.throttle = 0; p.steer = 0; p.mgFiring = false; p.firing = false; } return; }
-  if (mouse.wheel) {
+  if (mouse.wheel && p.type !== 'plane') {
     if (cam.sniper || cam.binoc) cam.fov = clamp(cam.fov * (mouse.wheel > 0 ? 1.15 : 0.87), 3.5, 16);
     else cam.dist = clamp(cam.dist + mouse.wheel * 1.2, 6, 26);
   }
@@ -91,6 +91,9 @@ function controlPlane(p, dt) {
   if (isDown('a_thr_up')) { p.throttle = Math.min(1, p.throttle + dt * 0.6); if (p.throttle >= 1) wepHold += dt; } else wepHold = 0;
   if (isDown('a_thr_dn')) { p.throttle = Math.max(0, p.throttle - dt * 0.6); p.wep = false; }
   if (wepHold > 0.5) p.wep = true;
+  // scroll = manete, 5% por passo (para cima acelera; em 100% liga o WEP)
+  if (mouse.wheel < 0) { if (p.throttle >= 1) p.wep = true; p.throttle = Math.min(1, p.throttle - 0.05 * mouse.wheel); }
+  if (mouse.wheel > 0) { p.throttle = Math.max(0, p.throttle - 0.05 * mouse.wheel); p.wep = false; }
   if (pressed('a_flaps')) p.cycleFlaps();
   p.airbrake = isDown('a_airbrake');
   const kx = (isDown('a_roll_r') ? 1 : 0) - (isDown('a_roll_l') ? 1 : 0);
