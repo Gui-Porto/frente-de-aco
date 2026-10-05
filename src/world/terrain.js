@@ -39,9 +39,11 @@ for (const f of FLATS) f.h = baseH(f.x, f.z);
 // Pistas da Batalha Aérea (uma por equipe, atrás do spawn): platô retangular com rampa até o relevo.
 // `pad` = largura extra plana ao lado da pista (pátio e hangares). Rumo de decolagem: yaw (0 = +z).
 // set: 'prop' (hélice) ou 'jet' (jato e radar: pista mais longa e bases bem mais afastadas — ~12 km entre elas)
+// As de hélice ficam 3,5 km para o lado: no eixo, o vale e o corredor de aproximação da base de jato (logo atrás)
+// passavam por cima delas e a pista ficava enterrada 25–75 m — o avião aparecia no meio do mato
 export const AIRFIELDS = [
-  { team: 1, x: -260, z: 3450, len: 1700, w: 50, pad: 170, yaw: Math.PI, set: 'prop' },
-  { team: -1, x: 260, z: -3450, len: 1700, w: 50, pad: 170, yaw: 0, set: 'prop' },
+  { team: 1, x: -3500, z: 3450, len: 1700, w: 50, pad: 170, yaw: Math.PI, set: 'prop' },
+  { team: -1, x: 3500, z: -3450, len: 1700, w: 50, pad: 170, yaw: 0, set: 'prop' },
   { team: 1, x: -420, z: 5600, len: 2400, w: 60, pad: 190, yaw: Math.PI, set: 'jet' },
   { team: -1, x: 420, z: -5600, len: 2400, w: 60, pad: 190, yaw: 0, set: 'jet' },
 ];
