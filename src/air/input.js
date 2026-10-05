@@ -74,7 +74,8 @@ export function pilot(p, c, aimDir, dt) {
     // (limitador dentro da rampa: o F-86 a 1200 km/h quicava 6,9↔9,6 G no W — "sobe e desce" no limite)
     p.pitchCmd = (p.pitchCmd ?? p.elev) + (c.pitch - (p.pitchCmd ?? p.elev)) * r;
     p.elev = p.limitElev(p.pitchCmd, { glim });
-    p.ail += ((c.roll || clamp(-2.5 * p.rr, -1, 1)) - p.ail) * r;      // solto: segura a inclinação (amortece rolagem)
+    const rk = Math.min(1, 0.7 / (2.5 * (p._ailAuth || 0) * Math.max(dt, 1 / 240) + 1e-6)); // sem bater em alta velocidade (ver steerTo)
+    p.ail += ((c.roll || clamp(-2.5 * rk * p.rr, -1, 1)) - p.ail) * r;  // solto: segura a inclinação (amortece rolagem)
     p.rud += ((c.yaw || clamp(-1.6 * p.yr, -1, 1)) - p.rud) * r;       // solto: anula a guinada
   } else {
     p.pitchCmd = null; // a próxima tecla parte do profundor atual

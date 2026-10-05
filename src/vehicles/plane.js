@@ -250,6 +250,7 @@ export class Plane {
       const qe = qd + (this.eng.jet ? 0 : 0.5 * this.eng.thrust / 8);
       let Mp = S * c * (qe * D.kde * (this.elev * ctrl * A.elev + (st('elevL') + st('elevR')) / 2) * tE - qd * 0.9 * aE * (this.tailOn ? 1 : 0.1)) - qd * S * c * c / (2 * Vd) * dmp[0] * this.pr * (this.tailOn ? 1 : 0.15);
       let Mr = qd * S * b * D.kda * (this.ail * A.ail + A.ailBias * 0.15) * ctrl * (this.wingOn.L && this.wingOn.R ? 1 : 0.5) - qd * S * b * b / (2 * Vd) * dmp[1] * this.rr * Math.max(kW, 0.3);
+      this._ailAuth = qd * S * b * D.kda * A.ail * ctrl / Ir; // rad/s² por unidade de aileron: o instrutor limita o ganho por ela
       Mr += qd * S * CL * (hpL - hpR) / 2 * b * 0.22;           // assimetria de sustentação
       Mr += qd * S * b * (0.03 * (this.flapP.L - this.flapP.R) + D.kda * 0.5 * (st('ailL') + st('ailR'))); // flap assimétrico / aileron travado
       Mr += qd * S * c * D.kde * 0.25 * tE * (this.elev * ctrl * A.elevBias + (st('elevL') - st('elevR')) / 2) * (D.span * 0.18 / c); // profundor de um lado só também rola
@@ -509,7 +510,11 @@ export class Plane {
     if (opts.recover) elev *= clamp((wu - 0.25) / 0.45, 0, 1);
     const elev0 = elev;
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
-    this.ail = clamp(K * (ka * rollErr - 2.0 * this.rr), -1, 1);
+    // o comando fica parado o quadro inteiro (vários passos de física): com muita pressão dinâmica (jato > ~1000 km/h)
+    // o amortecimento 2,0 corrigia demais num quadro e a rolagem alternava ±46°/s a cada quadro — asa "tremendo" na
+    // tela. O ganho é cortado para que um quadro desfaça no máximo ~70% da taxa de rolagem
+    const rk = Math.min(1, 0.7 / (2.0 * K * (this._ailAuth || 0) * Math.max(dt, 1 / 240) + 1e-6));
+    this.ail = clamp(K * rk * (ka * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
     // integral lateral (modo nariz): perto da mira a inclinação quase não age e o leme proporcional era fraco —
