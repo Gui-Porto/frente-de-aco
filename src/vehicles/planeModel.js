@@ -963,15 +963,30 @@ export function buildPlane(D) {
     for (let i = 0; i < rk.n; i++) {
       const side = i % 2 ? -1 : 1;
       let x, y, z, par = root;
-      if (belly) { const k = Math.floor(i / 2); x = side * fr * 0.5; y = -fr * 0.92; z = D.wingZ + 1.2 - k * (M.len + 0.6); }
+      if (belly) {
+        // semiembutido no ventre (Sparrow do F-4): poço raso escuro na chapa e o lançador ejetor (dois pés com as
+        // garras) segurando o míssil uns centímetros abaixo — antes ele ficava colado na chapa, sem suporte nenhum
+        const k = Math.floor(i / 2); x = side * fr * 0.5; z = D.wingZ + 1.2 - k * (M.len + 0.6);
+        const yb = fuseBottom(fuseG.userData.sec, x, z) ?? -fr * 0.9; y = yb - r - 0.07;
+        add(new THREE.CylinderGeometry(r * 1.25, r * 1.25, M.len * 0.92, 18, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2), DM.soot, root, x, yb + 0.02, z); // poço
+        for (const dz of [-0.24, 0.22]) {
+          add(new RoundedBoxGeometry(0.07, yb - y - r + 0.04, 0.16, 2, 0.015), dark, root, x, (yb + y + r) / 2, z + dz * M.len);   // pé do ejetor
+          add(new THREE.BoxGeometry(0.14, 0.02, 0.08), steel, root, x, y + r + 0.01, z + dz * M.len);                               // garras
+        }
+      }
       else {
         // pilone + trilho presos ao intradorso na estação da asa (antes ficavam flutuando à frente do bordo de ataque)
         const k = Math.floor(wk++ / 2), o = wingCfg(side), sw = Math.min(Math.max((D.span * (0.24 + 0.1 * k) - o.x0) / o.half, 0.15), 0.8);
         const c = chordAt(o, sw), p0 = station(o, sw, 0.42), tw = (o.t0 + (o.t1 - o.t0) * sw) * c * 0.5, ph = 0.1 + r * 0.6;
         par = sw > sB ? (side > 0 ? wingL : wingR).userData.tip : side > 0 ? wingL : wingR;
         x = p0[0]; y = p0[1] - tw - ph - r; z = p0[2] + M.len * 0.06;
-        add(new THREE.BoxGeometry(0.07, ph + 0.04, Math.min(c * 0.55, M.len * 0.5)), paint, par, x, p0[1] - tw - ph / 2 + 0.02, p0[2]);     // pilone
-        add(new THREE.BoxGeometry(0.09, 0.05, M.len * 0.62), dark, par, x, y + r + 0.02, z);                                              // trilho de lançamento
+        add(new RoundedBoxGeometry(0.08, ph + 0.04, Math.min(c * 0.55, M.len * 0.5), 2, 0.02), paint, par, x, p0[1] - tw - ph / 2 + 0.02, p0[2]); // pilone
+        // lançador de trilho (LAU-7 / APU-13): corpo com a frente arredondada, o trilho e os ganchos do míssil
+        const ll = M.len * 0.62, lz = z + M.len * 0.08;
+        add(new RoundedBoxGeometry(0.1, 0.07, ll, 2, 0.025), paint, par, x, y + r + 0.05, lz);
+        add(new THREE.SphereGeometry(0.05, 10, 8), paint, par, x, y + r + 0.05, lz + ll / 2).scale.set(1, 0.7, 1.6);
+        add(new THREE.BoxGeometry(0.05, 0.02, ll * 0.95), steel, par, x, y + r + 0.006, lz);
+        for (const dz of [-0.3, 0.05, 0.3]) add(new THREE.BoxGeometry(0.03, 0.025, 0.04), dark, par, x, y + r - 0.002, z + dz * M.len);
       }
       const m = add(missileGeometry(M), MSL_MATS, par, x, y, z);
       missileMeshes.push(m);
@@ -1254,6 +1269,13 @@ export function missileGeometry(M) {
   // bocal: tubo escuro com a garganta para dentro
   const rn = r * nz.r;
   G[4].push(lathe([V(rn * 0.55, tail + 0.02), V(rn * 0.85, tail - nz.len * 0.6), V(rn, tail - nz.len), V(rn * 1.04, tail - nz.len), V(r * 0.96, tail + 0.002)]));
+  // olho do buscador por trás do domo (dá profundidade ao vidro), duto de cabos no dorso e ganchos do trilho
+  if (F.nose.kind !== 'ogive') { const rd = r * (F.nose.dome || 0.55); G[4].push(new THREE.CircleGeometry(rd * 0.55, 14).translate(0, 0, tip - rd * 1.05)); }
+  const rw0 = tip - noseL - 0.04, rw1 = tail + L * 0.18;
+  G[0].push(new THREE.CapsuleGeometry(r * 0.16, rw0 - rw1, 2, 6).rotateX(Math.PI / 2).scale(1, 0.7, 1).translate(0, r * 0.98, (rw0 + rw1) / 2));
+  for (const zz of [tip - L * 0.3, tail + L * 0.35]) G[4].push(new THREE.BoxGeometry(r * 0.35, r * 0.3, r * 0.5).translate(0, r * 1.05, zz));
+  // garganta do bocal: anel escuro mais fundo
+  G[4].push(new THREE.CircleGeometry(r * nz.r * 0.5, 14).rotateY(Math.PI).translate(0, 0, tail + 0.03));
   // superfícies: canards (AIM-9/R-3), asas (rollerons nas traseiras do AIM-9/R-3; no meio do corpo no Sparrow), aletas traseiras
   const t = Math.max(0.006, M.d * 0.06);
   for (const k of ['canards', 'wings', 'tails']) if (F[k]) finSet(r, tip - F[k].at, F[k], t, G[0]);
