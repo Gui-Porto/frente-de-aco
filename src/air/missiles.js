@@ -89,7 +89,7 @@ export class Missile {
         pnAccel(this.pos, this.vel, tg.pos, tg.vel, M.nav, _q);
         _q.y += G; // compensa a gravidade
         _q.addScaledVector(_f, -_q.dot(_f)); // só aceleração lateral
-        const lim = M.maxG * G * clamp((V / 320) ** 2, 0.15, 1); // pouca autoridade em baixa velocidade
+        const lim = M.maxG * G * clamp((V / 290) ** 2, 0.22, 1); // pouca autoridade em baixa velocidade
         if (_q.length() > lim) _q.setLength(lim);
         _a.add(_q);
       }
@@ -128,8 +128,8 @@ export class Missile {
     fxExplosion(p, 1.1 + M.warhead / 9); sndBoom(p, false); shakeAt(p, 0.6, 120);
     for (let i = 0; i < 7; i++) spawnP({ pos: p.clone().add(rv(2)), vel: rv(5).add(this.vel.clone().multiplyScalar(0.05)), life: rand(5, 8), size: 3, size1: 9, color: 0x3c3a37, op: 0.55, drag: 1.2, rise: 0.2 });
     for (let i = 0; i < 10; i++) spawnP({ pos: p.clone(), vel: rv(40), life: rand(.3, .7), size: .25, size1: .1, tex: TEX.fire, add: true, color: 0xffd080, grav: 9, drag: .4 });
-    // estilhaços: dano cai com a distância; quem estiver a < 2× espoleta sofre
-    const R = M.fuse * 2.2;
+    // estilhaços: dano cai com a distância; quem estiver a < 2,4× espoleta sofre
+    const R = M.fuse * 2.4;
     for (const pl of planes) {
       if (pl.gone) continue;
       const d = pl === hitPlane ? 0 : pl.pos.distanceTo(p);
