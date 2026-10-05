@@ -473,7 +473,7 @@ export class Plane {
     // e voltava (MiG-21/F-4 balançavam 40°↔84° depois de a mira parar)
     if (this.nearAim) { const lim = Math.PI / 2 * clamp(off / 0.3, 0.3, 1); bank = clamp(bank, -lim, lim); }
     // no chão não se inclina para virar (tombaria o avião sobre uma roda): aileron só nivela, quem vira é o leme/roda
-    const w = this.onGround ? 0 : nose ? clamp((off - 0.02) / 0.09, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
+    const w = this.onGround || opts.level || opts.recover ? 0 : nose ? clamp((off - 0.02) / 0.09, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
     // nivelar: ganho 0,6 perto do nível (não balança), mais forte com muita inclinação a desfazer — parando o mouse
     // depois de uma curva o avião desfazia 90° a ~25°/s e o nariz ficava ~3,5° ao lado do círculo por 3 s
     const rollErr = lerp(level * (0.6 + 0.7 * clamp(Math.abs(level) - 0.35, 0, 1)), bank, w);
@@ -483,13 +483,16 @@ export class Plane {
     // ganhos do instrutor por avião (def.steer = { kp, kd, ka, kr, ky }); padrão = o que serve à maioria
     const SP = D.steer || {}, kp = SP.kp ?? 3.2, kd = SP.kd ?? 0.9, ka = SP.ka ?? 3.1, kr = SP.kr ?? 1.8, ky = SP.ky ?? 1.6;
     let elev = off > 1.4 && du < 0 ? 1 : K * (kp * pe * rp - kd * (this.pr - aimRate)) + trim + (nose ? 1.2 * this.iP : 0);
+    // recuperação perto do chão: desvira primeiro, puxa depois — de dorso, "alvo atrás e abaixo → puxa" era um
+    // split-S para dentro do chão (medido: IA a 6 G com 100–160° de inclinação até bater)
+    if (opts.recover) elev *= clamp((wu - 0.25) / 0.45, 0, 1);
     const elev0 = elev;
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
     this.ail = clamp(K * (ka * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
     this.rud = clamp(K * kr * yawErr * (1 - w * 0.7) - ky * this.yr, -1, 1);
-    const as = D.clmax / D.cla, aLim = as * (0.86 + this.flaps * 0.08);
+    const as = D.clmax / D.cla, aLim = as * (opts.aoa ?? 0.86 + this.flaps * 0.08);
     // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
     elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
     elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
