@@ -63,8 +63,8 @@ export function updateAirHUD(dt) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, V.W / 2, V.H - 40, 15, C.ally, 'center', UI);
   }
   tacMap(v, T);
-  const fade = B.fadeK || 0, g = live ? p.blackout : 0;
-  gdark(Math.max(g, fade), g > fade && p.gRed); // G (visão de túnel → desmaio; vermelho em G negativo) ou troca de tela pós-reparo
+  const fade = B.fadeK || 0, bo = live ? p.blackout : 0;
+  gdark(Math.max(bo, fade), bo > fade && p.gRed); // G (visão de túnel → desmaio; vermelho em G negativo) ou troca de tela pós-reparo
 }
 // escurecimento: as bordas fecham primeiro (visão de túnel) e em 1 a tela fica toda preta; só reescreve o estilo quando muda
 let _gd = -1;
