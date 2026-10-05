@@ -5,7 +5,7 @@ import { isDown, settings, keyName } from '../core/settings.js';
 import { V3, clamp } from '../core/util.js';
 import { drawScore } from '../ui/hud.js';
 import { $ } from '../core/util.js';
-import { B, wear } from './battle.js';
+import { B, needRefit } from './battle.js';
 import { homeField } from '../world/terrain.js';
 import { LOCK, LOCK_LABEL, leadPoint } from './targeting.js';
 import { missiles } from './missiles.js';
@@ -78,7 +78,7 @@ function gdark(k) {
 function baseHud(p) {
   const a = homeField(p.team), R = B.refit; if (!a) return;
   _b.set(a.x, a.h + 6, a.z); const d = _b.distanceTo(p.pos);
-  const need = wear(p) > 0.04 || p.guns.every(q => q.ammo < q.max * 0.25) || p.fuel < p.fuelMax * 0.2;
+  const need = needRefit(p);
   if (d > 900) {
     const pr = proj(_b, P1);
     if (pr && pr.on) {

@@ -30,12 +30,13 @@ export class FighterBrain {
     this.irRack = p.racks.find(r => r.M.seeker !== 'sarh') || null; this.sarhRack = p.racks.find(r => r.M.seeker === 'sarh') || null;
     this.seeker = this.irRack ? new Seeker(this.irRack.M) : null;
     this.threat = null; this.missile = null;
+    this.vs = Math.sqrt(2 * p.def.mass * G / (RHO * p.def.S * p.def.clmax)); // estol limpo (m/s)
     // decolagem: parado na pista (opts.runway), espera a vez (delay), rola na própria faixa, roda em vr, recolhe o trem e sobe
     this.runway = opts.runway || null; this.takeoff = !!(this.runway && p.onGround); this.toDelay = opts.delay || 0;
     if (this.takeoff) {
       const a = this.runway, D = p.def;
       this.rx = Math.cos(a.yaw); this.rz = -Math.sin(a.yaw); this.lane = (p.pos.x - a.x) * this.rx + (p.pos.z - a.z) * this.rz;
-      this.vr = 1.1 * Math.sqrt(2 * D.mass * G / (RHO * D.S * D.clmax)); // ~10% acima do estol limpo
+      this.vr = 1.2 * Math.sqrt(2 * D.mass * G / (RHO * D.S * D.clmax)); // ~20% acima do estol limpo (1,1 rodava no limite de α com o trem e a hélice puxando)
     }
   }
   // fase de decolagem (sem combate): segue o eixo da faixa e só puxa o nariz com velocidade
@@ -47,9 +48,15 @@ export class FighterBrain {
     if ((this.toDelay -= dt) > 0) { p.throttle = 0; p.wep = false; dir.y = -0.05; p.steerTo(dir.normalize(), dt, { glim: 3 }); return; }
     p.throttle = 1; p.wep = true;
     const agl = p.pos.y - H(p.pos.x, p.pos.z);
+    // subida rasa até ter folga sobre o estol: com 0,22 fixo o P-47 saía do chão a α 16°, perdia velocidade,
+    // o torque da hélice rolava o avião e ele voltava para o chão
+    const eK = clamp((p.ias - 1.25 * this.vs) / (0.6 * this.vs), 0, 1);
     if (p.onGround) dir.y = p.ias > this.vr ? 0.17 : -0.05;
-    else { dir.y = 0.22; if (agl > 25) p.gearCmd = 0; }
-    p.steerTo(dir.normalize(), dt, { glim: 3 });
+    else { dir.y = 0.03 + 0.17 * eK; if (agl > 25) p.gearCmd = 0; }
+    // α ≤ 60% do estol: puxando até o limite a bequilha saía do chão estolada. Rente ao chão só asas niveladas:
+    // inclinando para voltar à faixa, a ponta da asa batia na pista logo depois de sair do chão
+    if (!p.onGround && agl < 30) dir.set(fx, dir.y, fz);
+    p.steerTo(dir.normalize(), dt, { glim: 3, aoa: 0.6, level: !p.onGround && agl < 30 });
     if ((!p.onGround && agl > 250) || this.stateT > 90) { this.takeoff = false; this.state = 'patrol'; this.stateT = 0; p.gearCmd = 0; }
   }
   // percepção e decisão (em frequência menor que a física)
@@ -192,27 +199,40 @@ export class FighterBrain {
       default: { // patrulha em círculo largo na altitude de cruzeiro
         this.patrolA += dt * 0.05;
         const wx = this.home.x + Math.cos(this.patrolA) * 1400, wz = this.home.z + Math.sin(this.patrolA) * 1400;
-        dir.set(wx - p.pos.x, (Math.max(this.home.y, 1200) - p.pos.y) * 0.3, wz - p.pos.z).normalize(); glim = 4; p.wep = false;
+        dir.set(wx - p.pos.x, 0, wz - p.pos.z).normalize(); dir.y = clamp((Math.max(this.home.y, 1200) - p.pos.y) / 1500, -0.12, 0.25); dir.normalize(); glim = 4; p.wep = false; // rampa suave: alto demais virava mergulho a 1000 km/h
       }
     }
     // evita colisão com outros aviões
     for (const o of planes) {
       if (o === p || !o.alive) continue;
-      _r.copy(o.pos).sub(p.pos); const dist = _r.length(); if (dist > 140) continue;
+      _r.copy(o.pos).sub(p.pos); const dist = _r.length(); if (dist > 400) continue; // de frente fecham a ~200 m/s: 140 m dava 0,7 s
       const closing = -_a.copy(o.vel).sub(p.vel).dot(_r) / dist;
       if (closing > 0 && dist / closing < 2.5) { dir.addScaledVector(_r.normalize(), -1.4).normalize(); fire = false; }
     }
-    // solo: altitude mínima para recuperar de mergulho, R = v²/(g(n−1))
-    const agl = p.pos.y - H(p.pos.x, p.pos.z), V = p.vel.length(), sinD = clamp(-p.vel.y / Math.max(V, 1), 0, 1);
-    const pullAlt = V * V / (G * 4) * (1 - Math.sqrt(1 - sinD * sinD)) + 160;
-    if (agl < pullAlt) { dir.copy(fwdFlat).addScaledVector(UP, 1.0).normalize(); glim = Math.max(glim, 7); fire = false; }
+    // energia: subida limitada pela folga sobre o estol. Antes a patrulha pedia ~60° para cima (Δh·0,3 a 1,4 km),
+    // o pistão perdia velocidade, ia para o limite de ângulo de ataque e afundava até o chão puxando (medido: todas
+    // as quedas sozinhas eram α ≈ 15°, 250–280 km/h, −20 m/s). Lento = nariz no horizonte (ou abaixo) para acelerar.
+    const eK = clamp((p.ias - 1.3 * this.vs) / (0.8 * this.vs), 0, 1), agl = p.pos.y - H(p.pos.x, p.pos.z);
+    capClimb(dir, agl < 300 ? 0.04 + 0.5 * eK : -0.1 + 0.7 * eK);
+    // solo: altitude mínima para recuperar de mergulho, R = v²/(g(n−1)), mais o afundamento (lento não para na hora)
+    const V = p.vel.length(), sinD = clamp(-p.vel.y / Math.max(V, 1), 0, 1);
+    const pullAlt = V * V / (G * 3) * (1 - Math.sqrt(1 - sinD * sinD)) + 160 + Math.max(0, -p.vel.y) * 3; // n−1 = 3: rolar e chegar no G leva tempo
+    // recuperação: asas niveladas e nariz acima do horizonte só o que a velocidade aguenta (45° lento = afunda estolado)
+    const recover = agl < pullAlt;
+    if (recover) { dir.copy(fwdFlat).addScaledVector(UP, 0.15 + 0.85 * eK).normalize(); glim = Math.max(glim, 7); fire = false; }
     else if (dir.y < 0 && agl < 450) dir.y *= 0.2;
     // limite do mapa
     const lim = (S.airLimit || 4000) - 500;
     if (Math.max(Math.abs(p.pos.x), Math.abs(p.pos.z)) > lim) dir.set(-p.pos.x, 0, -p.pos.z).normalize().addScaledVector(UP, .15).normalize();
     p.firing = fire;
-    p.steerTo(dir, dt, { glim: Math.min(glim, p.def.glim - 1) });
+    p.steerTo(dir, dt, { glim: Math.min(glim, p.def.glim - 1), recover });
   }
+}
+// limita o seno da subida pedida em dir (mantém o rumo horizontal)
+function capClimb(dir, maxY) {
+  if (dir.y <= maxY) return;
+  const h = Math.hypot(dir.x, dir.z) || 1, k = Math.sqrt(1 - maxY * maxY) / h;
+  dir.set(dir.x * k, maxY, dir.z * k);
 }
 // a IA sabe do míssil pelos MESMOS sistemas do jogador ou vendo a fumaça (motor aceso / perto)
 function perceives(p, m) {

@@ -80,11 +80,12 @@ export class Plane {
       while (pts.length < g.n) pts.push(...pts.slice(0, g.n - pts.length));
       // cinta escolhida no hangar (jogador) ou padrão/ar-ar (IA)
       const beltName = (this.beltSel && this.beltSel[gi]) || (this.isPlayer ? 'Padrão' : Math.random() < 0.5 ? 'Padrão' : 'Ar-ar');
-      this.guns.push({ W, pts: pts.slice(0, g.n), ammo: g.ammo * g.n, max: g.ammo * g.n, acc: 0, k: 0, heat: 0, jam: false, beltName, belt: beltRounds(W, beltName) });
+      this.guns.push({ W, pts: pts.slice(0, g.n), ammo: g.ammo * g.n, max: g.ammo * g.n, acc: 0, k: 0, heat: 0, heatT: clamp(0.25 * g.ammo / (W.rpm / 60), 4, 8), jam: false, beltName, belt: beltRounds(W, beltName) });
     });
     this.bombs = []; this.rockets = 0;
     if (this.ordOn) { for (const b of D.bombs) for (let i = 0; i < b.n; i++) this.bombs.push(b); this.rockets = D.rockets ? D.rockets.n : 0; }
     else for (const m of [...this.bombMeshes, ...this.rocketMeshes]) m.visible = false;
+    this.ord0 = { bombs: this.bombs.length, rockets: this.rockets }; // carga de saída (o rearme só faz sentido se gastou)
     // estantes de mísseis (uma por tipo) e o selecionado; malhas na mesma ordem do modelo
     let mi = 0;
     this.racks = (D.missiles || []).map(r => ({ w: r.w, M: MISSILES[r.w], n: r.n, max: r.n, meshes: this.missileMeshes.slice(mi, mi += r.n) }));
@@ -471,12 +472,15 @@ export class Plane {
     if (this.nearAim) { if (off > NEAR * 1.5) this.nearAim = false; } else if (off < NEAR) this.nearAim = true;
     // perto da mira, o + 0.08 (~5°) deixa a inclinação proporcional ao desvio lateral: sem ele, dl e du quase zero
     // davam atan2 de ruído (±90°) e o jato balançava as asas com qualquer tremor da mira
-    let bank = Math.atan2(-dl, this.nearAim ? Math.abs(du) + 0.08 : du);
+    // círculo ABAIXO do nariz (até ~60°, quase sem desvio lateral; ex.: soltar o S no modo mouse): o jogador empurra
+    // o nariz de volta. Antes pedia ±180° de inclinação com o sinal decidido pelo ruído de dl → rolava de dorso
+    const push = nose && !this.nearAim && du < 0 && off < 1.05 && Math.abs(dl) < -du;
+    let bank = Math.atan2(-dl, this.nearAim ? Math.abs(du) + 0.08 : push ? -du : du);
     // e a inclinação fica limitada ao tamanho do erro: 8° ao lado pedia ~80° de asa e uma puxada que passava do alvo
     // e voltava (MiG-21/F-4 balançavam 40°↔84° depois de a mira parar)
     if (this.nearAim) { const lim = Math.PI / 2 * clamp(off / 0.3, 0.3, 1); bank = clamp(bank, -lim, lim); }
     // no chão não se inclina para virar (tombaria o avião sobre uma roda): aileron só nivela, quem vira é o leme/roda
-    const w = this.onGround ? 0 : nose ? clamp((off - 0.02) / 0.09, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
+    const w = this.onGround || opts.level || opts.recover ? 0 : nose ? clamp((off - 0.02) / 0.09, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
     // nivelar: ganho 0,6 perto do nível (não balança), mais forte com muita inclinação a desfazer — parando o mouse
     // depois de uma curva o avião desfazia 90° a ~25°/s e o nariz ficava ~3,5° ao lado do círculo por 3 s
     const rollErr = lerp(level * (0.6 + 0.7 * clamp(Math.abs(level) - 0.35, 0, 1)), bank, w);
@@ -486,18 +490,20 @@ export class Plane {
     // ganhos do instrutor por avião (def.steer = { kp, kd, ka, kr, ky }); padrão = o que serve à maioria
     const SP = D.steer || {}, kp = SP.kp ?? 3.2, kd = SP.kd ?? 0.9, ka = SP.ka ?? 3.1, kr = SP.kr ?? 1.8, ky = SP.ky ?? 1.6;
     let elev = off > 1.4 && du < 0 ? 1 : K * (kp * pe * rp - kd * (this.pr - aimRate)) + trim + (nose ? 1.2 * this.iP : 0);
+    // recuperação perto do chão: desvira primeiro, puxa depois — de dorso, "alvo atrás e abaixo → puxa" era um
+    // split-S para dentro do chão (medido: IA a 6 G com 100–160° de inclinação até bater)
+    if (opts.recover) elev *= clamp((wu - 0.25) / 0.45, 0, 1);
     const elev0 = elev;
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
     this.ail = clamp(K * (ka * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
-    this.rud = clamp(K * kr * yawErr * (1 - w * 0.7) - ky * this.yr, -1, 1);
-    const as = D.clmax / D.cla, aLim = as * (0.86 + this.flaps * 0.08);
-    // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
-    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
-    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
-    elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
-    elev = Math.max(elev, (-(opts.gneg || 2.5) - this.n) * 0.6 - 0.25);                 // limite de G negativo
+    // integral lateral (modo nariz): perto da mira a inclinação quase não age e o leme proporcional era fraco —
+    // depois de uma curva o nariz ficava ~3° ao lado do círculo parado por mais de 3 s (Spitfire, medido)
+    if (nose && off < 0.09 && !this.onGround) this.iY = clamp((this.iY || 0) + yawErr * dt, -0.1, 0.1);
+    else this.iY = (this.iY || 0) * Math.exp(-dt * 4);
+    this.rud = clamp(K * kr * yawErr * (1 - w * 0.7) - ky * this.yr + (nose ? 4 * this.iY : 0), -1, 1);
+    elev = this.limitElev(elev, opts);
     // proteção perto do solo (assistência arcade): não deixa mergulhar abaixo de ~60 m sem querer
     if (opts.groundAssist) {
       const agl = this.pos.y - H(this.pos.x, this.pos.z), sink = -this.vel.y;
@@ -510,6 +516,15 @@ export class Plane {
     this._elevLim = Math.abs(elev - elev0) > 0.02;
     this.elev = clamp(elev, -1, 1);
   }
+  // limitadores do instrutor (sem estol, G máximo/mínimo); também valem para W/S no modo mouse
+  limitElev(elev, opts = {}) {
+    const D = this.def, as = D.clmax / D.cla, aLim = as * (opts.aoa ?? 0.86 + this.flaps * 0.08);
+    // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
+    elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
+    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
+    elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
+    return Math.max(elev, (-(opts.gneg || 2.5) - this.n) * 0.6 - 0.25);                 // limite de G negativo
+  }
   // direção de tiro: armas FIXAS no eixo do avião, como no WT (quem aponta é o avião, não o mouse)
   fireDir(out) { this.axes(); return out.copy(_pf); }
   gunsPos(g, i, out) { const p = g.pts[i]; return out.set(p[0], p[1], p[2]).applyMatrix4(this.root.matrixWorld); }
@@ -517,9 +532,9 @@ export class Plane {
     if (!this.alive || !this.pilot) return;
     const gunsOK = powered(this, 'guns'); // disparo pneumático (Spitfire) ou elétrico (Fw 190)
     for (const g of this.guns) {
-      // aquecimento do cano: ~14 s de rajada contínua travam a arma até esfriar
+      // aquecimento do cano: trava depois de ~1/4 do pente em rajada contínua (4–8 s; antes 14 s para todas) até esfriar
       const shooting = this.firing && g.ammo > 0 && !g.jam && !g.broken && gunsOK;
-      g.heat = clamp(g.heat + (shooting ? dt / 14 : -dt / 9), 0, 1);
+      g.heat = clamp(g.heat + (shooting ? dt / g.heatT : -dt / 9), 0, 1);
       if (g.heat >= 1) g.jam = true; else if (g.jam && g.heat < 0.35) g.jam = false;
       if (!shooting) { g.acc = Math.min(g.acc, 1); continue; }
       g.acc += dt * g.W.rpm / 60 * g.pts.length;

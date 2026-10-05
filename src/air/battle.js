@@ -171,7 +171,9 @@ export const B = {
     const a = homeField(p.team), R = this.refit;
     R.onField = !!(p.onGround && a && onAirfield(a, p.pos.x, p.pos.z));
     R.parked = R.onField && p.ias < 2.5;
-    if (!R.parked) { R.t = 0; R.done = false; return; }
+    // só repara/rearma quem precisa: gastou armamento ou está avariado. Antes qualquer parada na base (inclusive
+    // a do começo da partida, quando o trem assenta e onGround pisca) disparava o "reparo e rearme"
+    if (!R.parked || !needRefit(p)) { R.t = 0; R.done = !needRefit(p); return; }
     if (R.done) return;
     if (!R.t) R.dur = 6 + 18 * wear(p); // rearme ~6 s; reparo cresce com o estrago
     R.t += dt;
@@ -334,6 +336,10 @@ export const B = {
 function PLANE_V(key) { const A = AIR[key]; return (A ? A.cruise : 450) / 3.6 * 0.85; }
 
 // quanto o avião está estragado (0..1): estrutura, módulos destruídos e peças perdidas
+// gastou armamento (munição, mísseis, bombas, foguetes) ou está avariado
+export function needRefit(p) {
+  return wear(p) > 0.005 || p.guns.some(g => g.ammo < g.max) || p.racks.some(r => r.n < r.max) || p.bombs.length < p.ord0.bombs || p.rockets < p.ord0.rockets;
+}
 export function wear(p) {
   const ks = Object.keys(p.maxHp); let d = 0;
   for (const k of ks) d += 1 - clamp(p.hp[k] / p.maxHp[k], 0, 1);

@@ -84,6 +84,15 @@ describe('temperatura do motor (água → óleo → desgaste)', () => {
     expect(run('liquid', 1, false, 120, 600).wear).toBe(0);
     expect(run('radial', 1, false, 120, 600).wear).toBe(0);
   });
+  it('100% subindo devagar não desgasta; WEP subindo leva minutos para estragar', () => {
+    expect(run('liquid', 1, false, 65, 600).wear).toBe(0);
+    expect(run('radial', 1, false, 65, 600).wear).toBe(0);
+    expect(run('radial', 1, true, 65, 120).wear).toBeLessThan(0.5);
+  });
+  it('amarelo é só alerta: desgaste só no vermelho', () => {
+    const y = { water: 0, oil: 112 }; expect(heatLevel(y, 'radial')).toBe(1); expect(stepHeat(y, 'radial', 1, true, 65, false, 0.1)).toBe(0);
+    const r = { water: 0, oil: 125 }; expect(heatLevel(r, 'radial')).toBe(2); expect(stepHeat(r, 'radial', 1, true, 65, false, 0.1)).toBeGreaterThan(0);
+  });
   it('WEP nivelado rápido aguenta 2 min sem estragar o motor', () => {
     expect(run('liquid', 1, true, 120, 120).wear).toBeLessThan(0.05);
   });
