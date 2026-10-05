@@ -151,7 +151,7 @@ export const PLANES = {
       { id: 'hyd', k: 'act', n: 'Hidráulico utilitário', does: ['flaps', 'brake'], z: -0.02, y: -0.45, s: [0.3, 0.18, 0.4] },
       { id: 'hydN', k: 'act', n: 'Comando hidráulico', does: ['ctl'], z: -0.3, y: 0.3, s: [0.2, 0.15, 0.4] }, { id: 'hydA', k: 'act', n: 'Comando alternativo', does: ['ctl'], z: -0.3, y: -0.3, s: [0.2, 0.15, 0.4] }],
     // 6 M3 nas laterais do nariz (3 de cada lado, em calhas com painel anti-sopro)
-    guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.2, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
+    guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.3, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
     // freios aerodinâmicos: dois painéis nas laterais da fuselagem traseira, abrindo para fora
     brake: [{ zf: -0.17, ax: 1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }, { zf: -0.17, ax: -1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }],
     missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', maw: 'pd',

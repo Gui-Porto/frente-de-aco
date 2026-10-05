@@ -406,13 +406,15 @@ export function buildPlane(D) {
   const nozzles = [], stacks = [];
   const add = (g, m, p = root, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; p.add(o); return o; };
   // fuselagem, coberta inferior e nariz
-  const ductM = new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: .55, metalness: .6 });
+  // interior (dutos, vãos): fosco e quase sem reflexo — metálico, espelhava o céu e o duto parecia vazado
+  const ductM = new THREE.MeshStandardMaterial({ color: 0x26282a, roughness: .85, metalness: .25, envMapIntensity: 0.35 });
   // capota em gota (perfil próprio por aeronave em def.canopy); a abertura da cabine sai dela: da frente do painel
   // do piloto até atrás do último assento, na largura da borda da capota
   const cz = jet ? L * 0.24 : D.key === 'il2' ? L * 0.08 : -L * 0.02;
   const C = Object.assign({ z: cz / L, len: jet ? 2.6 : 2.3, w: 0.5, h: jet ? 0.55 : 0.42, frames: jet ? [0.24] : [0.24, 0.62] }, D.canopy);
   const czc = C.z * L, seats = C.seats || [0.58], headZ = t => czc + C.len / 2 - t * C.len;
-  const hole = { z0: Math.max(headZ(seats[seats.length - 1]) - 0.42, czc - C.len * 0.4), z1: Math.min(headZ(seats[0]) + 0.86, czc + C.len * 0.38),
+  // a frente termina 2 cm à frente do painel (c.z + 0,78 em planeCockpit): passando dele, sob o para-brisa ficava um vão escuro
+  const hole = { z0: Math.max(headZ(seats[seats.length - 1]) - 0.42, czc - C.len * 0.4), z1: Math.min(headZ(seats[0]) + 0.8, czc + C.len * 0.38),
     hw: z => { const P = [0, 0, 0]; canopyPoint(C.len, C.w, C.h, Math.min(1, Math.max(0, (czc + C.len / 2 - z) / C.len)), 0, P, C.flat, null); return Math.abs(P[0]) * 0.9; } };
   // alojamentos do trem: a fuselagem sai uma vez sem eles só para dar a seção (onde a asa encontra o ventre)
   const F0 = fuselage(D, hole), GP = gearPlan(D), BAY = gearBays(D, GP, wingPlan(D, 1), F0.userData.sec);
@@ -779,7 +781,8 @@ export function buildPlane(D) {
         flush(slotG(0.12, 0.44).scale(1, 0.6, 1), DM.bare, x, y, z - 0.18, n).position.addScaledVector(n, -0.002); // lábio
         flush(slotG(0.12, 1.1), sootM, x, y, z - 0.95, n).position.addScaledVector(n, 0.002);
         // o cano: metade para fora da chapa, na calha (antes ficava 2 cm para dentro e quase sumia)
-        x += n.x * 0.004; y += n.y * 0.004;
+        // o cano assenta na calha com o eixo um raio fora da chapa (antes 4 mm: afundado, parecia dentro do jato)
+        x += n.x * M.r * 1.1; y += n.y * M.r * 1.1;
         tube(M.r * 1.25, M.r * 1.25, 0.13, DM.steel, x, y, z + M.len - 0.01);                         // quebra-chamas
         tube(M.r * 1.7, M.r * 1.35, 0.16, DM.steel, x, y, z + 0.05);                                    // luva do cano na boca da calha
         for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.004, 0.012, 0.05), black, root, x + Math.cos(k * Math.PI / 2) * M.r * 1.26, y + Math.sin(k * Math.PI / 2) * M.r * 1.26, z + M.len - 0.05); // fendas
