@@ -53,9 +53,10 @@ export class FighterBrain {
     const eK = clamp((p.ias - 1.25 * this.vs) / (0.6 * this.vs), 0, 1);
     if (p.onGround) dir.y = p.ias > this.vr ? 0.17 : -0.05;
     else { dir.y = 0.03 + 0.17 * eK; if (agl > 25) p.gearCmd = 0; }
-    // α ≤ 60% do estol: puxando até o limite a bequilha saía do chão estolada. Rente ao chão só asas niveladas:
-    // inclinando para voltar à faixa, a ponta da asa batia na pista logo depois de sair do chão
-    if (!p.onGround && agl < 30) dir.set(fx, dir.y, fz);
+    // α ≤ 60% do estol: puxando até o limite a bequilha saía do chão estolada. No ar sobe reto no rumo da pista:
+    // inclinando para voltar à faixa, a ponta da asa batia na pista, e acima de 30 m o P-47 entrava em oscilação
+    // de rolagem (±80°, aileron batendo) e caía
+    if (!p.onGround) dir.set(fx, dir.y, fz);
     p.steerTo(dir.normalize(), dt, { glim: 3, aoa: 0.6, level: !p.onGround && agl < 30 });
     if ((!p.onGround && agl > 250) || this.stateT > 90) { this.takeoff = false; this.state = 'patrol'; this.stateT = 0; p.gearCmd = 0; }
   }
@@ -216,14 +217,19 @@ export class FighterBrain {
     capClimb(dir, agl < 300 ? 0.04 + 0.5 * eK : -0.1 + 0.7 * eK);
     // solo: altitude mínima para recuperar de mergulho, R = v²/(g(n−1)), mais o afundamento (lento não para na hora)
     const V = p.vel.length(), sinD = clamp(-p.vel.y / Math.max(V, 1), 0, 1);
-    const pullAlt = V * V / (G * 3) * (1 - Math.sqrt(1 - sinD * sinD)) + 160 + Math.max(0, -p.vel.y) * 3; // n−1 = 3: rolar e chegar no G leva tempo
+    // G que a asa dá nessa velocidade (pistão a 380 km/h chega a ~3 no limite de α; supor 4 fazia puxar tarde demais)
+    const nAv = clamp(0.45 * (V / this.vs) ** 2, 1.8, 3.5);
+    const pullAlt = V * V / (G * (nAv - 1)) * (1 - Math.sqrt(1 - sinD * sinD)) + 160 + Math.max(0, -p.vel.y) * 3; // + afundamento: rolar e chegar no G leva tempo
     // recuperação: asas niveladas e nariz acima do horizonte só o que a velocidade aguenta (45° lento = afunda estolado)
     const recover = agl < pullAlt;
     if (recover) { dir.copy(fwdFlat).addScaledVector(UP, 0.15 + 0.85 * eK).normalize(); glim = Math.max(glim, 7); fire = false; }
-    else if (dir.y < 0 && agl < 450) dir.y *= 0.2;
+    else if (dir.y < 0 && agl < 450) dir.y = agl < 300 ? 0.02 : dir.y * 0.2; // rente ao chão nunca pede nariz para baixo: o instrutor rolava de dorso atrás do alvo baixo e não dava tempo de desvirar
     // limite do mapa
     const lim = (S.airLimit || 4000) - 500;
     if (Math.max(Math.abs(p.pos.x), Math.abs(p.pos.z)) > lim) dir.set(-p.pos.x, 0, -p.pos.z).normalize().addScaledVector(UP, .15).normalize();
+    // o piloto da IA sente o G: alivia antes de apagar (puxava 8,6 G até o G-LOC e caía de dorso, sem comando)
+    const gT = p.gT ?? 6;
+    if (p.gStress > 0.75) glim = Math.min(glim, gT - 2); else if (p.gStress > 0.45) glim = Math.min(glim, gT);
     p.firing = fire;
     p.steerTo(dir, dt, { glim: Math.min(glim, p.def.glim - 1), recover });
   }

@@ -483,7 +483,7 @@ export class Plane {
     // perto da mira o "nivelar" mira a inclinação de curva coordenada da mira em movimento (tan φ = V·ω/g);
     // nivelando para 0°, em curva ele brigava com a inclinação para o círculo e o nariz parava ~5° ao lado
     const om = this._aimVel ? _pd.crossVectors(this._aimPrev, this._aimVel).dot(UP) : 0;
-    const NEAR = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu) - clamp(Math.atan(this.vel.length() * om / 9.81), -1.4, 1.4);
+    const NEAR = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu) - (opts.recover ? 0 : clamp(Math.atan(this.vel.length() * om / 9.81), -1.4, 1.4)); // recuperando, a mira gira com o avião: nivela em 0°
     if (this.nearAim) { if (off > NEAR * 1.5) this.nearAim = false; } else if (off < NEAR) this.nearAim = true;
     // perto da mira, o + 0.08 (~5°) deixa a inclinação proporcional ao desvio lateral: sem ele, dl e du quase zero
     // davam atan2 de ruído (±90°) e o jato balançava as asas com qualquer tremor da mira
@@ -507,7 +507,9 @@ export class Plane {
     let elev = off > 1.4 && du < 0 ? 1 : K * (kp * pe * rp - kd * (this.pr - aimRate)) + trim + (nose ? 1.2 * this.iP : 0);
     // recuperação perto do chão: desvira primeiro, puxa depois — de dorso, "alvo atrás e abaixo → puxa" era um
     // split-S para dentro do chão (medido: IA a 6 G com 100–160° de inclinação até bater)
-    if (opts.recover) elev *= clamp((wu - 0.25) / 0.45, 0, 1);
+    // (cosseno da inclinação, não wu: mergulhando a 70° de asas niveladas wu ≈ 0,3 e o puxão sumia até o chão)
+    // perto da vertical a inclinação é ruído (o aileron batia ±1 sem nunca nivelar): puxa direto, qualquer lado sai no horizonte
+    if (opts.recover && _pf.y > -0.85) elev *= clamp((wu / Math.max(1e-6, Math.hypot(wu, wl)) - 0.25) / 0.45, 0, 1);
     const elev0 = elev;
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
     // o comando fica parado o quadro inteiro (vários passos de física): com muita pressão dinâmica (jato > ~1000 km/h)
