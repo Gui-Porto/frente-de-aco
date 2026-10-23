@@ -87,8 +87,8 @@ export const PLANES = {
       { id: 'turbo', k: 'turbo', n: 'Turbocompressor', z: -0.3, y: -0.6, s: [0.35, 0.3, 0.45] }, { id: 'oilc', k: 'cool', n: 'Radiadores de óleo', z: 0.26, y: -0.75, s: [0.55, 0.18, 0.35] },
       { id: 'hyd', k: 'act', n: 'Hidráulico', does: ['flaps'], z: -0.12, y: -0.1, s: [0.3, 0.2, 0.3] }],
     guns: [{ w: 'M2', n: 8, span: [1.9, 2.6, 3.0, 3.4], z: 0.9, ammo: 425 }],
-    bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.0, -2.0] }],
-    rockets: { name: 'M8/HVAR', m: 61, tnt: 3.5, v: 330, n: 6 }
+    bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.95, -2.95] }], // por fora da perna do trem, como no real
+    rockets: { name: 'M8/HVAR', m: 61, tnt: 3.5, v: 330, n: 6, mount: 'tube3', d: 0.114, len: 0.84 }
   },
   il2: {
     key: 'il2', type: 'plane', gear: { track: 3.85, ret: 'in' }, name: 'Il-2 (1942)', short: 'Il-2', nation: 'URSS', year: 1942, color: 0x3d4a2c, sp: 340,
@@ -102,7 +102,7 @@ export const PLANES = {
       { id: 'pneu', k: 'act', n: 'Pneumático', does: ['flaps'], z: -0.18, y: 0, s: [0.25, 0.25, 0.3] }],
     guns: [{ w: 'VYa', n: 2, span: [2.4], z: 0.6, ammo: 150 }, { w: 'ShKAS', n: 2, span: [2.0], z: 0.6, ammo: 750 }],
     bombs: [{ name: 'FAB-100', m: 100, tnt: 40, d: 0.27, n: 4, x: [1.5, -1.5, 2.2, -2.2] }],
-    rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 350, n: 8 }
+    rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 350, n: 8, d: 0.082, len: 0.86 }
   },
   fw190: {
     key: 'fw190', type: 'plane', gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
@@ -151,7 +151,7 @@ export const PLANES = {
       { id: 'hyd', k: 'act', n: 'Hidráulico utilitário', does: ['flaps', 'brake'], z: -0.02, y: -0.45, s: [0.3, 0.18, 0.4] },
       { id: 'hydN', k: 'act', n: 'Comando hidráulico', does: ['ctl'], z: -0.3, y: 0.3, s: [0.2, 0.15, 0.4] }, { id: 'hydA', k: 'act', n: 'Comando alternativo', does: ['ctl'], z: -0.3, y: -0.3, s: [0.2, 0.15, 0.4] }],
     // 6 M3 nas laterais do nariz (3 de cada lado, em calhas com painel anti-sopro)
-    guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.2, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
+    guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.3, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
     // freios aerodinâmicos: dois painéis nas laterais da fuselagem traseira, abrindo para fora
     brake: [{ zf: -0.17, ax: 1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }, { zf: -0.17, ax: -1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }],
     missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', maw: 'pd',
@@ -188,12 +188,12 @@ export const PLANES = {
     mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.72, 0.2], inertia: [223700, 44700, 253500], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² [arfagem, rolagem, guinada] do F-4C/E publicado (a estimativa por L² dava 2–2,4× mais)
     vne: 1400 / 3.6, glim: 9.5, kda: 0.05, kde: 0.36, kdr: 0.03, armor: { pilot: 6 },
     hpParts: { wingL: 60, wingR: 60, tail: 40, engine: 50, fuel: 36, fuse: 75 },
-    fuseR: 0.95, noseR: 0.5, wingZ: 0.4, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, tailY: 0.48, finY: 0.34, intakes: 'side', nozzles: 2, gunPod: true, wingBreak: [0.66, 12], finish: 'camo', underColor: 0xc9ccc6,
+    tc: [0.064, 0.04], fuseR: 0.95, noseR: 0.5, wingZ: 0.4, chord: 5.6, tipChord: 1.6, cowl: 'intake', dih: 4, tailDih: -23, tailY: 0.48, finY: 0.34, intakes: 'side', nozzles: 2, gunPod: true, wingBreak: [0.66, 12], finish: 'camo', underColor: 0xc9ccc6,
     radar: 'apq120', rwr: 'apr36',
     fuse: [[-0.53, .72, .42, .5, -.1], [-0.46, .78, .5, .56, -.08], [-0.36, .86, .62, .66, -.04], [-0.2, .95, .86, .82, 0], [0, 1, 1, .95, 0], [0.14, .92, 1.02, .9, 0], [0.26, .7, .92, .78, .02], [0.36, .52, .7, .62, 0], [0.45, 'n1', 'n1', 'n1', 0]],
     canopy: { z: 0.27, len: 5.0, w: 0.48, h: 0.74, frames: [0.2, 0.5, 0.76], seats: [0.34, 0.74], flat: 0.8, rearDy: -0.03 }, smoke: 0.8,
     // bocais com pétalas da pós-combustão, lâminas UHF/IFF, anticolisão em cima e embaixo, gancho e tanques de 370 gal nos pilones externos
-    nozzle: { len: 0.7, petals: 18, petalLen: 0.5 }, antennas: [{ k: 'blade', zf: 0.04, ay: 1, h: 0.3, len: 0.42 }, { k: 'blade', zf: 0.02, ay: -1, h: 0.24, len: 0.34 }],
+    nozzle: { len: 0.7, petals: 18, petalLen: 0.5 }, boom: { z0: -0.4, z1: -0.575, y: 0.33, w: 0.36, h: 0.3 }, antennas: [{ k: 'blade', zf: 0.04, ay: 1, h: 0.3, len: 0.42 }, { k: 'blade', zf: 0.02, ay: -1, h: 0.24, len: 0.34 }],
     beacons: [[-0.12, 1], [0.15, -1]], hook: true, drops: [{ ws: 0.8, len: 4.3, d: 0.66 }],
     // 7 células na fuselagem (em três blocos) + tanques integrais nas asas; dois J79; estabilizador todo móvel;
     // PC-1 e PC-2 movem os comandos, o utilitário move flaps e freios
@@ -210,12 +210,12 @@ export const PLANES = {
     bombs: [], rockets: null
   },
   mig21: {
-    key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
+    key: 'mig21', type: 'plane', marks: { nose: '24', fuse: false }, gear: { track: 2.69, ret: 'in' }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
     mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0175, e: 0.62, engine: 'r13', rcs: 3,
     mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.75, 0.17], inertia: [57000, 7000, 61000], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² aproximados do MiG-21 (asa curta e fuselagem fina)
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },
     hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
-    fuseR: 0.62, noseR: 0.45, wingZ: -0.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,
+    tc: [0.05, 0.042], fuseR: 0.62, noseR: 0.45, wingZ: -0.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,
     radar: 'rp22', rwr: 'spo10', maw: 'pd',
     fuse: [[-0.53, .82, .84, .82, 0], [-0.44, .86, .9, .86, 0], [-0.3, .92, 1, .92, 0], [-0.1, .96, 1.18, .96, 0], [0.08, .98, 1.22, .98, 0], [0.2, .98, 1.18, .98, 0], [0.3, .94, 1, .94, 0], [0.39, 'n1.18', 'n1.18', 'n1.18', 0], [0.46, 'n1.1', 'n1.1', 'n1.1', 0]],
     canopy: { z: 0.26, len: 2.7, w: 0.38, h: 0.5, frames: [0.26, 0.62] },
@@ -287,20 +287,20 @@ export const MISSILES = {
     form: { nose: { kind: 'ir', len: 0.3, dome: 0.55 }, canards: { at: 0.3, root: 0.26, tip: 0.04, span: 0.45 }, wings: { at: 2.38, root: 0.4, tip: 0.14, span: 0.56, roller: 0.09 },
       bands: { warhead: { at: 0.72, w: 0.04 }, motor: { at: 1.25, w: 0.04 } }, nozzle: { len: 0.06, r: 0.8 } } },
   AIM9J: { name: 'AIM-9J Sidewinder', short: 'AIM-9J', mass: 78, d: 0.127, len: 3.02, thrust: 15500, burn: 3.0, cd: 0.42,
-    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 20, nav: 4, fuse: 11, warhead: 4.5, rearAspect: 110, flareRes: 0.18, seeker: 'ir',
+    life: 24, range: 7000, minRange: 300, gimbal: 40, fov: 4, acq: 16, lockT: 0.7, maxG: 20, nav: 4, fuse: 11, warhead: 4.5, rearAspect: 110, flareRes: 0.18, smoke: { k: 0.92 }, seeker: 'ir',
     form: { nose: { kind: 'ir', len: 0.28, dome: 0.6 }, canards: { at: 0.28, root: 0.3, tip: 0.06, span: 0.56 }, wings: { at: 2.55, root: 0.42, tip: 0.15, span: 0.64, roller: 0.09 },
       bands: { warhead: { at: 0.78, w: 0.04 }, motor: { at: 1.35, w: 0.04 } }, nozzle: { len: 0.06, r: 0.8 } } },
   R3S: { name: 'R-3S (K-13)', short: 'R-3S', mass: 75, d: 0.127, len: 2.84, thrust: 17000, burn: 2.2, cd: 0.45,
-    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 14, nav: 3.8, fuse: 12, warhead: 4.5, rearAspect: 90, flareRes: 0.3, seeker: 'ir',
+    life: 22, range: 5200, minRange: 300, gimbal: 30, fov: 4, acq: 14, lockT: 1.0, maxG: 14, nav: 3.8, fuse: 12, warhead: 4.5, rearAspect: 90, flareRes: 0.3, smoke: { color: 0xc8c3b6 }, seeker: 'ir',
     form: { nose: { kind: 'ir', len: 0.33, dome: 0.5 }, canards: { at: 0.33, root: 0.24, tip: 0.05, span: 0.42 }, wings: { at: 2.4, root: 0.38, tip: 0.13, span: 0.53, roller: 0.09 },
       bands: { warhead: { at: 0.74, w: 0.04 }, motor: { at: 1.28, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } },
   // semiativos: não têm buscador próprio de aquisição — exigem o radar do lançador travado (STT) até o impacto
   AIM7E: { name: 'AIM-7E Sparrow', short: 'AIM-7E', mass: 197, d: 0.203, len: 3.66, thrust: 26000, burn: 3.6, cd: 0.4,
-    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 18, nav: 4, fuse: 14, warhead: 9, seeker: 'sarh', doppler: true, notch: 25, chaffRes: 0.25,
+    life: 40, range: 16000, minRange: 1200, gimbal: 40, maxG: 18, nav: 4, fuse: 14, warhead: 9, smoke: { k: 1.12, puff: 1.3 }, seeker: 'sarh', doppler: true, notch: 25, chaffRes: 0.25,
     form: { nose: { kind: 'ogive', len: 0.62 }, wings: { at: 1.2, root: 0.66, tip: 0.08, span: 1.02 }, tails: { at: 3.18, root: 0.44, tip: 0.18, span: 0.81 },
       bands: { warhead: { at: 1.95, w: 0.05 }, motor: { at: 2.35, w: 0.05 } }, nozzle: { len: 0.05, r: 0.75 } } },
   R3R: { name: 'R-3R (K-13R)', short: 'R-3R', mass: 83, d: 0.127, len: 3.1, thrust: 17500, burn: 2.4, cd: 0.44,
-    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 15, nav: 3.8, fuse: 12, warhead: 5, seeker: 'sarh', chaffRes: 0.3,
+    life: 26, range: 8000, minRange: 900, gimbal: 35, maxG: 15, nav: 3.8, fuse: 12, warhead: 5, smoke: { color: 0xc8c3b6 }, seeker: 'sarh', chaffRes: 0.3,
     form: { nose: { kind: 'ogive', len: 0.42 }, canards: { at: 0.5, root: 0.24, tip: 0.05, span: 0.42 }, wings: { at: 2.65, root: 0.4, tip: 0.13, span: 0.53, roller: 0.09 },
       bands: { warhead: { at: 0.98, w: 0.04 }, motor: { at: 1.5, w: 0.04 } }, nozzle: { len: 0.06, r: 0.78 } } }
 };

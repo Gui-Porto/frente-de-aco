@@ -46,6 +46,17 @@ const GLOW = new THREE.MeshBasicMaterial({ map: glowTex, ...add });
 const DISC = new THREE.CircleGeometry(1, 20).rotateY(Math.PI);
 const DIAMOND = new THREE.MeshBasicMaterial({ map: diamondTex, ...add });
 const VAPOR = new THREE.MeshBasicMaterial({ map: vaporTex, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.9 });
+// cone de vapor (transônico): casca aberta que alarga para trás, com a borda de trás recortada em ondas — liso, parecia
+// um copo de plástico; raio 1 na frente, z = 0 → −1 (o comprimento vem da escala)
+function vaporGeo(r1) {
+  const g = new THREE.CylinderGeometry(1, r1, 1, 40, 6, true).translate(0, -0.5, 0).rotateX(Math.PI / 2), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(y, x), t = -z, w = 1 + t * t * (0.18 * Math.sin(a * 7) + 0.1 * Math.sin(a * 13 + 1.3) + 0.06 * Math.sin(a * 23));
+    p.setXYZ(i, x * w, y * w, z * (1 + 0.12 * t * Math.sin(a * 5 + 0.7)));
+  }
+  g.computeVertexNormals(); return g;
+}
+const VCONE = vaporGeo(2.3), VNOSE = vaporGeo(1.7);
 // cone aberto: bocal em z = 0, ponta em z = −1 (o comprimento real vem da escala)
 const coneGeo = (r0, r1) => new THREE.CylinderGeometry(r0, r1, 1, 18, 1, true).translate(0, -0.5, 0).rotateX(Math.PI / 2);
 const OUTER = coneGeo(1, 0.35), INNER = coneGeo(0.7, 0.2), STACK = coneGeo(1, 0.15);
@@ -58,7 +69,8 @@ export function buildPlaneFx(D, root, nozzles, stacks) {
   for (const n of nozzles) fx.flames.push({ out: mk(OUTER, FLAME, root, n.x, n.y, n.z), inn: mk(INNER, DIAMOND, root, n.x, n.y, n.z), glow: mk(DISC, GLOW, root, n.x, n.y, n.z + 0.05), r: n.r });
   for (const s of stacks) { const m = mk(STACK, FLAME, root, s.x, s.y, s.z); m.rotation.y = s.dir || 0; fx.stacks.push(m); }
   mk(HOLEGEO, HOLE, root, 0, 0, 0).visible = false; // marca de bala (o shader vem da semente)
-  if (D.jet) fx.vapor = mk(new THREE.CylinderGeometry(D.fuseR * 1.15, D.fuseR * 2.6, 1, 24, 1, true).translate(0, -0.5, 0).rotateX(Math.PI / 2), VAPOR, root, 0, 0, D.wingZ + D.chord * 0.4);
+  // dois cones: um no meio da asa (o grande) e outro na cabine/nariz, como nas fotos de passagem transônica
+  if (D.jet) { fx.vapor = mk(VCONE, VAPOR, root, 0, 0, D.wingZ + D.chord * 0.4); fx.vaporN = mk(VNOSE, VAPOR, root, 0, D.fuseR * 0.25, D.L * 0.22); }
   return fx;
 }
 
@@ -98,9 +110,18 @@ export function updatePlaneFx(p, dt) {
   }
   // cone de vapor: aparece só numa faixa estreita em torno de Mach 1
   if (fx.vapor) {
-    const M = p.mach || 0, k = p.alive ? clamp(1 - Math.abs(M - 0.985) / 0.05, 0, 1) : 0;
-    if (k > 0.02) { const s = 0.8 + 0.35 * k; fx.vapor.scale.set(s * rand(0.96, 1.04), s * rand(0.96, 1.04), p.def.L * 0.3 * k); }
+    // faixa transônica (~0,92–1,05); o cone de cabine aparece um pouco antes e some antes do da asa. Tremula e gira
+    // devagar (a borda recortada não fica parada) — antes era um cilindro liso numa faixa estreitíssima
+    const M = p.mach || 0, k = p.alive ? clamp(1 - Math.abs(M - 0.985) / 0.065, 0, 1) ** 0.8 : 0, kn = p.alive ? clamp(1 - Math.abs(M - 0.96) / 0.055, 0, 1) : 0;
+    const R = p.def.fuseR, tt = performance.now() / 1000;
+    if (k > 0.02) { const s = R * (1.05 + 0.3 * k); fx.vapor.scale.set(s * rand(0.95, 1.05), s * rand(0.95, 1.05), p.def.L * (0.12 + 0.22 * k) * rand(0.92, 1.08)); fx.vapor.rotation.z = tt * 0.7; }
     else fx.vapor.scale.setScalar(HIDE);
+    if (fx.vaporN) { if (kn > 0.02) { const s = R * (0.95 + 0.15 * kn); fx.vaporN.scale.set(s * rand(0.96, 1.04), s * rand(0.96, 1.04), p.def.L * 0.12 * kn); fx.vaporN.rotation.z = -tt; } else fx.vaporN.scale.setScalar(HIDE); }
+    // supersônico: a casca de vapor se desprende em fiapos que ficam para trás nas pontas das asas
+    if (M > 0.97 && M < 1.08 && p.alive && Math.random() < 0.5 && p.pos.distanceToSquared(camera.position) < 1500 * 1500) {
+      const sp = p.def.span * 0.45 * (Math.random() < 0.5 ? 1 : -1);
+      spawnP({ pos: _p.set(sp, 0, p.def.wingZ - p.def.chord * 0.3).applyQuaternion(p.q).add(p.pos).clone(), vel: p.vel.clone().multiplyScalar(0.7), life: rand(0.3, 0.6), size: 0.8, size1: 2.8, color: 0xf6f8fa, op: 0.35, drag: 3 });
+    }
     // passou de Mach 1: anel de condensação que se abre em volta do avião e fica para trás
     if (M >= 1 && (p._m0 || 0) < 1 && (p._m0 || 0) > 0.9 && p.pos.distanceToSquared(camera.position) < 3000 * 3000) {
       p.axes && p.axes();
@@ -117,6 +138,7 @@ export function updatePlaneFx(p, dt) {
   for (const f of fx.flames) { f.glow.visible = f.glow.scale.x > HIDE; f.out.visible = f.out.scale.x > HIDE; f.inn.visible = f.inn.scale.x > HIDE; }
   for (const m of fx.stacks) m.visible = m.scale.x > HIDE;
   if (fx.vapor) fx.vapor.visible = fx.vapor.scale.z > HIDE;
+  if (fx.vaporN) fx.vaporN.visible = fx.vaporN.scale.z > HIDE;
 }
 
 // ---------- lascas de chapa arrancadas pelos acertos ----------

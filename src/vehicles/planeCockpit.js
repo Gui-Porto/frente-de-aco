@@ -197,7 +197,7 @@ export function buildCockpit(ctx) {
     for (let k = NSd; k >= 0; k--) { const y = yBot + ph * k / NSd; sh0.lineTo(-hwP(y), y - yc0); }
     const face = new THREE.ShapeGeometry(sh0), fuv = face.attributes.uv, fp = face.attributes.position;
     // u: 1 unidade de textura = 2·ph metros (o pedaço do painel no atlas é 2:1); v: metade de cima do atlas
-    for (let k = 0; k < fp.count; k++) fuv.setXY(k, 0.5 - fp.getX(k) / (2 * ph), 0.75 + fp.getY(k) / (2 * ph));
+    for (let k = 0; k < fp.count; k++) fuv.setXY(k, 0.5 + fp.getX(k) / (2 * ph), 0.75 + fp.getY(k) / (2 * ph)); // + : girada para o piloto, com − o atlas saía espelhado (AIRSPEED de trás para frente)
     face.rotateY(Math.PI);
     const panel = new THREE.Group(); panel.position.set(0, yc0, zP); panel.rotation.x = -tilt; root.add(panel);
     add(face, pm, panel, 0, 0, -0.006);
@@ -213,11 +213,12 @@ export function buildCockpit(ctx) {
     // capota antirreflexo: casca arqueada do topo do painel para a frente, até onde o para-brisa deixa (não fura o vidro)
     // cada vértice fica 2 cm para dentro do vidro naquela estação (o para-brisa afina para a frente: antes a chapa
     // reta passava pelos lados e pela frente da capota)
-    let zE = zP; while (zE < zP + 0.5 && ctx.canopyW(zE + 0.02, yTop + 0.02) > 0.12) zE += 0.02;
-    const gl = Math.max(0.12, zE - zP + 0.04), gw = hwP(yTop) * 2 + 0.03, by = yTop - 0.04, bz = zP + gl / 2 - 0.05;
-    const brow = new THREE.BoxGeometry(gw, 0.025, gl, 12, 1, 6), bp = brow.attributes.position;
+    // capuz curto (22 cm) da largura do painel, arqueado e com a frente um pouco mais baixa: comprido até o para-brisa,
+    // virava uma mesa/cunha preta enorme na frente do piloto
+    const gl = 0.22, gw = hwP(yTop) * 2 - 0.02, by = yTop - 0.03, bz = zP + gl / 2 - 0.06;
+    const brow = new THREE.BoxGeometry(gw, 0.022, gl, 12, 1, 6), bp = brow.attributes.position;
     for (let k = 0; k < bp.count; k++) {
-      const u = bp.getX(k) / (gw / 2), y = bp.getY(k) + 0.05 * (1 - u * u), z = bp.getZ(k) + bz, xm = Math.max(0.02, ctx.canopyW(z, y + by) - 0.02);
+      const u = bp.getX(k) / (gw / 2), z = bp.getZ(k) + bz, y = bp.getY(k) + 0.06 * (1 - u * u) - Math.max(0, z - zP) * 0.25, xm = Math.max(0.02, ctx.canopyW(z, y + by) - 0.02);
       bp.setY(k, y); if (z > zP && Math.abs(bp.getX(k)) > xm) bp.setX(k, Math.sign(bp.getX(k)) * xm);
     }
     brow.computeVertexNormals();

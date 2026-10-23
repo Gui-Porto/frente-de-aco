@@ -65,7 +65,7 @@ export const ENEMY_POOL = { helice: ['fw190', 'spit9', 'p47'], jato: ['mig15', '
 export const ALLY_POOL = { helice: ['spit9', 'p47', 'fw190'], jato: ['f86', 'mig15'], radar: ['f4e', 'mig21'] };
 // arena por era: limite (m do centro), distância de spawn de cada lado e altitude inicial.
 // Com radar o combate começa além do alcance visual.
-export const ARENA = { helice: { limit: 4200, spawnZ: 2700, alt: 1600 }, jato: { limit: 6000, spawnZ: 3500, alt: 2000 }, radar: { limit: 8500, spawnZ: 6500, alt: 4000 } };
+export const ARENA = { helice: { limit: 6000, spawnZ: 2700, alt: 1600 }, jato: { limit: 8000, spawnZ: 3500, alt: 2000 }, radar: { limit: 11000, spawnZ: 6500, alt: 4000 } };
 
 // Linhas de armamento para a ficha
 export function armament(key) {

@@ -5,7 +5,7 @@ import { clamp, lerp, sstep, hash2, rand } from '../core/util.js';
 // =====================================================================
 // Terreno analítico: a física consulta H(x,z) diretamente
 // =====================================================================
-export const LIMIT = 360, INNER = 900, OUTER = 9000, AIRLIMIT = 3200;
+export const LIMIT = 360, INNER = 900, OUTER = 15000, AIRLIMIT = 3200; // OUTER: malha detalhada de ±7,5 km (arenas maiores)
 export const POINTS = [{ id: 'A', x: -190, z: 25 }, { id: 'B', x: 0, z: 0 }, { id: 'C', x: 190, z: -25 }];
 export const SPAWN = { 1: { x: 0, z: 300, yaw: Math.PI }, '-1': { x: 0, z: -300, yaw: 0 } };
 export const AIRSPAWN = { 1: { x: 0, z: 2400, y: 1300, yaw: Math.PI }, '-1': { x: 0, z: -2400, y: 1300, yaw: 0 } };
@@ -39,9 +39,11 @@ for (const f of FLATS) f.h = baseH(f.x, f.z);
 // Pistas da Batalha Aérea (uma por equipe, atrás do spawn): platô retangular com rampa até o relevo.
 // `pad` = largura extra plana ao lado da pista (pátio e hangares). Rumo de decolagem: yaw (0 = +z).
 // set: 'prop' (hélice) ou 'jet' (jato e radar: pista mais longa e bases bem mais afastadas — ~12 km entre elas)
+// As de hélice ficam 3,5 km para o lado: no eixo, o vale e o corredor de aproximação da base de jato (logo atrás)
+// passavam por cima delas e a pista ficava enterrada 25–75 m — o avião aparecia no meio do mato
 export const AIRFIELDS = [
-  { team: 1, x: -260, z: 3450, len: 1700, w: 50, pad: 170, yaw: Math.PI, set: 'prop' },
-  { team: -1, x: 260, z: -3450, len: 1700, w: 50, pad: 170, yaw: 0, set: 'prop' },
+  { team: 1, x: -3500, z: 3450, len: 1700, w: 50, pad: 170, yaw: Math.PI, set: 'prop' },
+  { team: -1, x: 3500, z: -3450, len: 1700, w: 50, pad: 170, yaw: 0, set: 'prop' },
   { team: 1, x: -420, z: 5600, len: 2400, w: 60, pad: 190, yaw: Math.PI, set: 'jet' },
   { team: -1, x: 420, z: -5600, len: 2400, w: 60, pad: 190, yaw: 0, set: 'jet' },
 ];
@@ -181,8 +183,10 @@ function terrainMesh(size, seg, drop, holeR, macro = false) {
   const pos = g.attributes.position, col = new Float32Array(pos.count * 3), sp = new Float32Array(pos.count * 3), c = new THREE.Color(), w = [0, 0, 0];
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
-    const ed = holeR ? 0 : sstep(INNER / 2 - 50, INNER / 2, Math.max(Math.abs(x), Math.abs(z))) * 1.4;
-    pos.setY(i, H(x, z) - drop - ed);
+    // malha de fora: afunda só na emenda com a de dentro (onde as duas se sobrepõem). Afundada inteira (1,4 m), o
+    // chão desenhado ficava abaixo do que a física usa: o avião rodava "flutuando" e batia antes de tocar o chão
+    const ed = holeR ? 0 : sstep(INNER / 2 - 50, INNER / 2, Math.max(Math.abs(x), Math.abs(z))) * 1.4, M = Math.max(Math.abs(x), Math.abs(z));
+    pos.setY(i, H(x, z) - (holeR && drop < 3 ? drop * (1 - sstep(holeR + 30, holeR + 90, M)) : drop) - ed);
     groundSample(x, z, c, w, macro);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; sp[i * 3] = w[0]; sp[i * 3 + 1] = w[1]; sp[i * 3 + 2] = w[2];
   }
@@ -201,7 +205,7 @@ function terrainMesh(size, seg, drop, holeR, macro = false) {
   return m;
 }
 terrainMesh(INNER, 300, 0, 0);
-terrainMesh(OUTER, 260, 1.4, INNER / 2 - 24, true);
+terrainMesh(OUTER, 520, 1.4, INNER / 2 - 24, true); // ~29 m por quadrado, sem afundar: com 35 m os morros cortavam por cima do avião rente
 // anel distante até o horizonte (56 km, 200 m por quadrado): as serras fecham a vista e não há mais borda nem vazio
 // no fim do mapa; afundado e por baixo da malha externa na emenda
 terrainMesh(56000, 280, 6, OUTER / 2 - 250, true);

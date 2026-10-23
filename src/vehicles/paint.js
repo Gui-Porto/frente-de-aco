@@ -137,7 +137,8 @@ export function planeDecals(D, t) {
   }
   // fuselagem: vista de fora de cada lado (direita da imagem = cauda), na estação zf
   const L = D.L, zf = t.decalZ ?? -0.14, f = t.fuseAt(zf), sz = Math.min(f.hw * 2.1, (f.top - f.yc + f.h) * 0.92);
-  for (const sd of [1, -1]) project(t.fuse, ins, V3(sd * f.hw, f.yc, L * zf), V3(0, 0, -sd), V3(0, 1, 0), N === 'EUA' ? sz * 1.9 : sz, sz, f.hw * 1.4);
+  // marks.fuse === false: sem insígnia na fuselagem (MiG-21: estrelas só na deriva e nas asas, como no real)
+  if (t.fuseIns !== false) for (const sd of [1, -1]) project(t.fuse, ins, V3(sd * f.hw, f.yc, L * zf), V3(0, 0, -sd), V3(0, 1, 0), N === 'EUA' ? sz * 1.9 : sz, sz, f.hw * 1.4);
   // deriva: faixas da RAF, estrela da VVS, número de série dos EUA
   if (t.fin) {
     const F = t.fin.p, fin = t.fin.mesh; fin.updateWorldMatrix(true, false);

@@ -7,9 +7,10 @@ import { RHO } from '../data/vehicles.js';
 // escala do motor em relação ao AIM-9B (127 mm, 17,8 kN): cresce com o diâmetro e com o empuxo
 const motorScale = M => Math.sqrt((M.d / 0.127) * (M.thrust / 17800));
 // rastro e chama proporcionais ao míssil (AIM-9B = rastro de 1,8 → 14 m em 14 s)
+// M.smoke = { k (densidade), color }: cada motor tem a sua fumaça (Mk 38 do Sparrow grossa e branca; R-3 mais acinzentada)
 export function smokeOf(M) {
-  const k = motorScale(M);
-  return { w0: 1.8 * k, w1: 14 * k, life: 14 * (0.7 + 0.3 * k), flame: M.d * 14 * Math.sqrt(M.thrust / 17800) };
+  const S = M.smoke || {}, k = motorScale(M) * (S.k ?? 1);
+  return { w0: 1.8 * k, w1: 14 * k, life: 14 * (0.7 + 0.3 * k), flame: M.d * 14 * Math.sqrt(M.thrust / 17800), color: S.color ?? 0xd6d2ca, puff: S.puff ?? 1 };
 }
 
 // Ganho de velocidade da queima em voo nivelado reto, com o mesmo modelo do voo

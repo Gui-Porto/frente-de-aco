@@ -35,7 +35,8 @@ export function gearBays(D, GP, o, sec) {
   main.wxi = main.xj ? xj : main.xi; // trecho da asa: de xj (ou xi) até xo
   const fuse = [], names = [];
   if (main.xj) for (const sd of [1, -1]) { fuse.push({ za: B.za, zb: B.zb, xa: sd > 0 ? main.xi : -main.xj, xb: sd > 0 ? main.xj : -main.xi }); names.push(sd > 0 ? 'L' : 'R'); }
-  const nb = GP.nbay; fuse.push({ za: nb.za, zb: nb.zb, xa: -nb.w, xb: nb.w }); names.push('N');
+  // bequilha fixa (pistão): sem alojamento — antes o recorte caía no fim do cone de cauda e a cauda ficava oca
+  const nb = D.jet ? GP.nbay : null; if (nb) { fuse.push({ za: nb.za, zb: nb.zb, xa: -nb.w, xb: nb.w }); names.push('N'); }
   return { main, nose: nb, fuse, names };
 }
 
@@ -101,7 +102,7 @@ export function buildBays(add, root, pars, D, BAY, o, sec, M, duct = null) {
     add(q, mat, par);
   }
   // nariz/bequilha: só ventre; teto acima da roda em pé (pivô ny + roda), sem passar do meio da fuselagem
-  const N = BAY.nose, nr = D.jet ? 0.28 : 0.17;
+  const N = BAY.nose, nr = 0.28; if (!N) return;
   const nbot = (x, z) => fuseBottom(sec, x, z) ?? sec(z).yc - sec(z).bt, ntop = (x, z) => Math.min(N.y0 + nr + 0.06, sec(z).yc + sec(z).tp * 0.2, duct && z > duct.z - 0.08 ? duct.yc - duct.h - 0.02 : 9);
   const CN = cavity(-N.w, N.w, N.za, N.zb, nbot, ntop);
   add(CN.walls, bayM, root); add(CN.ceil, bayM, root);
