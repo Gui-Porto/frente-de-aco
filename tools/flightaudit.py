@@ -4,23 +4,23 @@ import json, os, sys
 from playwright.sync_api import sync_playwright
 PRE = """const g = window.__game, who = g.mkWho('T', 1, false);
   const p = g.spawnVehicle(who, key, 2), V = p.pos.constructor;
-  p.brain = null; p.pos.set(0, alt, 0); p.vel.set(0, 0, v0); p.q.identity(); p.throttle = 1; p.wep = true; p.gearCmd = 0; p.gear = 0; p.fuel = p.fuelMax * 0.5; p.bombs = []; p.rockets = 0;
+  p.brain = null; p.pos.set(0, alt, 0); p.vel.set(0, 0, v0); p.q.identity(); p.throttle = 1; p.wep = true; p.gearCmd = 0; p.gear = 0; p.fuel = p.fuelMax; p.bombs = []; p.rockets = 0;
   const run = (t, f) => { for (let i = 0; i < t * 30; i++) { f(); p.pos.x = 0; p.pos.z = 0; p.temp = 80; p.heat.water = 85; p.heat.oil = 70; g.simulate(1/30); if (!p.alive) break; } };
   const done = o => { g.planes.splice(g.planes.indexOf(p), 1); p.remove(); return Object.assign({ key, alt }, o); };"""
 VMAX = "([key, alt, v0]) => {" + PRE + """
   const d = new V(0, 0, 1); let sum = 0, n = 0; // média dos últimos 10 s (o pico incluiria a velocidade inicial)
   run(90, () => { p.steerTo(d, 1/30); if (++n > 80 * 30) sum += p.vel.length(); });
   return done({ vmax: Math.round(sum / (10 * 30) * 3.6) }); }"""
-# subida ESTÁVEL: o ângulo é ajustado para segurar cada velocidade-alvo (sem "zoom" gastando energia
-# cinética); vale a melhor razão de subida entre as velocidades testadas
+# subida ESTÁVEL: altitude fixa (densidade constante), o ângulo segura cada velocidade-alvo e vale a
+# média de vel.y em 40 s (o controlador oscila como um fugoide); fica a melhor entre as velocidades
 CLIMB = "([key, alt, v0]) => {" + PRE + """
-  let best = null; const sp = (p.def.jet ? [450, 600, 750, 900, 1050] : [220, 260, 300, 340]).map(x => x / 3.6);
+  let best = null, all = []; const sp = (p.def.jet ? [450, 600, 750, 900, 1050] : [200, 240, 280, 320]).map(x => x / 3.6);
   for (const vt of sp) { p.pos.set(0, alt, 0); p.vel.set(0, 0, vt); p.q.identity(); p.alive = true; p.iP = 0;
-    let gm = 0.2, y0 = 0, d = new V();
-    const f = () => { gm = Math.max(0, Math.min(p.def.jet ? 1.4 : 0.6, gm + 0.004 * (p.vel.length() - vt) * (1/30))); d.set(0, Math.sin(gm), Math.cos(gm)); p.steerTo(d, 1/30); };
-    run(70, f); y0 = p.pos.y; run(10, f);
-    const roc = (p.pos.y - y0) / 10; if (!best || roc > best.roc) best = { roc: +roc.toFixed(1), kmh: Math.round(vt * 3.6), ang: Math.round(gm * 57.3), at: Math.round(p.vel.length() * 3.6) }; }
-  return done(best); }"""
+    let gm = 0.2, sum = 0, n = 0; const d = new V();
+    const f = () => { gm = Math.max(0, Math.min(1.45, gm + 0.004 * (p.vel.length() - vt) / 30)); d.set(0, Math.sin(gm), Math.cos(gm)); p.steerTo(d, 1/30); p.pos.y = alt; if (++n > 60 * 30) sum += p.vel.y; };
+    run(100, f);
+    const roc = sum / (40 * 30); all.push([Math.round(vt * 3.6), +roc.toFixed(1)]); if (!best || roc > best.roc) best = { roc: +roc.toFixed(1), kmh: Math.round(vt * 3.6), ang: Math.round(gm * 57.3) }; }
+  best.all = all; return done(best); }"""
 # curva: alvo 90° à direita do rumo, com leve subida para segurar a altura; tempo de 360° nos últimos 20 s
 TURN = "([key, alt, v0]) => {" + PRE + """
   const hd = () => Math.atan2(p.vel.x, p.vel.z), d = new V();

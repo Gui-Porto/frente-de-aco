@@ -134,7 +134,7 @@ export const PLANES = {
   },
   f86: {
     key: 'f86', type: 'plane', marks: { serial: '24513', buzz: 'FU-513', decalZ: -0.22 }, gear: { track: 2.5, ret: 'in' }, name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
-    mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.0145, e: 0.78, engine: 'j47', mcrit: 0.9, vctrl: 290, flapV: [410, 305, 245],
+    mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.016, e: 0.78, engine: 'j47', mcrit: 0.9, vctrl: 290, flapV: [410, 305, 245],
     vne: 1150 / 3.6, glim: 12, kda: 0.05, kde: 0.3, kdr: 0.04, armor: { pilot: 8 },
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
     fuseR: 0.72, noseR: 0.62, wingZ: 0.0, chord: 3.3, tipChord: 1.6, cowl: 'intake',
@@ -159,7 +159,7 @@ export const PLANES = {
   },
   mig15: {
     key: 'mig15', type: 'plane', marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
-    mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.019, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
+    mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.023, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1', maw: 'pd',
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
