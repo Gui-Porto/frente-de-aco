@@ -14,10 +14,10 @@ VMAX = "([key, alt, v0]) => {" + PRE + """
 # subida ESTÁVEL: o ângulo é ajustado para segurar cada velocidade-alvo (sem "zoom" gastando energia
 # cinética); vale a melhor razão de subida entre as velocidades testadas
 CLIMB = "([key, alt, v0]) => {" + PRE + """
-  let best = null; const sp = (p.def.jet ? [350, 450, 550, 700, 850] : [220, 260, 300, 340]).map(x => x / 3.6);
+  let best = null; const sp = (p.def.jet ? [450, 600, 750, 900, 1050] : [220, 260, 300, 340]).map(x => x / 3.6);
   for (const vt of sp) { p.pos.set(0, alt, 0); p.vel.set(0, 0, vt); p.q.identity(); p.alive = true; p.iP = 0;
     let gm = 0.2, y0 = 0, d = new V();
-    const f = () => { gm = Math.max(0, Math.min(p.def.jet ? 1.2 : 0.6, gm + 0.004 * (p.vel.length() - vt) * (1/30))); d.set(0, Math.sin(gm), Math.cos(gm)); p.steerTo(d, 1/30); };
+    const f = () => { gm = Math.max(0, Math.min(p.def.jet ? 1.4 : 0.6, gm + 0.004 * (p.vel.length() - vt) * (1/30))); d.set(0, Math.sin(gm), Math.cos(gm)); p.steerTo(d, 1/30); };
     run(70, f); y0 = p.pos.y; run(10, f);
     const roc = (p.pos.y - y0) / 10; if (!best || roc > best.roc) best = { roc: +roc.toFixed(1), kmh: Math.round(vt * 3.6), ang: Math.round(gm * 57.3), at: Math.round(p.vel.length() * 3.6) }; }
   return done(best); }"""
