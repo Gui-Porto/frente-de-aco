@@ -106,7 +106,7 @@ export const PLANES = {
   },
   fw190: {
     key: 'fw190', type: 'plane', gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
-    mass: 4750, S: 18.3, span: 10.5, L: 9.0, cla: 4.8, clmax: 1.45, cd0: 0.019, e: 0.8, engine: 'bmw801',
+    mass: 4750, S: 18.3, span: 10.5, L: 9.0, cla: 4.8, clmax: 1.45, cd0: 0.0225, e: 0.8, engine: 'bmw801',
     vne: 850 / 3.6, glim: 12, kda: 0.06, kde: 0.32, kdr: 0.05, armor: { pilot: 8, engine: 6 },
     hpParts: { wingL: 30, wingR: 30, tail: 24, engine: 22, fuel: 18, fuse: 36 },
     fuseR: 0.66, noseR: 0.66, wingZ: 0.7, chord: 2.2, tipChord: 1.1, cowl: 'radial', radial: { cyl: 7, fan: 12 }, // BMW 801: 7 cilindros na frente, ventoinha de 12 pás
@@ -134,7 +134,7 @@ export const PLANES = {
   },
   f86: {
     key: 'f86', type: 'plane', marks: { serial: '24513', buzz: 'FU-513', decalZ: -0.22 }, gear: { track: 2.5, ret: 'in' }, name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
-    mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.0145, e: 0.78, engine: 'j47', mcrit: 0.9, vctrl: 290, flapV: [410, 305, 245],
+    mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.016, e: 0.78, engine: 'j47', mcrit: 0.9, vctrl: 290, flapV: [410, 305, 245],
     vne: 1150 / 3.6, glim: 12, kda: 0.05, kde: 0.3, kdr: 0.04, armor: { pilot: 8 },
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
     fuseR: 0.72, noseR: 0.62, wingZ: 0.0, chord: 3.3, tipChord: 1.6, cowl: 'intake',
@@ -159,7 +159,7 @@ export const PLANES = {
   },
   mig15: {
     key: 'mig15', type: 'plane', marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
-    mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.016, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
+    mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.023, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1', maw: 'pd',
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
@@ -211,7 +211,7 @@ export const PLANES = {
   },
   mig21: {
     key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
-    mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0175, e: 0.62, engine: 'r13', rcs: 3,
+    mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0195, e: 0.7, engine: 'r13', rcs: 3,
     mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.75, 0.17], inertia: [57000, 7000, 61000], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² aproximados do MiG-21 (asa curta e fuselagem fina)
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },
     hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
