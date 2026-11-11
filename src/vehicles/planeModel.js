@@ -944,6 +944,7 @@ export function buildPlane(D) {
   // detalhes por dados (planeDetail.js): luz da cauda, anticolisão, antenas, tanques externos, gancho
   DT.tailLight(add, DM, tail, D); DT.beacons(add, DM, root, D, at); DT.antennas(add, DM, root, tail, D, at);
   DT.drops(add, DM, root, D, at, wingCfg, wingL, wingR, sB); DT.hook(add, DM, root, D, at);
+  DT.fences(add, DM, D, wingCfg, wingL, wingR, sB); DT.ventral(add, DM, root, D, at);
   const gear = buildGear(D, root, dark, under, { ...BAY, wingDoors, fuseDoors: fuseG.userData.bayDoors, sec: fuseG.userData.sec, bayM: DM.bay });
   // efeitos presos ao avião (chama da PC, fogo do WEP, cone de vapor) — fora da fusão de malhas
   const fx = buildPlaneFx(D, root, nozzles, stacks);

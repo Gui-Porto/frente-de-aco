@@ -158,7 +158,7 @@ export const PLANES = {
     bombs: [], rockets: null
   },
   mig15: {
-    key: 'mig15', type: 'plane', marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
+    key: 'mig15', type: 'plane', marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, fences: [{ ws: 0.4, h: 0.17, len: 0.95 }, { ws: 0.68, h: 0.12, len: 0.9 }], name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
     mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.023, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1', maw: 'pd',
@@ -210,7 +210,7 @@ export const PLANES = {
     bombs: [], rockets: null
   },
   mig21: {
-    key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
+    key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, fences: [{ ws: 0.5, h: 0.17, len: 0.85 }], ventral: { zf: -0.3, h: 0.45, c: 1.6 }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
     mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0195, e: 0.7, engine: 'r13', rcs: 3,
     mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.75, 0.17], inertia: [57000, 7000, 61000], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² aproximados do MiG-21 (asa curta e fuselagem fina)
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },

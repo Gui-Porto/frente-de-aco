@@ -145,3 +145,20 @@ export function hook(add, M, root, D, at) {
   const h = add(new THREE.CylinderGeometry(0.04, 0.05, len, 8).translate(0, -len / 2, 0), M.dark, root, 0, y + 0.02, z); h.rotation.x = Math.PI / 2 - 0.1;
   add(new THREE.BoxGeometry(0.12, 0.06, 0.14), M.yellow, h, 0, -len, 0);
 }
+
+// Cercas de asa (def.fences: [{ ws, h, len }]): chapa vertical sobre o extradorso, na estação ws (0..1 da semi-envergadura),
+// altura h e comprimento len × corda; presa à asa (ou à ponta, além da dobra), então acompanha o dano
+export function fences(add, M, D, wingCfg, wingL, wingR, sB) {
+  for (const F of D.fences || []) for (const side of [1, -1]) {
+    const o = wingCfg(side), c = chordAt(o, F.ws), p = station(o, F.ws, 0.5), tw = (o.t0 + (o.t1 - o.t0) * F.ws) * c * 0.5;
+    const par = F.ws > sB ? (side > 0 ? wingL : wingR).userData.tip : side > 0 ? wingL : wingR;
+    add(new THREE.BoxGeometry(0.022, F.h, c * F.len), M.skin, par, p[0], p[1] + tw + F.h * 0.4, p[2]);
+  }
+}
+// aleta ventral (def.ventral: { zf, h, c }): trapézio sob a cauda, zf = fração do comprimento onde começa o bordo de ataque
+export function ventral(add, M, root, D, at) {
+  const V0 = D.ventral; if (!V0) return;
+  const a = at(V0.zf), s = new THREE.Shape(); [[0, 0], [V0.c, 0], [V0.c * 0.7, -V0.h], [V0.c * 0.15, -V0.h]].forEach(([u, v], i) => i ? s.lineTo(u, v) : s.moveTo(u, v));
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.04, bevelEnabled: false }); g.rotateY(-Math.PI / 2); g.translate(0.02, 0, 0);
+  add(g, M.skin, root, 0, a.yc - a.h * 0.9, V0.zf * D.L - V0.c);
+}
