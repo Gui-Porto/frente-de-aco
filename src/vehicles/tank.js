@@ -11,6 +11,7 @@ import { sndShot, sndMG, sndClick } from '../fx/audio.js';
 import { fireProj, destroyVehicle } from '../combat/ballistics.js';
 import { makeLabel, showDmg, shakeCam } from '../ui/hud.js';
 import { camoTexture, addDecals } from './paint.js';
+import { addTankDetail } from './tankDetail.js';
 // =====================================================================
 // Blindados: modelo, corpo rígido com suspensão por roda, lagartas, câmbio
 // =====================================================================
@@ -139,6 +140,7 @@ export function buildTank(D) {
   }
   const mgMuzzle = new THREE.Object3D(); mgMuzzle.position.set(T.w * .14, .05, .7); gunPivot.add(mgMuzzle);
   addDecals(D, root, turret);
+  addTankDetail(D, { root, turret, gunPivot, mats: [camo, dark, steel], wheels });
   return { root, turret, gunPivot, muzzles, mgMuzzle, mats: [camo, dark, steel, trackL, trackR], wheels, armorMeshes: meshes, trackL, trackR };
 }
 export function setArmorView(v, on) { for (const m of v.armorMeshes) m.material = on ? armorMat : m.userData.normalMat; }
