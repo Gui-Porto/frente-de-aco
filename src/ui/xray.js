@@ -36,7 +36,7 @@ const solidProto = new THREE.ShaderMaterial({
 const lineMat = new THREE.LineBasicMaterial({ color: 0xffb060, transparent: true, depthTest: false });
 const pathMat = new THREE.MeshBasicMaterial({ color: 0xffe2a8, depthTest: false, toneMapped: false });
 const blastMat = new THREE.MeshBasicMaterial({ color: 0xffb050, transparent: true, depthTest: false, blending: THREE.AdditiveBlending, toneMapped: false });
-const COL = { crew: 0x7fd070, dead: 0x4a1410, hit: 0xff4630, mod: 0xb9c2c4, ammo: 0xe0a040, fuel: 0x6f9bd0 };
+const COL = { crew: 0x7fd070, dead: 0x4a1410, hit: 0xff4630, mod: 0xb9c2c4, ammo: 0xe0a040, fuel: 0x6f9bd0, radiator: 0x8fb0a8, barrel: 0x9aa3a6 };
 
 const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 460 / 290, 0.1, 100);
 const inner = new THREE.Group(); scene.add(inner);
@@ -63,13 +63,14 @@ const GEO = {
   shell: new THREE.CylinderGeometry(0.035, 0.035, 1, 6).rotateX(Math.PI / 2).translate(0, 0, 0.5), ball: new THREE.SphereGeometry(1, 14, 10)
 };
 // [geometria, escala x/y/z em múltiplos do raio]
-const SHAPE = { engine: ['box', 1.5, 1.0, 1.9], transmission: ['box', 2.0, 0.9, 1.0], ammo: ['box', 1.0, 1.3, 2.0], fuel: ['box', 1.0, 1.1, 1.9], drive: ['ring', 2.2, 2.2, 2.2], breech: ['cyl', 1.0, 1.0, 2.6] };
+const SHAPE = { engine: ['box', 1.5, 1.0, 1.9], transmission: ['box', 2.0, 0.9, 1.0], ammo: ['box', 1.0, 1.3, 2.0], fuel: ['box', 1.0, 1.1, 1.9], drive: ['ring', 2.2, 2.2, 2.2], breech: ['cyl', 1.0, 1.0, 2.6], barrel: ['cyl', 1.1, 1.1, 1], elev: ['box', 0.8, 1.6, 1.2], radiator: ['box', 2.0, 0.5, 1.6] };
 function compMesh(o) {
   const mat = solidProto.clone(), g = new THREE.Group(); g.position.fromArray(o.p);
   if (o.kind === 'crew') {
     const b = new THREE.Mesh(GEO.body, mat), h = new THREE.Mesh(GEO.head, mat); b.position.y = -0.05; h.position.y = 0.42; g.add(b, h);
   } else {
-    const [geo, sx, sy, sz] = SHAPE[o.name] || ['box', 1.2, 1.2, 1.2], m = new THREE.Mesh(GEO[geo], mat); m.scale.set(sx * o.r, sy * o.r, sz * o.r); g.add(m);
+    const [geo, sx, sy, sz] = SHAPE[o.name] || ['box', 1.2, 1.2, 1.2], m = new THREE.Mesh(GEO[geo], mat); m.scale.set(sx * o.r, sy * o.r, o.len || sz * o.r); g.add(m);
+    g.rotation.y = o.yaw || 0; // peças da torre giram com ela
   }
   g.userData = { o, mat };
   return g;
@@ -103,8 +104,8 @@ export function xrayShot(t, hit, dir, E, am, word, detail, color, inn) {
   const ent = inn ? inn.lp : lp;
   open(t, {
     entry: ent, pre: [ent[0] - ld.x * 4, ent[1] - ld.y * 4, ent[2] - ld.z * 4], end: inn ? inn.end : null, frags: inn ? inn.frags : [], blast: inn ? inn.blast : null,
-    comps: inn ? inn.comps.map((c, i) => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, label: compLabel(c), was: inn.before[i], now: state(c, t) }))
-      : t.components().map(c => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, was: state(c, t), now: state(c, t) })),
+    comps: inn ? inn.comps.map((c, i) => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, yaw: c.yaw, len: c.len, label: compLabel(c), was: inn.before[i], now: state(c, t) }))
+      : t.components().map(c => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, yaw: c.yaw, len: c.len, was: state(c, t), now: state(c, t) })),
     word, color, ammo: `${am.name} · ${Math.round(E.pen)} mm`, plate: `${E.arm.t} mm · ${Math.round(E.ang)}° → ${Math.round(E.eff)} mm`
   });
 }
@@ -114,7 +115,7 @@ export function xrayReport(r) {
   const t = r.t;
   open(t, {
     entry: r.x.lp, pre: [r.x.lp[0], r.x.lp[1] + 4, r.x.lp[2]], end: null, frags: r.x.frags, blast: r.x.blast,
-    comps: r.x.comps.map((c, i) => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, label: compLabel(c), was: r.x.before[i], now: state(c, t) })),
+    comps: r.x.comps.map((c, i) => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, yaw: c.yaw, len: c.len, label: compLabel(c), was: r.x.before[i], now: state(c, t) })),
     word: r.w, color: r.c, ammo: 'Alto-explosivo', plate: r.s.split(' · ').slice(1, 2).join('')
   });
 }
@@ -183,7 +184,7 @@ export function drawXray() {
 const stc = $('#status'), stx = stc.getContext('2d');
 const sScene = new THREE.Scene(), sCam = new THREE.PerspectiveCamera(28, 230 / 190, 0.1, 100), sInner = new THREE.Group(); sScene.add(sInner);
 let sGhost = null, sFor = null;
-const MODSHORT = { engine: 'MOTOR', transmission: 'TRANS', tracks: 'ESTEIRA', breech: 'CULATRA', drive: 'GIRO' }, VIEW = 0.7;
+const MODSHORT = { engine: 'MOTOR', radiator: 'RADIAD', transmission: 'TRANSM', tracks: 'ESTEIRA', breech: 'CULATRA', barrel: 'CANO', drive: 'GIRO', elev: 'ELEVAÇ' }, VIEW = 0.62;
 afterRender.push(() => {
   const t = S.player;
   if (!t || t.type === 'plane' || S.mode === 'air' || S.state !== 'play' || !stc.offsetParent) return;
@@ -192,13 +193,13 @@ afterRender.push(() => {
   if (sFor !== t || sInner.children.length !== comps.length) {
     if (sGhost) sScene.remove(sGhost.root);
     sGhost = ghostOf(D, 'own'); sScene.add(sGhost.root); sFor = t;
-    sInner.clear(); for (const c of comps) sInner.add(compMesh({ p: c.p, r: c.r, kind: c.kind, name: c.name }));
+    sInner.clear(); for (const c of comps) sInner.add(compMesh({ p: c.p, r: c.r, kind: c.kind, name: c.name, yaw: c.yaw, len: c.len }));
   }
   sGhost.root.visible = t.alive; sGhost.turret.visible = t.turretOn; sGhost.turret.rotation.y = t.turretYaw; sGhost.gunPivot.rotation.x = -t.gunPitch;
   const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 110), swap = new Set(Object.values(t.replace).map(x => x.spare));
   comps.forEach((c, i) => {
     const g = sInner.children[i], mat = g.userData.mat, ok = state(c, t);
-    g.position.fromArray(c.p); g.rotation.z = c.kind === 'crew' && !ok ? 0.9 : 0;
+    g.position.fromArray(c.p); g.rotation.z = c.kind === 'crew' && !ok ? 0.9 : 0; g.rotation.y = c.yaw || 0;
     mat.uniforms.col.value.setHex(c.kind === 'crew' ? (!ok ? COL.dead : swap.has(c.ref) ? 0xe8a23c : COL.crew) : !ok ? COL.hit : COL[c.name] || COL.mod);
     mat.uniforms.glow.value = (c.kind !== 'crew' && !ok ? 0.25 * pulse : 0) + (t.fire > 0 && c.name === 'engine' ? 0.8 * pulse : 0);
   });
@@ -220,7 +221,7 @@ afterRender.push(() => {
   stx.drawImage(renderer.domElement, r.left * pr, r.top * pr, r.width * pr, vh * pr, 0, 0, W, V2);
   // fileiras: tripulação (posto) e módulos; verde/cinza = inteiro, âmbar = trocando de posto/em reparo, vermelho = fora
   const row = (items, y) => {
-    const gap = 6, w = (W - 16 - gap * (items.length - 1)) / items.length, h = (Hh - V2 - 22) / 2;
+    const gap = 6, w = (W - 16 - gap * (items.length - 1)) / items.length, h = (Hh - V2 - 28) / 3;
     const fs = Math.round(Math.min(h * 0.5, (w - 8) / Math.max(...items.map(it => it[0].length)) * 1.6));
     stx.font = `600 ${fs}px "IBM Plex Mono", monospace`; stx.textAlign = 'center'; stx.textBaseline = 'middle';
     items.forEach(([label, st], i) => {
@@ -233,7 +234,8 @@ afterRender.push(() => {
     return h;
   };
   const h1 = row(t.crew.map(c => [c.short, !c.alive ? 'bad' : swap.has(c) ? 'warn' : 'crew']), V2 + 6);
-  row(Object.keys(t.mods).map(k => [MODSHORT[k] || k, t.mods[k].broken ? (t.repairT > 0 ? 'warn' : 'bad') : 'ok']), V2 + 12 + h1);
+  const ml = Object.keys(t.mods).map(k => [MODSHORT[k] || k, t.mods[k].broken ? (t.repairT > 0 ? 'warn' : 'bad') : 'ok']), half = Math.ceil(ml.length / 2);
+  row(ml.slice(0, half), V2 + 12 + h1); row(ml.slice(half), V2 + 18 + h1 * 2);
   stx.font = '600 20px "IBM Plex Mono", monospace'; stx.textBaseline = 'top'; stx.textAlign = 'right';
   const dead = t.crew.filter(c => !c.alive).length, af = t.ammoFrac();
   stx.fillStyle = 'rgba(221,214,183,.75)'; stx.fillText(`MUN ${Math.round(af * 100)}%`, W - 10, 10);

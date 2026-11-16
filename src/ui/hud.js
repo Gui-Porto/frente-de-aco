@@ -116,7 +116,7 @@ function updatePanels(v) {
   const mg = $('#weapons').querySelector('.mg b'); if (mg) mg.textContent = v.mgReload > 0 ? `${v.mgReload.toFixed(0)} s` : `${v.mgBelt}/${v.mgAmmo}`;
   const frac = ready ? (g.auto ? v.clip / g.clip : 1) : 1 - v.reload / g.reload;
   $('#reloadBar').style.width = frac * 100 + '%'; $('#reloadBox').className = 'reload' + (ready ? ' ready' : '');
-  $('#reloadT').textContent = !v.alive ? 'destruído' : v.mods.breech.broken ? 'culatra danificada' : !v.seat('gunner').alive ? 'sem atirador' : ready ? (g.auto ? `pente ${v.clip}/${g.clip}` : 'carregado') : `${v.reload.toFixed(1)} s`;
+  $('#reloadT').textContent = !v.alive ? 'destruído' : v.mods.breech.broken ? 'culatra danificada' : v.mods.barrel.broken ? 'cano danificado' : !v.seat('gunner').alive ? 'sem atirador' : ready ? (g.auto ? `pente ${v.clip}/${g.clip}` : 'carregado') : `${v.reload.toFixed(1)} s`;
   $('#tFire').hidden = !(v.fire > 0);
   $('#tRepair').hidden = !(v.repairT > 0); if (v.repairT > 0) $('#tRepair').textContent = `Reparando · ${Math.ceil(v.repairT)} s (F cancela)`;
   $('#tBroken').hidden = !(v.brokenCount() && v.repairT <= 0 && v.fire <= 0);

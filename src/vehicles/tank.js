@@ -17,7 +17,10 @@ import { addTankDetail } from './tankDetail.js';
 // Blindados: modelo, corpo rígido com suspensão por roda, lagartas, câmbio
 // =====================================================================
 export const CREW = [['driver', 'Motorista', 'MOT'], ['radio', 'Op. de rádio', 'RÁD'], ['gunner', 'Atirador', 'ATI'], ['commander', 'Comandante', 'CMD'], ['loader', 'Municiador', 'MUN']];
-export const MODS = { engine: ['Motor', 22], transmission: ['Transmissão', 25], tracks: ['Esteira', 11], breech: ['Culatra', 18], drive: ['Giro da torre', 15] };
+// Módulos funcionais (rótulo, tempo de reparo). Cada um é um volume dentro do tanque (components()) que pode ser atingido:
+// motor (potência a 22%), radiador (superaquece: potência a 60%), transmissão e esteira (imobilizam), culatra e cano
+// (não atira), giro da torre e elevação (apontar lento). Paióis e tanques de combustível não quebram: explodem/incendeiam.
+export const MODS = { engine: ['Motor', 22], radiator: ['Radiador', 14], transmission: ['Transmissão', 25], tracks: ['Esteira', 11], breech: ['Culatra', 18], barrel: ['Cano', 16], drive: ['Giro da torre', 15], elev: ['Elevação', 12] };
 const STEER = 1.55; // lagarta de dentro em curva: 1 = solta, > 1 = contra-rotação (1,6 parava o tanque na curva)
 export const GEARS = [0.15, 0.3, 0.5, 0.74, 1.0];
 
@@ -201,7 +204,7 @@ export class Tank {
   seat(role) { return this.crew.find(c => c.role === role); }
   aliveCount() { return this.crew.filter(c => c.alive).length; }
   ammoFrac() { const tot = this.def.gun.ammo.reduce((s, a) => s + a.count, 0); return this.ammoLeft.reduce((s, a) => s + a, 0) / tot; }
-  canFire() { return this.alive && this.turretOn && this.loaded >= 0 && !this.mods.breech.broken && this.seat('gunner').alive; }
+  canFire() { return this.alive && this.turretOn && this.loaded >= 0 && !this.mods.breech.broken && !this.mods.barrel.broken && this.seat('gunner').alive; }
   canDrive() { return this.alive && !this.mods.transmission.broken && !this.mods.tracks.broken && this.seat('driver').alive; }
   axes() { _m4.makeRotationFromQuaternion(this.q); _ax.setFromMatrixColumn(_m4, 0); _ay.setFromMatrixColumn(_m4, 1); _az.setFromMatrixColumn(_m4, 2); }
   centerPos(out) { return out.set(0, this.def.clr + this.def.Hh * 0.6, 0).applyMatrix4(this.root.matrixWorld); }
@@ -244,7 +247,7 @@ export class Tank {
     const tgtRpm = 700 + (D.rpm - 700) * (busy ? Math.max(x, 0.55 * Math.max(Math.abs(thr), Math.abs(st))) : x * 0.6);
     this.rpm += (tgtRpm - this.rpm) * Math.min(1, dt * 6);
     const xr = this.rpm / D.rpm;
-    const P = D.hp * 745.7 * 0.95 * clamp(1.9 * xr - 0.9 * xr * xr, 0.3, 1) * (this.mods.engine.broken ? 0.22 : 1);
+    const P = D.hp * 745.7 * 0.95 * clamp(1.9 * xr - 0.9 * xr * xr, 0.3, 1) * (this.mods.engine.broken ? 0.22 : 1) * (this.mods.radiator.broken ? 0.6 : 1);
     let Fe = this.shiftT > 0 ? 0 : P / Math.max(vTrack, 0.8);
     Fe = Math.min(Fe, 0.9 * D.mass * G);
     if (x >= 1 && Math.abs(this.vFwd) >= top * 0.98) Fe = 0; // regulador de velocidade
@@ -381,7 +384,8 @@ export class Tank {
     let elev = Math.atan2(p.y, hd);
     if (this.compensate) elev += ballistic(this.ammo, hd).ang;
     const tgt = clamp(elev, -g.dep * DEG, g.elev * DEG);
-    if (gunner) this.gunPitch += clamp(tgt - this.gunPitch, -g.elevRate * DEG * dt, g.elevRate * DEG * dt);
+    const er = g.elevRate * DEG * dt * (this.mods.elev.broken ? 0.15 : 1);
+    if (gunner) this.gunPitch += clamp(tgt - this.gunPitch, -er, er);
     this.aimErr = Math.abs(angDiff(this.turretYaw, want)) + Math.abs(tgt - this.gunPitch) + (Math.abs(elev - tgt) > 0.01 ? 1 : 0);
   }
 
@@ -502,6 +506,9 @@ export class Tank {
       { kind: 'mod', name: 'transmission', p: [0, y0 + .35, D.transFront ? L * .43 : -L * .46], r: .5 },
       { kind: 'mod', name: 'ammo', p: [it * .36, y0 + .4, -L * .02], r: .42 },
       { kind: 'mod', name: 'ammo', p: [-it * .36, y0 + .4, -L * .02], r: .42 },
+      { kind: 'mod', name: 'ammo', p: [0, y0 + .22, L * .1], r: .36 },
+      { kind: 'mod', name: 'radiator', p: [it * .3, yH - .32, -L * .43], r: .34 },
+      { kind: 'mod', name: 'radiator', p: [-it * .3, yH - .32, -L * .43], r: .34 },
       { kind: 'mod', name: 'fuel', p: [it * .36, y0 + .65, -L * .2], r: .38 },
       { kind: 'mod', name: 'fuel', p: [-it * .36, y0 + .65, -L * .2], r: .38 },
       { kind: 'mod', name: 'drive', p: [0, yH - .25, T.z], r: .35 }
@@ -513,7 +520,10 @@ export class Tank {
         { kind: 'crew', ref: this.seat('gunner'), p: tp(-T.w * .22, .05, T.l * .12), r: .4 },
         { kind: 'crew', ref: this.seat('commander'), p: tp(-T.w * .22, .15, -T.l * .28), r: .4 },
         { kind: 'crew', ref: this.seat('loader'), p: tp(T.w * .24, -.05, -T.l * .05), r: .4 },
-        { kind: 'mod', name: 'breech', p: tp(0, T.h * .5, T.l * .18), r: .35 });
+        { kind: 'mod', name: 'breech', p: tp(0, T.h * .5, T.l * .18), r: .35, yaw: this.turretYaw },
+        { kind: 'mod', name: 'elev', p: tp(T.w * .16, T.h * .3, T.l * .3), r: .22, yaw: this.turretYaw },
+        // o cano fica FORA da blindagem: é atingido por fora (impactTank), aqui só aparece no raio-X
+        { kind: 'mod', name: 'barrel', p: tp(0, T.h * .5, T.l / 2 + D.gun.len * .5), r: .16, len: D.gun.len, yaw: this.turretYaw });
     }
     return out;
   }

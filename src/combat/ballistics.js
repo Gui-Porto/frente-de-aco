@@ -237,6 +237,7 @@ function onImpact(pr, hit) {
   return impactTank(pr, hit, sp, dir);
 }
 
+const _brl = new V3();
 function impactTank(pr, hit, sp, dir) {
   const t = hit.tank, am = pr.am, sh = pr.owner, shell = pr.kind === 'shell', isP = sh && sh.isPlayer;
   if (sh && sh.team !== t.team) t.lastHitBy = sh;
@@ -245,6 +246,11 @@ function impactTank(pr, hit, sp, dir) {
   const mat = hit.part === 'hull' ? t.root.matrixWorld : t.turret.matrixWorld;
   const nW = new V3(...E.arm.n).transformDirection(mat);
   if (E.track && t.alive && (shell ? Math.random() < 0.75 : E.pen > 15 && Math.random() < 0.1)) { t.breakMod('tracks'); if (t.isPlayer) showDmg('Esteira rompida'); }
+  // frente da torre, em cima do eixo do canhão: o projétil pega o cano/mantelete por fora
+  if (hit.part !== 'hull' && t.alive && !t.mods.barrel.broken) {
+    const T = t.def.turret, l = _brl.copy(hit.point).applyMatrix4(t.invTurret);
+    if (l.z > T.l / 2 - 0.05 && Math.abs(l.x) < 0.24 && Math.abs(l.y - T.h * 0.5) < 0.24 && Math.random() < (shell ? 0.6 : 0.03)) { t.breakMod('barrel'); if (t.isPlayer) showDmg('Cano danificado'); }
+  }
   if (isP && shell) S.stats.hits++;
   if (Math.random() < E.ricoP) {
     pr.v.addScaledVector(nW, -2 * pr.v.dot(nW)).multiplyScalar(0.55).add(rv(30));
