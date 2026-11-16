@@ -20,7 +20,7 @@ Lista viva dos pedidos, na ordem em que serão feitos. Cada item vira uma branch
   - Fw 190 e F-4: sem candidato texturizado de origem clara; só os CC0 de mgg8 ("feitos no Blender com assistência de IA") — decisão do dono.
   - Rejeitar autores com rips de jogo: KojfDiscord, 42manako, MirzaArrafiERV_45, Jeyhun1985, manbs999, scout., s9pata, fuzion_z3, manilov.ap.
   - Tanque moderno exige regras novas: estabilizador, APFSDS, blindagem composta, telêmetro.
-- **Esteira do T-34-85 animada**: no arquivo cada elo vem em várias ilhas; falta agrupar no Blender (tools/blender/t34.py) e exportar um elo + quadros, ou gerar o laço no carregador.
+- **Esteira do T-34-85**: anima (tools/blender/t34.py exporta rodas e um par de sapatas + traçado do laço). Falta acabamento: a detecção acha 147/148 sapatas por lado (o certo é par, ~144); sobram 1–2 ilhas que não são sapata e o trecho de cima fica um pouco irregular.
 - **Wirbelwind (antiaérea)** segue procedural; precisa de modelo.
 
 ## Pendências menores

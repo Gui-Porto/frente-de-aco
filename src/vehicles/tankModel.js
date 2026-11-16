@@ -84,12 +84,26 @@ function runningGear(g, R) {
     const f = frames[ref], inv = new THREE.Matrix4().makeRotationX(-f.th).multiply(new THREE.Matrix4().makeTranslation(0, -f.y, -f.z));
     // sentido: andando para frente o trecho de baixo corre para trás (z diminui)
     const nx = frames[(ref + 1) % N];
-    tracks.push({ side, g: pick(g, link, inv), frames, dir: nx.z < f.z ? 1 : -1, pitch: Math.hypot(nx.y - f.y, nx.z - f.z) });
+    tracks.push({ side, parts: [{ g: pick(g, link, inv) }], frames, period: 1, dir: nx.z < f.z ? 1 : -1, pitch: Math.hypot(nx.y - f.y, nx.z - f.z) });
   }
   return {
     still: pick(g, still.flatMap(c => c.tris)), tracks,
-    wheels: wheels.filter(Boolean).map(w => ({ side: w.side, r: w.r, at: [0, w.y, w.z], g: pick(g, w.tris, new THREE.Matrix4().makeTranslation(0, -w.y, -w.z)) }))
+    wheels: wheels.filter(Boolean).map(w => ({ side: w.side, r: w.r, at: [0, w.y, w.z], parts: [{ g: pick(g, w.tris, new THREE.Matrix4().makeTranslation(0, -w.y, -w.z)) }] }))
   };
+}
+
+// Trem de rolamento de arquivo já preparado (tools/blender): nós wheel_* (extras y, z, r, side) e link_L/link_R
+// (extras centers = [y, z, ...] das sapatas em volta do laço, ref = sapata de referência, period = sapatas por elo)
+function preparedGear(wheelNodes, linkNodes) {
+  const wheels = [], tracks = [];
+  for (const [n, parts] of wheelNodes) { const e = n.userData; wheels.push({ side: e.side, r: e.r, at: [0, e.y, e.z], parts: parts.map(q => ({ g: q.g.translate(0, -e.y, -e.z), mi: q.mi })) }); }
+  for (const [n, parts] of linkNodes) {
+    const e = n.userData, c = e.centers, N = c.length / 2, P = i => { i = ((i % N) + N) % N; return [c[i * 2], c[i * 2 + 1]]; };
+    const frames = []; for (let i = 0; i < N; i++) { const [y, z] = P(i), a = P(i - 1), b = P(i + 1); frames.push({ y, z, th: Math.atan2(-(b[0] - a[0]), b[1] - a[1]) }); }
+    const f = frames[e.ref], nx = frames[(e.ref + 1) % N], inv = new THREE.Matrix4().makeRotationX(-f.th).multiply(new THREE.Matrix4().makeTranslation(0, -f.y, -f.z));
+    tracks.push({ side: e.side, parts: parts.map(q => ({ g: q.g.applyMatrix4(inv), mi: q.mi })), frames, period: e.period || 1, dir: nx.z < f.z ? 1 : -1, pitch: Math.hypot(nx.y - f.y, nx.z - f.z) });
+  }
+  return { wheels, tracks };
 }
 
 function prepare(D, scene) {
@@ -98,13 +112,15 @@ function prepare(D, scene) {
   if (M.off) fix.premultiply(new THREE.Matrix4().makeTranslation(...M.off)); // leva o centro do casco para a origem
   scene.updateMatrixWorld(true);
   const parts = { hull: [], track: [], turret: [], gun: [] }, mats = new Map();
+  const wheelNodes = new Map(), linkNodes = new Map();
   scene.traverse(o => {
     if (!o.isMesh) return;
     const g = o.geometry.clone().applyMatrix4(o.matrixWorld).applyMatrix4(fix), mat = o.material;
     if (!mats.has(mat)) { mat.transparent = false; mat.depthWrite = true; mats.set(mat, mats.size); }
     const mi = mats.get(mat);
     // arquivo já preparado (tools/blender): nós "hull" / "turret" / "gun" / "track" mandam; senão vale o material
-    let node = null; for (let q = o; q && !node; q = q.parent) node = (/^(hull|turret|gun|track)/.exec(q.name) || [])[1];
+    let node = null, nobj = null; for (let q = o; q && !node; q = q.parent) { node = (/^(hull|turret|gun|track|wheel|link)/.exec(q.name) || [])[1]; nobj = q; }
+    if (node === 'wheel' || node === 'link') { const m = node === 'wheel' ? wheelNodes : linkNodes; if (!m.has(nobj)) m.set(nobj, []); m.get(nobj).push({ g, mi }); return; }
     if (node === 'gun') parts.gun.push({ g: g.translate(-M.trunnion[0], -M.trunnion[1], -M.trunnion[2]), mi });
     else if (node === 'turret') parts.turret.push({ g: g.translate(-M.ring[0], -M.ring[1], -M.ring[2]), mi });
     else if (node) parts[node].push({ g, mi });
@@ -114,12 +130,12 @@ function prepare(D, scene) {
       parts.turret.push({ g: tur.translate(-M.ring[0], -M.ring[1], -M.ring[2]), mi });
     } else parts[mat.name === (M.track || 'chassis') ? 'track' : 'hull'].push({ g, mi });
   });
-  let run = null;
+  let run = wheelNodes.size || linkNodes.size ? preparedGear(wheelNodes, linkNodes) : null;
   if (M.run && parts.track.length) {
     // todas as malhas do trem viram uma só, não indexada, para as peças soltas poderem ser reagrupadas
     const gs = parts.track.map(p => p.g.toNonIndexed()), one = new THREE.BufferGeometry();
     for (const n in gs[0].attributes) { const s = gs[0].attributes[n].itemSize, o = new Float32Array(gs.reduce((t, q) => t + q.attributes[n].array.length, 0)); let at = 0; for (const q of gs) { o.set(q.attributes[n].array, at); at += q.attributes[n].array.length; } one.setAttribute(n, new THREE.BufferAttribute(o, s)); }
-    run = runningGear(one, M.run); run.mi = parts.track[0].mi; parts.track = [{ g: run.still, mi: run.mi }];
+    run = runningGear(one, M.run); const mi = parts.track[0].mi; for (const x of [...run.wheels, ...run.tracks]) for (const q of x.parts) q.mi = mi; parts.track = [{ g: run.still, mi }];
   }
   return { parts, run, mats: [...mats.keys()] };
 }
@@ -174,20 +190,28 @@ export function gltfTank(D, tagArmor, proc) {
   const still = () => ({ map: { offset: { x: 0 } } }), wheels = []; // a esteira do modelo anda por trackAnim, não por textura
   let trackAnim = null;
   if (C.run) {
-    const mat = mats[C.run.mi], dummy = new THREE.Object3D();
-    for (const w of C.run.wheels) { const m = new THREE.Mesh(w.g, mat); m.position.fromArray(w.at); m.receiveShadow = true; root.add(m); hi.push(m); wheels.push({ m, side: w.side, r: w.r }); }
-    const belts = C.run.tracks.map(t => { const im = new THREE.InstancedMesh(t.g, mat, t.frames.length); im.receiveShadow = true; im.frustumCulled = false; root.add(im); hi.push(im); return { im, t, last: NaN }; });
-    // off = [esquerda, direita] em metros andados pela esteira
+    const dummy = new THREE.Object3D();
+    for (const w of C.run.wheels) {
+      const m = new THREE.Group(); m.position.fromArray(w.at); root.add(m);
+      for (const q of w.parts) { const x = new THREE.Mesh(q.g, mats[q.mi]); x.receiveShadow = true; m.add(x); hi.push(x); }
+      wheels.push({ m, side: w.side, r: w.r });
+    }
+    const belts = C.run.tracks.map(t => {
+      const n = Math.floor(t.frames.length / t.period), ims = t.parts.map(q => { const im = new THREE.InstancedMesh(q.g, mats[q.mi], n); im.receiveShadow = true; im.frustumCulled = false; root.add(im); hi.push(im); return im; });
+      return { ims, n, t, last: NaN };
+    });
+    // off = [esquerda, direita] em metros andados pela esteira. Cada instância é um elo (period sapatas) e anda de sapata em sapata.
     trackAnim = off => {
       for (const b of belts) {
-        const { frames, dir, pitch } = b.t, N = frames.length, u = off[b.t.side > 0 ? 0 : 1] / pitch, k = Math.floor(u), f = u - k;
+        const { frames, dir, pitch, period } = b.t, N = frames.length, u = off[b.t.side > 0 ? 0 : 1] / pitch, k = Math.floor(u), f = u - k;
         if (Math.abs(u - b.last) < 1e-4) continue; b.last = u;
-        for (let i = 0; i < N; i++) {
-          const a = frames[(((i + k * dir) % N) + N) % N], c = frames[(((i + (k + 1) * dir) % N) + N) % N];
+        for (let j = 0; j < b.n; j++) {
+          const i = j * period, a = frames[(((i + k * dir) % N) + N) % N], c = frames[(((i + (k + 1) * dir) % N) + N) % N];
           let d = c.th - a.th; if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
-          dummy.position.set(0, a.y + (c.y - a.y) * f, a.z + (c.z - a.z) * f); dummy.rotation.x = a.th + d * f; dummy.updateMatrix(); b.im.setMatrixAt(i, dummy.matrix);
+          dummy.position.set(0, a.y + (c.y - a.y) * f, a.z + (c.z - a.z) * f); dummy.rotation.x = a.th + d * f; dummy.updateMatrix();
+          for (const im of b.ims) im.setMatrixAt(j, dummy.matrix);
         }
-        b.im.instanceMatrix.needsUpdate = true;
+        for (const im of b.ims) im.instanceMatrix.needsUpdate = true;
       }
     };
     trackAnim([0, 0]);
