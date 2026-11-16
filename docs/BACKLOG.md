@@ -2,6 +2,22 @@
 
 Lista viva dos pedidos, na ordem em que serão feitos. Cada item vira uma branch (`feature/…` ou `fix/…`) com commits e um PR para revisão. Ao concluir, o item sai daqui e vai para a descrição do PR.
 
+## Retomada (trabalho autônomo — o dono pediu para seguir sozinho, inclusive depois de reset de limite)
+
+Ordem de trabalho na branch `feature/fatia-vertical`. Marque o que for concluindo; ao terminar tudo, apague esta seção.
+
+1. Integrar as entregas dos agentes (cada uma: olhar imagem na bancada, rodar `npm test`, teste de partida sem erro, commitar):
+   - M1 Abrams (`public/models/m1.glb`, `tools/blender/m1.py`, ficha `m1`, `ERAS.mod`).
+   - Aviões e armamentos por era; F-4E e MiG-21 na batalha de tanques da era Moderna.
+   - P-47 com modelo real (`public/models/p47.glb`, `modelLibrary.js`).
+   - Mapa: estradas, vila, cobertura (`src/world/`).
+2. Commitar o que ficou pendente meu: minimapa com ícones orientados (`ui/minimap.js`) e distância ao lado da mira (`ui/hud.js`, `styles.css`) — conferir por captura de tela antes.
+3. Antiaérea com modelo real: "FlakPanzer IV Wirbelwind" de Prak (Sketchfab `0995d38d4b1f4648b5c1bc1384f4eeaf`, CC BY) — verificar descrição/origem, baixar pelo Chrome "SUPERVISOR_MONI", preparar com `tools/blender/prep.py` ou script próprio. Para a era Moderna: Gepard de xFORTUNAx `67815bf4efae4f3da979dbb3696daf85` ou Tunguska de usedm `54ff4d655755473d99eab1ccc7eb6bfc`. Se o Sketchfab devolver erro, é limite de requisições: esperar.
+4. HUD geral: revisar cada tela da batalha de tanques por captura (painel de armas, placar, feed de abates, tela de spawn) e alinhar ao estilo do War Thunder.
+5. Medir desempenho com tudo junto (triângulos/chamadas por quadro, tempo de simulação) e corrigir regressões.
+6. Autocrítica honesta (pedido do dono): comparar com o War Thunder item a item — modelos, física, mira, dano, som, mapa, HUD, aviões — dizendo o que está bom, o que está fraco e o que falta; registrar em `docs/AVALIACAO.md`.
+7. Gitflow: `git checkout develop && git merge --no-ff feature/fatia-vertical`. Sem push e sem release (não foram pedidos).
+
 ## Em andamento / próximos
 
 - **Jatos mais bonitos (modelos glTF prontos)**: escolher/comprar modelos (Sketchfab/CGTrader) de F-86, MiG-15, F-4E e MiG-21 com licença que permita uso no jogo; preparar os nós `wingL/wingR/tail/prop/hp_N` (+ superfícies) e ligar por `def.model = { url }`. Depende do jogador escolher os modelos.
