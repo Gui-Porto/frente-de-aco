@@ -3,3 +3,4 @@
 Modelos 3D usados sob licença Creative Commons Atribuição 4.0 (https://creativecommons.org/licenses/by/4.0/):
 
 - **Tiger I (PzKpfw VI Ausf. E)**, de M1RON — https://sketchfab.com/3d-models/tiger-i-pzkpfw-vi-ausf-e-5dde7ae017584613a823784f744935fc — `public/models/tiger.glb` (conversão GLB automática do Sketchfab; no jogo a malha da torre é recortada em torre + canhão).
+- **T-34-85 Soviet Tank**, de Federico Oviedo — https://sketchfab.com/3d-models/t-34-85-soviet-tank-58d1ec1a786f4065a504da5ccf6fc7b5 — `public/models/t34.glb` (decimado, reescalado e separado em casco/torre/canhão por `tools/blender/t34.py`).

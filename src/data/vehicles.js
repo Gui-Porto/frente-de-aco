@@ -27,6 +27,8 @@ export const TANKS = {
     mass: 32000, hp: 500, rpm: 1800, vmax: 54 * 1.15 / 3.6, vrev: 8 * 1.25 / 3.6, wheels: 5, rpmTraverse: false,
     L: 6.1, W: 3.0, Hh: 1.25, clr: 0.4, trackW: 0.5, transFront: false,
     turret: { w: 2.0, l: 2.5, h: 0.8, z: 0.35, shape: 'hex' },
+    // "T-34-85 Soviet Tank" de Federico Oviedo, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/t34.py
+    model: { url: '/models/t34.glb', off: [-5.265, 0, 2.115], ring: [0, 1.70, 0.30], trunnion: [0, 2.06, 1.56], muzzle: 5.08 },
     armor: { front: [45, 60], lfront: [45, 53], side: [45, 20], rear: [45, 47], top: 20, bottom: 15, tFront: [90, 0], tSide: [75, 20], tRear: [52, 10], tTop: 20 },
     gun: { name: '85 mm ZiS-S-53', cal: 85, len: 4.6, reload: 7.8, trav: 22, elevRate: 6, dep: 5, elev: 22, brake: false,
       ammo: [

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // =====================================================================
 // Modelos glTF dos blindados (opcional), só por dados:
+//   (arquivo com nós hull/turret/gun dispensa turret e cut; `off` translada o arquivo)
 //   def.model = { url, turret: 'nome do material da torre', ring: [x, y, z] (centro do anel da torre),
 //                 trunnion: [x, y, z] (munhão do canhão), cut: z a partir do qual a malha da torre é canhão/mantelete,
 //                 muzzle: z da boca do cano, scale?, rot? }
@@ -92,6 +93,7 @@ function runningGear(g, R) {
 function prepare(D, scene) {
   const M = D.model, fix = new THREE.Matrix4().makeScale(M.scale || 1, M.scale || 1, M.scale || 1);
   if (M.rot) fix.multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...M.rot)));
+  if (M.off) fix.premultiply(new THREE.Matrix4().makeTranslation(...M.off)); // leva o centro do casco para a origem
   scene.updateMatrixWorld(true);
   const parts = { hull: [], track: [], turret: [], gun: [] }, mats = new Map();
   scene.traverse(o => {
@@ -99,7 +101,12 @@ function prepare(D, scene) {
     const g = o.geometry.clone().applyMatrix4(o.matrixWorld).applyMatrix4(fix), mat = o.material;
     if (!mats.has(mat)) { mat.transparent = false; mat.depthWrite = true; mats.set(mat, mats.size); }
     const mi = mats.get(mat);
-    if (mat.name === M.turret) {
+    // arquivo já preparado (tools/blender): nós "hull" / "turret" / "gun" / "track" mandam; senão vale o material
+    let node = null; for (let q = o; q && !node; q = q.parent) node = (/^(hull|turret|gun|track)/.exec(q.name) || [])[1];
+    if (node === 'gun') parts.gun.push({ g: g.translate(-M.trunnion[0], -M.trunnion[1], -M.trunnion[2]), mi });
+    else if (node === 'turret') parts.turret.push({ g: g.translate(-M.ring[0], -M.ring[1], -M.ring[2]), mi });
+    else if (node) parts[node].push({ g, mi });
+    else if (mat.name === M.turret) {
       const [gun, tur] = splitGeo(g.toNonIndexed(), (x, y, z) => z > M.cut);
       parts.gun.push({ g: gun.translate(-M.trunnion[0], -M.trunnion[1], -M.trunnion[2]), mi });
       parts.turret.push({ g: tur.translate(-M.ring[0], -M.ring[1], -M.ring[2]), mi });
