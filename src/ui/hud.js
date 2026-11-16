@@ -45,48 +45,7 @@ export function addFeed(k, v, cause) {
 const sc = $('#status'), sx = sc.getContext('2d'), SX = sx;
 const C = { ok: '#c9c4ab', warn: '#efa53c', bad: '#e65a42', dead: '#5a1f18', dim: 'rgba(201,196,171,.35)', line: 'rgba(221,214,183,.55)', crew: '#93cf6c' };
 const modCol = m => (m.broken ? C.bad : C.ok);
-function drawTankStatus(t) {
-  const W = sc.width, Hh = sc.height, D = t.def;
-  sx.clearRect(0, 0, W, Hh);
-  const s = Math.min((Hh - 24) / D.L, (W - 60) / D.W) * 0.95, ox = W / 2, oy = Hh / 2 + 4;
-  const P = (x, z) => [ox - x * s, oy - z * s]; // frente para cima, +x (esquerda do tanque) à esquerda
-  sx.lineWidth = 1.5;
-  // lagartas
-  for (const side of [1, -1]) {
-    const [x0, y0] = P(side * D.W / 2, D.L * 0.48);
-    sx.fillStyle = t.mods.tracks.broken ? C.bad : 'rgba(201,196,171,.25)';
-    sx.fillRect(Math.min(x0, x0 + side * D.trackW * s), y0, D.trackW * s, D.L * 0.96 * s);
-  }
-  // casco
-  const [hx, hy] = P(D.W / 2 - D.trackW, D.L / 2);
-  sx.strokeStyle = C.line; sx.strokeRect(hx, hy, (D.W - 2 * D.trackW) * s, D.L * s);
-  // módulos
-  const box = (x, z, w, l, col) => { const [a, b] = P(x + w / 2, z + l / 2); sx.fillStyle = col; sx.fillRect(a, b, w * s, l * s); };
-  box(0, -D.L * .33, D.W * .42, D.L * .2, modCol(t.mods.engine));
-  box(0, D.transFront ? D.L * .43 : -D.L * .46, D.W * .38, D.L * .07, modCol(t.mods.transmission));
-  const af = t.ammoFrac();
-  for (const side of [1, -1]) box(side * (D.W - 2 * D.trackW) * .36, -D.L * .02, .45, .7, `rgba(239,165,60,${0.25 + af * 0.6})`);
-  // torre e canhão (giram com a torre)
-  if (t.turretOn) {
-    const T = D.turret, [tx, ty] = P(0, T.z);
-    sx.save(); sx.translate(tx, ty); sx.rotate(-t.turretYaw);
-    sx.strokeStyle = t.mods.drive.broken ? C.bad : C.line; sx.lineWidth = 2;
-    sx.beginPath(); sx.ellipse(0, 0, T.w / 2 * s, T.l / 2 * s, 0, 0, 7); sx.stroke();
-    sx.strokeStyle = t.mods.breech.broken ? C.bad : C.ok; sx.lineWidth = 3;
-    sx.beginPath(); sx.moveTo(0, -T.l * .3 * s); sx.lineTo(0, -(T.l / 2 + D.gun.len) * s * 0.7); sx.stroke();
-    sx.restore();
-  }
-  // tripulação
-  for (const c of t.components()) {
-    if (c.kind !== 'crew') continue;
-    const [x, y] = P(c.p[0], c.p[2]), rep = Object.values(t.replace).some(r => r.spare === c.ref);
-    sx.fillStyle = !c.ref.alive ? C.dead : rep ? C.warn : C.crew;
-    sx.beginPath(); sx.arc(x, y, 5, 0, 7); sx.fill();
-    if (!c.ref.alive) { sx.strokeStyle = C.bad; sx.lineWidth = 2; sx.beginPath(); sx.moveTo(x - 4, y - 4); sx.lineTo(x + 4, y + 4); sx.moveTo(x + 4, y - 4); sx.lineTo(x - 4, y + 4); sx.stroke(); }
-  }
-  if (t.fire > 0) { sx.fillStyle = `rgba(255,${100 + Math.random() * 80},30,${0.35 + Math.random() * 0.25})`; const [a, b] = P(D.W / 2, D.L / 2); sx.fillRect(a, b, D.W * s, D.L * s); }
-  if (t.repairT > 0) { sx.strokeStyle = C.warn; sx.lineWidth = 4; sx.beginPath(); sx.arc(W - 20, 20, 13, -Math.PI / 2, -Math.PI / 2 + (1 - t.repairT / t.repairMax) * Math.PI * 2); sx.stroke(); }
-}
+// o estado do tanque é o raio-X 3D de ui/xray.js (desenhado depois do quadro)
 export function drawPlaneStatus(p, sx = SX, W = sc.width, Hh = sc.height) {
   const D = p.def;
   sx.clearRect(0, 0, W, Hh);
@@ -129,6 +88,7 @@ export function buildPanels(v) {
 }
 function updatePanels(v) {
   if (v.type === 'plane') {
+    if (sc.width !== 230) { sc.width = 230; sc.height = 190; } // o painel 3D do tanque redimensiona o canvas
     drawPlaneStatus(v);
     $('#iIas').textContent = Math.round(v.ias * 3.6);
     $('#iAlt').textContent = Math.round(v.pos.y);
@@ -144,7 +104,6 @@ function updatePanels(v) {
     $('#gdark').style.opacity = (v.blackout || 0) * 0.97;
     return;
   }
-  drawTankStatus(v);
   $('#tSpeed').textContent = Math.round(Math.abs(v.vFwd) * 3.6);
   $('#tGear').textContent = v.gear < 0 ? 'R' : Math.abs(v.vFwd) < 0.2 && Math.abs(v.throttle) < 0.05 ? 'N' : String(v.gear);
   $('#tRpm').textContent = Math.round(v.rpm / 10) * 10;

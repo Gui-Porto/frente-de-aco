@@ -39,12 +39,12 @@ const COL = { crew: 0x7fd070, dead: 0x4a1410, hit: 0xff4630, mod: 0xb9c2c4, ammo
 const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 460 / 290, 0.1, 100);
 const inner = new THREE.Group(); scene.add(inner);
 const ghosts = new Map(); // um fantasma por tipo de veículo
-function ghostOf(D) {
-  let g = ghosts.get(D.key);
+function ghostOf(D, slot = 'hit') {
+  const key = slot + ':' + D.key; let g = ghosts.get(key);
   if (!g) {
     g = buildTank(D);
     g.root.traverse(o => { if (o.isMesh) { o.material = ghost; o.castShadow = o.receiveShadow = false; o.renderOrder = 2; } else if (o.isSprite || o.isLine) o.visible = false; });
-    ghosts.set(D.key, g);
+    ghosts.set(key, g);
   }
   return g;
 }
@@ -164,3 +164,55 @@ export function drawXray() {
   });
   if (el > 1.2 && !lost.length && X.end) { c.fillStyle = 'rgba(221,214,183,.7)'; c.fillText('sem dano crítico', W - 12, 48); }
 }
+
+// =====================================================================
+// Painel de estado do SEU tanque, no mesmo raio-X 3D: casco translúcido visto de trás/cima, torre e canhão ao vivo,
+// tripulação e módulos coloridos pelo estado (verde/cinza = inteiro, vermelho = avariado, escuro = morto, âmbar =
+// tripulante trocando de posto). Renderizado no canvas principal, no retângulo do #status, e copiado para ele (o
+// painel tem fundo próprio, então não dá para deixar o WebGL aparecer por baixo como no hit-cam).
+// ponytail: cópia WebGL -> 2D a cada quadro (retângulo pequeno); passar a quadros alternados se pesar em GPU fraca.
+// =====================================================================
+const stc = $('#status'), stx = stc.getContext('2d');
+const sScene = new THREE.Scene(), sCam = new THREE.PerspectiveCamera(28, 230 / 190, 0.1, 100), sInner = new THREE.Group(); sScene.add(sInner);
+let sGhost = null, sFor = null;
+const MODLBL = { engine: 'MOTOR', transmission: 'TRANSMISSÃO', tracks: 'ESTEIRA', breech: 'CULATRA', drive: 'GIRO DA TORRE' };
+afterRender.push(() => {
+  const t = S.player;
+  if (!t || t.type === 'plane' || S.mode === 'air' || S.state !== 'play' || !stc.offsetParent) return;
+  const r = stc.getBoundingClientRect(); if (r.width < 10) return;
+  const D = t.def, comps = t.components();
+  if (sFor !== t || sInner.children.length !== comps.length) {
+    if (sGhost) sScene.remove(sGhost.root);
+    sGhost = ghostOf(D, 'own'); sScene.add(sGhost.root); sFor = t;
+    sInner.clear(); for (const c of comps) sInner.add(compMesh({ p: c.p, r: c.r, kind: c.kind, name: c.name }));
+  }
+  sGhost.root.visible = t.alive; sGhost.turret.visible = t.turretOn; sGhost.turret.rotation.y = t.turretYaw; sGhost.gunPivot.rotation.x = -t.gunPitch;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 110), swap = new Set(Object.values(t.replace).map(x => x.spare));
+  comps.forEach((c, i) => {
+    const g = sInner.children[i], mat = g.userData.mat, ok = state(c, t);
+    g.position.fromArray(c.p); g.rotation.z = c.kind === 'crew' && !ok ? 0.9 : 0;
+    mat.uniforms.col.value.setHex(c.kind === 'crew' ? (!ok ? COL.dead : swap.has(c.ref) ? 0xe8a23c : COL.crew) : !ok ? COL.hit : COL[c.name] || COL.mod);
+    mat.uniforms.glow.value = (c.kind !== 'crew' && !ok ? 0.25 * pulse : 0) + (t.fire > 0 && c.name === 'engine' ? 0.8 * pulse : 0);
+  });
+  const yaw = Math.PI + 0.55, pit = 0.62, dist = D.L * 2.05, cy = D.clr + D.Hh * 0.55;
+  sCam.position.set(Math.sin(yaw) * Math.cos(pit) * dist, cy + Math.sin(pit) * dist, Math.cos(yaw) * Math.cos(pit) * dist + D.L * 0.08); sCam.lookAt(0, cy, D.L * 0.08);
+  const Hc = renderer.domElement.clientHeight, pr = renderer.getPixelRatio();
+  renderer.getViewport(_vp); renderer.getScissor(_sc); const st = renderer.getScissorTest(), ac = renderer.autoClear, a0 = renderer.getClearAlpha(); renderer.getClearColor(_cc);
+  sCam.aspect = r.width / r.height; sCam.updateProjectionMatrix();
+  renderer.setRenderTarget(null); renderer.autoClear = false; renderer.setScissorTest(true);
+  renderer.setViewport(r.left, Hc - r.bottom, r.width, r.height); renderer.setScissor(r.left, Hc - r.bottom, r.width, r.height);
+  renderer.setClearColor(0x10140f, 1); renderer.clear(true, true, false);
+  renderer.render(sScene, sCam);
+  renderer.setClearColor(_cc, a0); renderer.setViewport(_vp); renderer.setScissor(_sc); renderer.setScissorTest(st); renderer.autoClear = ac;
+  // cópia para o canvas do painel (2× para ficar nítido) + avisos por cima
+  const W = Math.round(r.width * 2), Hh = Math.round(r.height * 2); if (stc.width !== W || stc.height !== Hh) { stc.width = W; stc.height = Hh; }
+  stx.clearRect(0, 0, W, Hh);
+  stx.drawImage(renderer.domElement, r.left * pr, r.top * pr, r.width * pr, r.height * pr, 0, 0, W, Hh);
+  const bad = Object.keys(t.mods).filter(k => t.mods[k].broken).map(k => MODLBL[k] || k.toUpperCase());
+  const dead = t.crew.filter(c => !c.alive).length;
+  stx.font = '600 20px "IBM Plex Mono", monospace'; stx.textAlign = 'left'; stx.textBaseline = 'top';
+  bad.forEach((b, i) => { stx.fillStyle = `rgba(255,90,64,${0.7 + 0.3 * pulse})`; stx.fillRect(10, 12 + i * 26, 10, 16); stx.fillText(b, 28, 10 + i * 26); });
+  stx.textAlign = 'right'; stx.fillStyle = dead ? '#efa53c' : 'rgba(221,214,183,.75)'; stx.fillText(`${t.crew.length - dead}/${t.crew.length}`, W - 10, 10);
+  if (t.repairT > 0) { stx.strokeStyle = '#efa53c'; stx.lineWidth = 7; stx.beginPath(); stx.arc(W - 34, Hh - 34, 22, -Math.PI / 2, -Math.PI / 2 + (1 - t.repairT / t.repairMax) * Math.PI * 2); stx.stroke(); }
+  if (t.fire > 0) { stx.strokeStyle = `rgba(255,120,40,${0.5 + 0.5 * pulse})`; stx.lineWidth = 6; stx.strokeRect(3, 3, W - 6, Hh - 6); }
+});
