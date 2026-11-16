@@ -7,7 +7,7 @@ import { H } from '../world/terrain.js';
 import { world, STEP } from '../world/physics.js';
 import { grass, waveFlags } from '../world/scenery.js';
 import { Q } from '../core/render.js';
-import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle, fireProj } from '../combat/ballistics.js';
+import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, cookOff } from '../combat/ballistics.js';
 import { updateParts, fxBurn, spawnP, TEX } from '../fx/particles.js';
 import { eng } from '../fx/audio.js';
 import { updateMatch, startMatch, spawnPlayer, mkWho, spawnVehicle } from './match.js';
@@ -36,6 +36,7 @@ export function simulate(dt) {
   if (n === 8) acc = 0;
   for (const t of tanks) {
     t.afterPhysics(dt);
+    if (!t.alive) cookOff(t, dt);
     if (!t.alive && t.burnT > 0) { t.burnT -= dt; if ((t.smokeT -= dt) < 0) { t.smokeT = .22; fxBurn(t.centerPos(new V3()).add(rv(1)), 1.2); } }
   }
   for (const p of planes) { p.physics(dt); p.updateWeapons(dt); p.applyTransform(); updatePlaneFx(p, dt); }

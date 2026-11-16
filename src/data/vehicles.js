@@ -314,7 +314,8 @@ for (const D of Object.values(PLANES)) {
   if (D.jet) D.thrust = E.mil * D.engines; else { D.hp = E.hp * D.engines; D.wep = E.wep * D.engines; D.eta = E.eta; }
 }
 export const VEHICLES = Object.assign({}, TANKS, PLANES);
-export const LINEUP = ['sherman', 't34', 'pz4', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'];
+// elenco enxuto a pedido do dono: Sherman e Pz IV continuam nos dados, só saíram da partida
+export const LINEUP = ['t34', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'];
 
 // ---------- Balística: arrasto quadrático a = -k|v|v, k = ½ρ·Cd·A/m ----------
 export function prepAmmo(am, cal, cd) {

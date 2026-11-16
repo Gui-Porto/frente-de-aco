@@ -15,7 +15,7 @@ import { cam } from './camera.js';
 import { $ } from '../core/util.js';
 
 const NAMES = { 1: ['Sgt. Moura', 'Cb. Teixeira', 'Ten. Barros', 'Sd. Ribeiro'], '-1': ['Ofw. Brandt', 'Ltn. Krause', 'Uffz. Lenz', 'St. Sokolov', 'Sgt. Orlov'] };
-const GROUND = ['sherman', 't34', 'pz4', 'tiger'];
+const GROUND = ['t34', 'tiger'];
 let respawns = [], lastPlane = { 1: -999, '-1': -999 }, ticketT = 0;
 
 export function mkWho(name, team, isPlayer) {
@@ -59,8 +59,8 @@ export function startMatch() {
   clearWorld();
   S.stats = { kills: 0, airKills: 0, deaths: 0, shots: 0, hits: 0, pens: 0 }; S.matchT = 0;
   S.me = mkWho('Você', 1, true); S.me.sp = 300; S.me.used = new Set(); S.me.firstSpawn = true;
-  NAMES[1].forEach((n, i) => spawnVehicle(mkWho(n, 1, false), GROUND[Math.floor(Math.random() * 4)], i < 2 ? i : i + 1));
-  NAMES[-1].forEach((n, i) => spawnVehicle(mkWho(n, -1, false), GROUND[Math.floor(Math.random() * 4)], i));
+  NAMES[1].forEach((n, i) => spawnVehicle(mkWho(n, 1, false), GROUND[Math.floor(Math.random() * GROUND.length)], i < 2 ? i : i + 1));
+  NAMES[-1].forEach((n, i) => spawnVehicle(mkWho(n, -1, false), GROUND[Math.floor(Math.random() * GROUND.length)], i));
   S.paused = false;
   $('#caps').innerHTML = POINTS.map(p => `<div class="cap">${p.id}<i></i></div>`).join('');
   openSpawn('Primeiro spawn sem custo. Aviões liberam com SP, ganhos por abates e capturas.');

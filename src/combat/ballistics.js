@@ -439,15 +439,37 @@ export function destroyVehicle(v, killer, cause) {
   onVehicleDestroyed(v, k, cause);
 }
 function onTankDestroyed(t, cause) {
-  t.throttle = 0; t.steer = 0; t.fire = 0; t.deadT = 0; t.burnT = cause === 'ammo' ? 45 : 28;
+  const ammo = cause === 'ammo';
+  t.throttle = 0; t.steer = 0; t.fire = 0; t.deadT = 0; t.burnT = ammo ? 45 : 28;
   for (const m of t.mats) m.color.multiplyScalar(0.28);
-  const center = t.centerPos(new V3());
-  if (cause === 'ammo') {
-    fxExplosion(center, 2.2); sndBoom(center, true); shakeAt(center, 1.2, 80);
+  const center = t.centerPos(new V3()), up = new V3(0, 1, 0).applyQuaternion(t.q), sideV = new V3(1, 0, 0).applyQuaternion(t.q);
+  // o canhão cai no batente e o casco leva o tranco da explosão interna
+  t.gunPitch = -t.def.gun.dep * DEG * 0.9; if (t.turretOn) t.gunPivot.rotation.x = -t.gunPitch;
+  t.impulse(up.clone().multiplyScalar(t.mass * (ammo ? 2.2 : 0.8)).addScaledVector(sideV, t.mass * rand(-0.5, 0.5)), center);
+  // rodas arrancadas (só quem tem rodas separadas): viram destroços que rolam
+  for (let n = ammo ? rand(2, 5) | 0 : Math.random() < 0.6 ? 1 : 0; n > 0 && t.wheels.length > 4; n--) {
+    const w = t.wheels.splice(Math.floor(Math.random() * t.wheels.length), 1)[0]; scene.attach(w.m);
+    spawnDebris(w.m, sideV.clone().multiplyScalar(w.side * rand(3, 8)).addScaledVector(up, rand(3, 9)).add(t.vel), rv(7), [0.12, w.r, w.r], [0, 0, 0], 250);
+  }
+  // cozimento da munição: estouros e jatos de faísca pelas escotilhas nos segundos seguintes (loop.js consome t.cook)
+  t.cook = []; for (let i = 0, at = 0.25; i < (ammo ? 9 : 3); i++, at += rand(0.25, 0.9)) t.cook.push(at);
+  if (ammo) {
+    fxExplosion(center, 2.2); fxBigBlast(center, 1.4); sndBoom(center, true); shakeAt(center, 1.2, 80);
     const obj = t.turret; scene.attach(obj); t.turretOn = false;
     const T = t.def.turret;
     t.popped = spawnDebris(obj, new V3(rand(-3, 3), rand(9, 15), rand(-3, 3)).add(t.vel), rv(3), [T.w / 2, T.h / 2, T.l / 2], [0, T.h / 2, 0], 4000);
-  } else { fxExplosion(center, 1); sndBoom(center, true); }
+  } else { fxExplosion(center, 1); sndBoom(center, true); shakeAt(center, 0.6, 50); }
+}
+// estouros do cozimento: chamado a cada quadro para tanque destruído
+export function cookOff(t, dt) {
+  if (!t.cook || !t.cook.length) return;
+  for (let i = 0; i < t.cook.length; i++) t.cook[i] -= dt;
+  while (t.cook.length && t.cook[0] <= 0) {
+    t.cook.shift();
+    const p = t.centerPos(new V3()).add(new V3(rand(-.8, .8), t.def.Hh * 0.5 + 0.3, rand(-1.2, 1.2)).applyQuaternion(t.q));
+    fxSparks(p, 22); fxExplosion(p, rand(0.35, 0.7)); sndBoom(p, false); shakeAt(p, 0.25, 40);
+    for (let k = 0; k < 6; k++) spawnP({ pos: p.clone(), vel: new V3(rand(-2, 2), rand(9, 18), rand(-2, 2)), life: rand(0.5, 1.1), size: 0.5, size1: 0.15, color: 0xffb040, add: true, grav: 9, drag: 0.4 });
+  }
 }
 // Destroço como corpo rígido do Rapier (quica, rola e colide com veículos e construções)
 const _dq = new QUAT();
