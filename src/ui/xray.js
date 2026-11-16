@@ -49,7 +49,12 @@ function ghostOf(D, slot = 'hit') {
     const ms = []; g.root.traverse(o => { if (o.isMesh) ms.push(o); else if (o.isSprite || o.isLine) o.visible = false; });
     for (const o of ms) {
       o.castShadow = o.receiveShadow = false;
-      const pre = o.clone(false); pre.material = ghostPre; pre.renderOrder = 1; o.parent.add(pre); // irmão: herda a mesma transformação
+      // irmão com a mesma geometria e transformação. NÃO usar o.clone(): ele serializa userData (onde mora o material
+      // original, userData.normalMat) e com isso converte todas as texturas em data-URL — travava 1 a 5 s no 1º acerto
+      const pre = o.isInstancedMesh ? new THREE.InstancedMesh(o.geometry, ghostPre, o.count) : new THREE.Mesh(o.geometry, ghostPre);
+      if (o.isInstancedMesh) pre.instanceMatrix = o.instanceMatrix;
+      pre.position.copy(o.position); pre.quaternion.copy(o.quaternion); pre.scale.copy(o.scale); pre.frustumCulled = o.frustumCulled;
+      pre.renderOrder = 1; o.parent.add(pre);
       o.material = ghost; o.renderOrder = 2;
     }
     ghosts.set(key, g);
@@ -179,15 +184,15 @@ export function drawXray() {
 // tripulação e módulos coloridos pelo estado (verde/cinza = inteiro, vermelho = avariado, escuro = morto, âmbar =
 // tripulante trocando de posto). Renderizado no canvas principal, no retângulo do #status, e copiado para ele (o
 // painel tem fundo próprio, então não dá para deixar o WebGL aparecer por baixo como no hit-cam).
-// ponytail: cópia WebGL -> 2D a cada quadro (retângulo pequeno); passar a quadros alternados se pesar em GPU fraca.
 // =====================================================================
 const stc = $('#status'), stx = stc.getContext('2d');
 const sScene = new THREE.Scene(), sCam = new THREE.PerspectiveCamera(28, 230 / 190, 0.1, 100), sInner = new THREE.Group(); sScene.add(sInner);
-let sGhost = null, sFor = null;
+let sGhost = null, sFor = null, sTick = 0;
 const MODSHORT = { engine: 'MOTOR', radiator: 'RADIAD', transmission: 'TRANSM', tracks: 'ESTEIRA', breech: 'CULATRA', barrel: 'CANO', drive: 'GIRO', elev: 'ELEVAÇ' }, VIEW = 0.62;
 afterRender.push(() => {
   const t = S.player;
   if (!t || t.type === 'plane' || S.mode === 'air' || S.state !== 'play' || !stc.offsetParent) return;
+  if (sTick++ % 6 && sFor === t) return; // ~10 Hz: render + cópia WebGL -> 2D custavam ~4 ms em todo quadro
   const r = stc.getBoundingClientRect(); if (r.width < 10) return;
   const D = t.def, comps = t.components();
   if (sFor !== t || sInner.children.length !== comps.length) {
