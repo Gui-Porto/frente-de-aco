@@ -52,7 +52,7 @@ function frame(ts) {
   const menu = S.state === 'menu' || S.state === 'airmenu';
   if (dt > 0 && !menu) simulate(dt);
   else if (menu) updateParts(dt);
-  if (S.state === 'airmenu') updateHangar(dt); else if (S.mode === 'air') updateAirCamera(dt); else updateCamera(dt);
+  if (S.state === 'airmenu') updateHangar(dt); else if (S.mode === 'air' || (S.player && S.player.type === 'plane' && S.player.alive && S.state === 'play')) updateAirCamera(dt); else updateCamera(dt); // avião do jogador usa a câmera aérea nos dois modos
   const p = S.player, f = S.state === 'menu' && cam.hangar ? cam.hangar.pos : p && p.alive ? p.pos : S.spectate ? S.spectate.pos : camera.position;
   frameLighting(f, camera.position.y, H(camera.position.x, camera.position.z), S, dt);
   grass.count = Q.grass; grass.update(dt);

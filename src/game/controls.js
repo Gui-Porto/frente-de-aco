@@ -3,7 +3,8 @@ import { S, tanks } from '../core/state.js';
 import { settings, codeDown, codeUp, isDown, pressed, mouse, clearInput } from '../core/settings.js';
 import { clamp } from '../core/util.js';
 import { cam } from './camera.js';
-import { airMouse } from '../air/camera.js';
+import { airMouse, acam } from '../air/camera.js';
+import { readInput, pilot } from '../air/input.js';
 import { los } from '../combat/ballistics.js';
 import { setPause } from '../ui/menus.js';
 import { drawScore } from '../ui/hud.js';
@@ -47,7 +48,7 @@ addEventListener('mousemove', e => {
   const base = 0.0022 * (air ? settings.mouse.plane : inSight ? settings.mouse.sight * Math.max(cam.fov, 3) / 60 : settings.mouse.tank);
   const inv = settings.mouse.invertY ? -1 : 1;
   // Batalha Aérea: mira livre em quaternion (permite loop, sem trava perto da vertical)
-  if (S.mode === 'air') { airMouse(e.movementX * base, e.movementY * base * inv); return; }
+  if (S.mode === 'air' || (air && p.alive)) { airMouse(e.movementX * base, e.movementY * base * inv); return; }
   cam.yaw -= e.movementX * base;
   cam.pitch = clamp(cam.pitch - e.movementY * base * inv, air ? -1.5 : -0.6, air ? 1.5 : 0.55);
 });
@@ -87,26 +88,12 @@ export function controlPlayer(dt) {
   if (pressed('t_ext')) p.extinguish();
   if ((p.spotT = (p.spotT || 0) - dt) < 0) { p.spotT = .5; for (const e of tanks) if (e.team !== 1 && e.alive && p.pos.distanceTo(e.pos) < 650 && los(p, e)) e.spottedUntil = S.now + 4; }
 }
+// Avião na batalha de tanques: MESMO comando da Batalha Aérea (air/input.js pilot): instrutor com mira em quaternion,
+// tecla = eixo direto com limite de G/estol, manete rápida. Antes havia um caminho próprio, mais antigo e pior de voar.
 function controlPlane(p, dt) {
-  if (isDown('a_thr_up')) { p.throttle = Math.min(1, p.throttle + dt * 0.6); if (p.throttle >= 1) wepHold += dt; } else wepHold = 0;
-  if (isDown('a_thr_dn')) { p.throttle = Math.max(0, p.throttle - dt * 0.6); p.wep = false; }
-  if (wepHold > 0.5) p.wep = true;
-  // scroll = manete, 2% por passo (para cima acelera; em 100% liga o WEP)
-  if (mouse.wheel < 0) { if (p.throttle >= 1) p.wep = true; p.throttle = Math.min(1, p.throttle - 0.02 * mouse.wheel); }
-  if (mouse.wheel > 0) { p.throttle = Math.max(0, p.throttle - 0.02 * mouse.wheel); p.wep = false; }
-  if (pressed('a_flaps')) p.cycleFlaps();
-  p.airbrake = isDown('a_airbrake');
-  const kx = (isDown('a_roll_r') ? 1 : 0) - (isDown('a_roll_l') ? 1 : 0);
-  const ky = (isDown('a_yaw_l') ? 1 : 0) - (isDown('a_yaw_r') ? 1 : 0);
-  const kp = (isDown('a_pitch_up') ? 1 : 0) - (isDown('a_pitch_dn') ? 1 : 0);
-  if (settings.gameplay.flightMode === 'teclado') {
-    // controle direto pelas teclas, com rampa suave
-    const r = 1 - Math.exp(-dt * 6);
-    p.elev += (kp - p.elev) * r; p.ail += (kx - p.ail) * r; p.rud += (ky - p.rud) * r;
-  } else {
-    p.steerTo(cam.aimDir, dt, { glim: 9, groundAssist: true });
-    if (kx) p.ail = kx; if (ky) p.rud = ky; if (kp) p.elev = kp;
-  }
+  const c = readInput();
+  if (c.cam) acam.mode = (acam.mode + 1) % 4;
+  pilot(p, c, cam.aimDir, dt);
   p.firing = isDown('a_guns');
   if (pressed('a_bomb')) p.dropBomb();
   if (pressed('a_rocket')) { p.fireRocket(); p.fireRocket(); }

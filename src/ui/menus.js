@@ -9,6 +9,7 @@ import { buildTank, setArmorView } from '../vehicles/tank.js';
 import { buildPlane } from '../vehicles/plane.js';
 import { audioInit, audioPause, sndUi, eng } from '../fx/audio.js';
 import { cam, resetCam } from '../game/camera.js';
+import { resetAirCam } from '../air/camera.js';
 import { input, lockPointer, exitPointer } from '../game/controls.js';
 import { startMatch, spawnPlayer, clearWorld } from '../game/match.js';
 import { destroyVehicle } from '../combat/ballistics.js';
@@ -122,6 +123,7 @@ function onSpawnBtn() {
   const v = spawnPlayer(spawnSel); if (!v) return;
   $('#spawn').hidden = true; S.state = 'play';
   resetCam(v.type === 'plane' ? Math.PI : SPAWN[1].yaw);
+  if (v.type === 'plane') resetAirCam(Math.atan2(v.vel.x, v.vel.z));
   buildPanels(v);
   const b = settings.binds, k = id => keyName(b[id][0]);
   hint(v.type === 'plane'
