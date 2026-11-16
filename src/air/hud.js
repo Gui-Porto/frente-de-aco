@@ -233,8 +233,8 @@ function reticle(p) {
   const ap = proj(_b, P2);
   if (ap && acam.mode !== 3) {
     const near = pr ? Math.hypot(ap.x - pr.x, ap.y - pr.y) : 99;
-    g.globalAlpha = clamp((near - 6) / 20, 0.25, 1);
-    g.beginPath(); g.arc(ap.x, ap.y, 8, 0, 7); gstroke(1.3, C.white);
+    g.globalAlpha = clamp((near - 6) / 20, 0.7, 1); // sempre visível, como no WT (antes quase sumia com o nariz no lugar)
+    g.beginPath(); g.arc(ap.x, ap.y, 11, 0, 7); gstroke(1.6, C.white);
     g.globalAlpha = 1;
   }
 }
