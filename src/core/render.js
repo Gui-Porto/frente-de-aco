@@ -120,4 +120,5 @@ export function frameLighting(focus, camY, groundY, S, dt) {
 // flush explícito a cada quadro: sem ele o Chrome/ANGLE (D3D11) acumulava comandos e a cada ~4,6 s
 // travava 200–550 ms num flush do compositor (medido com trace; a GPU em si gasta ~1,5 ms por quadro)
 const glCtx = renderer.getContext();
-export function renderFrame() { composer.render(); glCtx.flush(); }
+export const afterRender = []; // desenhos por cima do quadro pronto (hit-cam 3D): f() usa o renderer direto na tela
+export function renderFrame() { composer.render(); for (const f of afterRender) f(); glCtx.flush(); }
