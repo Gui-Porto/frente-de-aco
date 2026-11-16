@@ -172,6 +172,7 @@ function reticles(t) {
       cls = E.ricoP > .5 || E.pen < E.eff ? 'nopen' : E.pen < E.eff * 1.15 ? 'maybe' : 'pen';
     }
     gunret.className = cls + (t.canFire() ? '' : ' unready');
+    const rl = t.loaded >= 0 ? 1 : 1 - t.reload / t.gun.reload; gunret.style.setProperty('--rl', rl.toFixed(3)); gunret.style.setProperty('--rlo', rl < 1 ? 1 : 0); cam.reloadK = rl;
     // na luneta o canhão é o próprio centro: sem bolinha; a chance de perfurar pinta o chevron do retículo
     cam.penCls = cls; if (cam.sniper) gunret.hidden = true;
     if (settings.gameplay.tankAssist && !t.def.gun.auto) { const ip = predictImpact(t, new V3()); if (ip) toScreen(ip, drop); }
@@ -197,6 +198,7 @@ function drawScope(t) {
     for (let m = -40; m <= 40; m += 10) { const x = cx + Math.tan(m / 1000) * f; sctx.fillRect(x - 1, cy - (m % 20 ? 5 : 10), 2, m % 20 ? 10 : 20); }
   } else {
     sctx.fillRect(cx - R, cy - 1.5, R - 60, 3); sctx.fillRect(cx + 60, cy - 1.5, R - 60, 3); sctx.fillRect(cx - 1.5, cy + 60, 3, R - 60);
+    if (cam.reloadK < 1) { sctx.save(); sctx.lineWidth = 4; sctx.strokeStyle = 'rgba(0,0,0,.4)'; sctx.beginPath(); sctx.arc(cx, cy, 30, 0, 7); sctx.stroke(); sctx.strokeStyle = '#e8a23c'; sctx.beginPath(); sctx.arc(cx, cy, 30, -Math.PI / 2, -Math.PI / 2 + cam.reloadK * Math.PI * 2); sctx.stroke(); sctx.restore(); } // recarga na luneta
     sctx.save(); sctx.strokeStyle = { pen: '#58c26a', maybe: '#e8b23c', nopen: '#e2553f' }[cam.penCls] || 'rgba(10,10,10,.85)'; sctx.lineWidth = 2.5;
     sctx.beginPath(); sctx.moveTo(cx - 9, cy + 14); sctx.lineTo(cx, cy); sctx.lineTo(cx + 9, cy + 14); sctx.stroke();
     sctx.restore();
