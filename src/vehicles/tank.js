@@ -328,6 +328,7 @@ export class Tank {
     this.syncIn();
     const D = this.def;
     for (let i = 0; i < 2; i++) { this.trackOff[i] += this.trackV[i] * dt; (i === 0 ? this.trackL : this.trackR).map.offset.x = -this.trackOff[i] * 0.9; }
+    if (this.trackAnim) this.trackAnim(this.trackOff);
     for (const w of this.wheels) w.m.rotation.x += (w.side > 0 ? this.trackV[0] : this.trackV[1]) / w.r * dt;
     this.axes();
     const gs = this.groundSpeed();

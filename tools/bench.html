@@ -19,6 +19,7 @@ if (D.type !== 'plane') await (await import('/src/vehicles/tankModel.js')).prelo
 const m = D.type === 'plane' ? (await import('/src/vehicles/planeModel.js')).buildPlane(D) : (await import('/src/vehicles/tank.js')).buildTank(D);
 if (m.gearMesh && m.gearMesh.userData.anim) m.gearMesh.userData.anim(gear);
 if (m.turret) { m.turret.rotation.y = (+q.get('tur') || 0) * Math.PI / 180; m.gunPivot.rotation.x = -(+q.get('el') || 0) * Math.PI / 180; } // ?tur=40&el=10: torre girada e canhão elevado
+if (m.trackAnim) { const o = +q.get('trk') || 0; m.trackAnim([o, o]); for (const w of m.wheels) w.m.rotation.x = o / w.r; } // ?trk=0.07: esteira andada (m)
 scene.add(m.root); m.root.updateMatrixWorld(true);
 const box = new THREE.Box3().setFromObject(m.root), c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3()), R = Math.max(s.x, s.y, s.z) * 0.95;
 // frente do veículo = +z; ângulos: [yaw, pitch, nome]
