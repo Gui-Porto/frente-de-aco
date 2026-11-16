@@ -57,15 +57,12 @@ function frame(ts) {
   grass.count = Q.grass; grass.update(dt);
   if ((flagT += dt) > 0.05) { waveFlags(S.now + ts / 1000); flagT = 0; }
   // motores
-  if (S.mode === 'air' || S.state === 'airmenu') { if (eng.tank) eng.tank.g.gain.value = eng.tank.track.g.gain.value = 0; airAudio(dt || 0.016); }
+  if (S.mode === 'air' || S.state === 'airmenu') { if (eng.tank) eng.tank.set(false); airAudio(dt || 0.016); }
   else if (eng.tank) {
     airAudioOff(); // gravações/vozes do modo aéreo não ficam tocando na batalha de tanques
     const on = p && p.alive && S.state === 'play' && !S.paused && p.type !== 'plane';
-    eng.tank.g.gain.value = on ? 0.05 + Math.abs(p.throttle) * 0.03 : 0;
-    if (on) { eng.tank.o.frequency.value = 22 + p.rpm / 60; eng.tank.o2.frequency.value = 11 + p.rpm / 120; eng.tank.lfo.frequency.value = (22 + p.rpm / 60) / 4; }
-    // esteiras: chocalho dos elos no ritmo da velocidade
-    const sp = on ? Math.abs(p.vFwd || 0) : 0;
-    eng.tank.track.g.gain.value = Math.min(1, sp / 6) * 0.07; eng.tank.track.lfo.frequency.value = 2 + sp * 2.2; eng.tank.track.f.frequency.value = 700 + sp * 40;
+    // motor pela rotação real e pela carga (acelerador ou giro); esteiras no ritmo da velocidade
+    eng.tank.set(on, on ? p.rpm : 0, on ? Math.max(Math.abs(p.throttle), Math.abs(p.steer)) : 0, on ? Math.abs(p.vFwd || 0) : 0);
     const pl = p && p.alive && p.type === 'plane' && !S.paused ? p : null;
     let near = pl, nd = 0;
     if (!near) { nd = 1e9; for (const q of planes) { if (!q.alive) continue; const d = q.pos.distanceTo(camera.position); if (d < nd) { nd = d; near = q; } } }

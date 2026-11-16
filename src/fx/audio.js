@@ -48,15 +48,43 @@ export function audioInit() {
     const filt = (type, f, q = 0.7) => { const x = AC.createBiquadFilter(); x.type = type; x.frequency.value = f; x.Q.value = q; return x; };
     const gain = v => { const x = AC.createGain(); x.gain.value = v; return x; };
 
-    // ---- tanque: motor (dente de serra + sub-harmônico, batida dos cilindros) e esteiras (chocalho que segue a velocidade) ----
+    // ---- tanque: V12 a gasolina. O oscilador roda na frequência do CICLO do motor (rpm/120) e a forma de onda traz as
+    // ordens: 12 (queima dos 12 cilindros) e múltiplos dominam, 6 e 18 dão o ronco irregular entre bancadas, o resto é
+    // mecânica. A carga abre o filtro (motor "abrindo") e sobe o ruído de escape, que pulsa na queima; esteiras à parte.
     {
-      const o = AC.createOscillator(), o2 = AC.createOscillator(), fl = filt('lowpass', 240), g = gain(0), g2 = gain(0.35);
-      o.type = 'sawtooth'; o.frequency.value = 32; o2.type = 'square'; o2.frequency.value = 16;
-      const am = gain(0.75), lfo = AC.createOscillator(), lg = gain(0.3); lfo.frequency.value = 8; lfo.connect(lg); lg.connect(am.gain);
-      o.connect(fl); o2.connect(g2); g2.connect(fl); fl.connect(am); am.connect(g); g.connect(engBus); o.start(); o2.start(); lfo.start();
+      const N = 72, re = new Float32Array(N + 1), im = new Float32Array(N + 1); let sd = 7;
+      const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+      for (let n = 1; n <= N; n++) {
+        const amp = n % 12 === 0 ? 1 / Math.pow(n / 12, 0.75) : n % 6 === 0 ? 0.5 / Math.pow(n / 6, 0.9) : n % 3 === 0 ? 0.16 / Math.sqrt(n / 3) : 0.07 * rnd() / Math.sqrt(n);
+        const ph = rnd() * Math.PI * 2; re[n] = amp * Math.cos(ph); im[n] = amp * Math.sin(ph);
+      }
+      const o = AC.createOscillator(); o.setPeriodicWave(AC.createPeriodicWave(re, im)); o.frequency.value = 6;
+      const fl = filt('lowpass', 320, 0.9), body = filt('peaking', 110, 1.2); body.gain.value = 7; const g = gain(0);
+      o.connect(fl); fl.connect(body); body.connect(g); g.connect(engBus); o.start();
+      // escape: ruído marrom que pulsa com o motor
+      const xn = loop(brownBuf, 1.3), xf = filt('bandpass', 180, 0.7), xam = gain(0.5), xmod = gain(0.9), xg = gain(0);
+      o.connect(xmod); xmod.connect(xam.gain); xn.connect(xf); xf.connect(xam); xam.connect(xg); xg.connect(g);
+      // mecânica: válvulas/engrenagens, chiado agudo e baixo
+      const mn = loop(noiseBuf, 1), mf = filt('bandpass', 2600, 1.5), mam = gain(0.4), mmod = gain(0.6), mg = gain(0);
+      o.connect(mmod); mmod.connect(mam.gain); mn.connect(mf); mf.connect(mam); mam.connect(mg); mg.connect(g);
       const tn = loop(noiseBuf, 0.7), tf = filt('bandpass', 900, 1.2), tam = gain(0.5), tl = AC.createOscillator(), tlg = gain(0.5), tg = gain(0);
       tl.type = 'square'; tl.frequency.value = 6; tl.connect(tlg); tlg.connect(tam.gain); tn.connect(tf); tf.connect(tam); tam.connect(tg); tg.connect(engBus); tl.start();
-      eng.tank = { o, o2, g, f: fl, lfo, track: { g: tg, lfo: tl, f: tf } };
+      // squeal: rangido metálico dos pinos da esteira, só andando
+      const sq = AC.createOscillator(), sqf = filt('bandpass', 2300, 9), sqg = gain(0); sq.type = 'sawtooth'; sq.frequency.value = 2300; sq.connect(sqf); sqf.connect(sqg); sqg.connect(engBus); sq.start();
+      // rpm real do motor, carga 0..1 (acelerador), velocidade da esteira em m/s
+      const set = (on, rpm, load, sp) => {
+        const t = AC.currentTime, k = 0.06;
+        g.gain.setTargetAtTime(on ? 0.10 + load * 0.11 : 0, t, k);
+        if (!on) { tg.gain.setTargetAtTime(0, t, k); sqg.gain.setTargetAtTime(0, t, k); return; }
+        o.frequency.setTargetAtTime(rpm / 120, t, 0.03);
+        fl.frequency.setTargetAtTime(260 + rpm * 0.12 + load * 900, t, 0.09);
+        body.frequency.setTargetAtTime(70 + rpm * 0.03, t, 0.1);
+        xf.frequency.setTargetAtTime(120 + rpm * 0.1, t, 0.1); xg.gain.setTargetAtTime(0.5 + load * 1.3, t, 0.08);
+        mg.gain.setTargetAtTime(0.05 + rpm / 2500 * 0.12, t, 0.1);
+        tg.gain.setTargetAtTime(Math.min(1, sp / 6) * 0.09, t, k); tl.frequency.setTargetAtTime(2 + sp * 2.2, t, k); tf.frequency.setTargetAtTime(700 + sp * 40, t, k);
+        sqg.gain.setTargetAtTime(sp > 0.5 ? 0.006 + Math.min(sp, 8) * 0.0015 : 0, t, 0.15); sq.frequency.setTargetAtTime(2100 + sp * 60 + Math.sin(t * 7) * 120, t, 0.05);
+      };
+      eng.tank = { g, set, track: { g: tg } };
     }
     // ---- pistão: forma de onda com harmônicos de escapamento + "estalo" de ruído no ritmo das explosões + batida da hélice ----
     {
@@ -261,13 +289,23 @@ export function sndCrackle(v, muf = 1) {
 }
 export function audioPause(p) { if (AC) p ? AC.suspend() : AC.resume(); }
 // canhão de tanque: estalo da boca, corpo do disparo, sub-grave e a cauda do vale (reverberação)
+// Tiro de canhão em camadas: estalo supersônico, corpo da explosão com o filtro fechando, sub grave que cresce com o
+// calibre, e o eco que volta do terreno. De perto (o seu canhão) entra o tranco da culatra e o estojo caindo.
 export function sndShot(pos, cal) {
-  const a = at(pos, 1.4 * cal / 80); if (!a) return; const o = out(a, 1.3), v = Math.min(a.vol, 1.2);
+  const a = at(pos, 1.6 * cal / 80); if (!a) return; const o = out(a, 1.5), v = Math.min(a.vol, 1.3), big = clamp((cal - 37) / 60, 0, 1.3);
   if (SMP.boom_small) { playRec(SMP.boom_small, a, v * 1.2, rand(0.62, 0.7), o); thump(a.t, Math.min(a.vol, 1), 60, 0.6, o); return; }
-  noiseBurst(a.t, v, 6000, 0.05, 0.7, o, 'highpass');
-  noiseBurst(a.t, v, 1800 / (1 + a.d / 500), 1.1, 0.8, o);
-  noiseBurst(a.t, v * 0.9, 220, 1.6, 0.7, o, 'lowpass', brownBuf, 0.01);
-  thump(a.t, Math.min(a.vol, 1), 75, 0.45, o);
+  noiseBurst(a.t, v, 5200, 0.045, 0.7, o, 'highpass', noiseBuf, 0.001);
+  noiseBurst(a.t, v * 1.1, 2400 / (1 + a.d / 400), 0.5 + big * 0.5, 0.8, o);
+  noiseBurst(a.t + 0.01, v, 500 - big * 180, 1.1 + big * 0.8, 0.7, o);
+  noiseBurst(a.t, v, 190 - big * 60, 1.8 + big * 1.2, 0.7, o, 'lowpass', brownBuf, 0.008);
+  thump(a.t, Math.min(a.vol * 1.2, 1.2), 82 - big * 30, 0.5 + big * 0.5, o);
+  thump(a.t, Math.min(a.vol, 1) * big, 38, 0.9, o);
+  // eco do terreno: repetição mais grave e fraca, mais longe = mais atrasada
+  const e = 0.28 + Math.min(a.d, 600) / 1500; noiseBurst(a.t + e, v * 0.22, 700, 1.4, 0.6, o, 'lowpass', brownBuf, 0.05);
+  if (a.d < 12) { // dentro/junto do tanque: culatra recuando e voltando, estojo no piso
+    ping(a.t + 0.05, 0.16, 190, 90, 0.18, sfx, 'square'); noiseBurst(a.t + 0.32, 0.22, 2400, 0.09, 5, sfx, 'bandpass');
+    ping(a.t + 0.9, 0.07, 3100, 2300, 0.25, sfx); ping(a.t + 1.02, 0.04, 3600, 2700, 0.2, sfx);
+  }
 }
 // metralhadoras e canhões de avião: estalo curto que muda com o calibre; a partir de 20 mm, o "tum" do canhão.
 // Limite de cadência POR CALIBRE (antes era um só para tudo: o canhão sumia no meio das .50)
