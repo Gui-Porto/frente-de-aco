@@ -455,7 +455,7 @@ function onTankDestroyed(t, cause) {
   t.cook = []; for (let i = 0, at = 0.25; i < (ammo ? 9 : 3); i++, at += rand(0.25, 0.9)) t.cook.push(at);
   if (ammo) {
     fxExplosion(center, 2.2); fxBigBlast(center, 1.4); sndBoom(center, true); shakeAt(center, 1.2, 80);
-    const obj = t.turret; scene.attach(obj); t.turretOn = false;
+    const obj = t.turret; scene.attach(obj); t.turretOn = false; if (t.lod) t.lod.turret.visible = false;
     const T = t.def.turret;
     t.popped = spawnDebris(obj, new V3(rand(-3, 3), rand(9, 15), rand(-3, 3)).add(t.vel), rv(3), [T.w / 2, T.h / 2, T.l / 2], [0, T.h / 2, 0], 4000);
   } else { fxExplosion(center, 1); sndBoom(center, true); shakeAt(center, 0.6, 50); }

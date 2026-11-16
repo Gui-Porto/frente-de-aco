@@ -70,6 +70,8 @@ let activeScene = scene;
 // troca a cena desenhada (o hangar da Batalha Aérea tem cena própria)
 export function setScene(s) { activeScene = s; renderPass.scene = s; if (gtao) gtao.scene = s; }
 let gtao = null, bloom = null, aa = null;
+// objetos que só existem para projetar sombra (casco simples dos tanques com modelo glTF): somem no passe de normais do GTAO
+export const shadowOnly = new Set();
 const output = new OutputPass();
 let shadowSize = 0;
 export let Q = QUALITY[settings.graphics.quality] || QUALITY.alta;
@@ -88,7 +90,8 @@ export function applyQuality() {
   composer.addPass(renderPass);
   const w = innerWidth * renderer.getPixelRatio(), h = innerHeight * renderer.getPixelRatio();
   if (Q.ao) {
-    if (!gtao) { gtao = new GTAOPass(activeScene, camera, w, h); gtao.blendIntensity = 0.85; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 }); }
+    if (!gtao) { gtao = new GTAOPass(activeScene, camera, w, h); gtao.blendIntensity = 0.85;
+      const rnd = gtao.render.bind(gtao); gtao.render = (...x) => { for (const o of shadowOnly) o.visible = false; rnd(...x); for (const o of shadowOnly) o.visible = true; }; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 }); }
     composer.addPass(gtao);
   }
   if (Q.bloom) { if (!bloom) bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.22, 0.35, 4.0); composer.addPass(bloom); }

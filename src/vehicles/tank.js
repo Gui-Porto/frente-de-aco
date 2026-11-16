@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { hasTankModel, gltfTank } from './tankModel.js';
-import { scene } from '../core/render.js';
+import { scene, camera, shadowOnly } from '../core/render.js';
 import { S, tanks } from '../core/state.js';
 import { V3, QUAT, UP, clamp, rand, rv, angDiff } from '../core/util.js';
 import { H, terrainNormal, LIMIT } from '../world/terrain.js';
@@ -76,8 +76,8 @@ function tagArmor(mesh, D, part) {
   mesh.userData.normalMat = mesh.material;
 }
 
-export function buildTank(D) {
-  if (hasTankModel(D)) return gltfTank(D, tagArmor);
+export function buildTank(D, simple) {
+  if (hasTankModel(D) && !simple) return gltfTank(D, tagArmor, () => buildTank(D, true));
   const root = new THREE.Group();
   const camo = new THREE.MeshStandardMaterial({ map: camoTexture(D), roughness: .78, metalness: .25 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c19, roughness: .95, metalness: .1 });
@@ -212,6 +212,9 @@ export class Tank {
     this.root.quaternion.copy(this.q);
     this.root.position.copy(this.pos).sub(_tmp.set(0, this.comY, 0).applyQuaternion(this.q));
     if (this.turretOn) { this.turret.rotation.y = this.turretYaw; this.gunPivot.rotation.x = -this.gunPitch; }
+    if (this.setLod) { // modelo detalhado só quando ocupa tela: 170 m a olho nu, mais longe com zoom (FOV fechado)
+      this.lodSync(); this.setLod(this.pos.distanceTo(camera.position) > 170 * 60 / camera.fov);
+    }
     this.root.updateMatrixWorld(true);
     this.invRoot.copy(this.root.matrixWorld).invert();
     if (this.turretOn) this.invTurret.copy(this.turret.matrixWorld).invert();
@@ -287,10 +290,13 @@ export class Tank {
       c.on = false;
       _rr.set(c.x, c.y - 0.12 - this.comY, c.z).applyQuaternion(this.q);
       _wp.copy(this.pos).add(_rr);
-      const d = H(_wp.x, _wp.z) - _wp.y;
+      // a altura analítica do terreno é cara (ruído fractal) e isto roda 2×/quadro por contato: tanque parado reusa a
+      // altura (o ponto não saiu do lugar) e a normal só é refeita a cada meio metro andado (a inclinação muda devagar)
+      if (!c.n) { c.n = new V3(); c.hx = c.nx = 1e9; }
+      if (Math.abs(_wp.x - c.hx) > 0.03 || Math.abs(_wp.z - c.hz) > 0.03) { c.h = H(_wp.x, _wp.z); c.hx = _wp.x; c.hz = _wp.z; }
+      const d = c.h - _wp.y;
       if (d <= 0) continue;
-      if (!c.n) c.n = new V3();
-      terrainNormal(_wp.x, _wp.z, c.n);
+      if (Math.abs(_wp.x - c.nx) > 0.5 || Math.abs(_wp.z - c.nz) > 0.5) { terrainNormal(_wp.x, _wp.z, c.n); c.nx = _wp.x; c.nz = _wp.z; }
       c.on = true; c.d = d * c.n.y; c.side > 0 ? gl++ : gr++;
     }
     this.trackV[0] = this.trackV[1] = 0;
@@ -511,6 +517,6 @@ export class Tank {
     }
     return out;
   }
-  remove() { scene.remove(this.root); if (this.body) world.removeRigidBody(this.body); this.body = null; this.label.remove(); const i = tanks.indexOf(this); if (i >= 0) tanks.splice(i, 1); }
+  remove() { scene.remove(this.root); if (this.lod) shadowOnly.delete(this.lod.root); if (this.body) world.removeRigidBody(this.body); this.body = null; this.label.remove(); const i = tanks.indexOf(this); if (i >= 0) tanks.splice(i, 1); }
 }
 

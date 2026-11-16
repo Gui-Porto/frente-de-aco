@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { shadowOnly } from '../core/render.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // =====================================================================
 // Modelos glTF dos blindados (opcional), só por dados:
 //   (arquivo com nós hull/turret/gun dispensa turret e cut; `off` translada o arquivo)
@@ -131,14 +133,37 @@ export async function preloadTankModels(defs) {
 export const hasTankModel = D => !!(D.model && cache.has(D.key));
 
 // Monta o mesmo objeto que buildTank() devolve. tagArmor(mesh, D, part) grava a espessura por vértice (visão de blindagem).
-export function gltfTank(D, tagArmor) {
+// Sombra e distância: o modelo glTF (100–160 mil triângulos) NÃO projeta sombra e some de longe; quem faz as duas coisas
+// é o tanque procedural (~1 mil triângulos, `proc()`), que fica junto na raiz: de perto só projeta a sombra (material
+// sem cor), de longe vira o próprio tanque. Cada triângulo de cena é desenhado ~3× (cor, sombra, normais do GTAO).
+const castOnly = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+// funde as dezenas de malhas do tanque procedural numa por material em cada peça móvel (casco, torre, canhão):
+// o que pesa nele não são os triângulos, são as chamadas de desenho (×3 passes)
+function mergeStatic(lo) {
+  lo.root.updateMatrixWorld(true);
+  const anchors = [lo.gunPivot, lo.turret, lo.root], inv = new THREE.Matrix4(), by = new Map(), ms = [];
+  lo.root.traverse(o => { if (o.isMesh) ms.push(o); });
+  for (const m of ms) {
+    let a = m.parent; while (!anchors.includes(a)) a = a.parent;
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    for (const n of Object.keys(g.attributes)) if (n !== 'position' && n !== 'normal' && n !== 'uv') g.deleteAttribute(n);
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(g.attributes.position.count * 2, 2));
+    g.applyMatrix4(inv.copy(a.matrixWorld).invert().multiply(m.matrixWorld));
+    if (!by.has(a)) by.set(a, new Map()); const bm = by.get(a); if (!bm.has(m.material)) bm.set(m.material, []); bm.get(m.material).push(g);
+  }
+  for (const m of ms) m.parent.remove(m); // só depois: um filho (cubo da roda) ainda precisa achar a âncora pelo pai
+  for (const [a, bm] of by) for (const [mat, gs] of bm) { const m = new THREE.Mesh(mergeGeometries(gs), mat); m.castShadow = true; a.add(m); }
+}
+export function gltfTank(D, tagArmor, proc) {
   const C = cache.get(D.key), M = D.model, mats = C.mats.map(m => m.clone()), armorMeshes = [];
   const root = new THREE.Group(), turret = new THREE.Group(), gunPivot = new THREE.Group();
+  const hi = []; // tudo que é do modelo detalhado (some no LOD)
   turret.position.fromArray(M.ring); root.add(turret);
   gunPivot.position.set(M.trunnion[0] - M.ring[0], M.trunnion[1] - M.ring[1], M.trunnion[2] - M.ring[2]); turret.add(gunPivot);
   const put = (list, parent, part) => {
     for (const { g, mi } of list) {
-      const m = new THREE.Mesh(g, mats[mi]); m.castShadow = m.receiveShadow = true; parent.add(m);
+      const m = new THREE.Mesh(g, mats[mi]); m.receiveShadow = true; parent.add(m); hi.push(m);
       if (!g.attributes.thick) { m.updateMatrix(); tagArmor(m, D, part); } else m.userData.normalMat = m.material;
       armorMeshes.push(m);
     }
@@ -150,8 +175,8 @@ export function gltfTank(D, tagArmor) {
   let trackAnim = null;
   if (C.run) {
     const mat = mats[C.run.mi], dummy = new THREE.Object3D();
-    for (const w of C.run.wheels) { const m = new THREE.Mesh(w.g, mat); m.position.fromArray(w.at); m.castShadow = m.receiveShadow = true; root.add(m); wheels.push({ m, side: w.side, r: w.r }); }
-    const belts = C.run.tracks.map(t => { const im = new THREE.InstancedMesh(t.g, mat, t.frames.length); im.castShadow = im.receiveShadow = true; im.frustumCulled = false; root.add(im); return { im, t, last: NaN }; });
+    for (const w of C.run.wheels) { const m = new THREE.Mesh(w.g, mat); m.position.fromArray(w.at); m.receiveShadow = true; root.add(m); hi.push(m); wheels.push({ m, side: w.side, r: w.r }); }
+    const belts = C.run.tracks.map(t => { const im = new THREE.InstancedMesh(t.g, mat, t.frames.length); im.receiveShadow = true; im.frustumCulled = false; root.add(im); hi.push(im); return { im, t, last: NaN }; });
     // off = [esquerda, direita] em metros andados pela esteira
     trackAnim = off => {
       for (const b of belts) {
@@ -167,5 +192,17 @@ export function gltfTank(D, tagArmor) {
     };
     trackAnim([0, 0]);
   }
-  return { root, turret, gunPivot, muzzles: [mz], mgMuzzle, mats, wheels, armorMeshes, trackL: still(), trackR: still(), trackAnim };
+  // tanque simples: sombra de perto, LOD de longe
+  const lo = proc(), loMeshes = []; let far = false;
+  mergeStatic(lo);
+  lo.root.traverse(o => { if (o.isMesh) { o.userData.real = o.material; o.material = castOnly; o.receiveShadow = false; loMeshes.push(o); } });
+  root.add(lo.root); shadowOnly.add(lo.root);
+  const setLod = f => {
+    if (f === far) return; far = f;
+    for (const m of hi) m.visible = !f;
+    for (const m of loMeshes) { m.material = f ? m.userData.real : castOnly; m.receiveShadow = f; }
+    f ? shadowOnly.delete(lo.root) : shadowOnly.add(lo.root);
+  };
+  const lodSync = () => { lo.turret.rotation.y = turret.rotation.y; lo.gunPivot.rotation.x = gunPivot.rotation.x; };
+  return { root, turret, gunPivot, muzzles: [mz], mgMuzzle, mats: [...mats, ...lo.mats], wheels, armorMeshes, trackL: still(), trackR: still(), trackAnim, lod: lo, setLod, lodSync };
 }

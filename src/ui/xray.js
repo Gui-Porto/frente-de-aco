@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { S } from '../core/state.js';
 import { $, clamp } from '../core/util.js';
-import { renderer, afterRender } from '../core/render.js';
+import { renderer, afterRender, shadowOnly } from '../core/render.js';
 import { buildTank } from '../vehicles/tank.js';
 import { compLabel } from '../combat/ballistics.js';
 import { report } from './hud.js';
@@ -45,6 +45,7 @@ function ghostOf(D, slot = 'hit') {
   const key = slot + ':' + D.key; let g = ghosts.get(key);
   if (!g) {
     g = buildTank(D);
+    if (g.lod) { g.root.remove(g.lod.root); shadowOnly.delete(g.lod.root); } // o fantasma é só o modelo detalhado
     const ms = []; g.root.traverse(o => { if (o.isMesh) ms.push(o); else if (o.isSprite || o.isLine) o.visible = false; });
     for (const o of ms) {
       o.castShadow = o.receiveShadow = false;

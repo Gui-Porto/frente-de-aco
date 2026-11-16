@@ -1,5 +1,5 @@
 import { updatePlaneFx, updateFlakes } from '../vehicles/planeFx.js';
-import { camera, frameLighting, renderFrame } from '../core/render.js';
+import { camera, frameLighting, renderFrame, renderer, afterRender } from '../core/render.js';
 import { S, tanks, planes, projs } from '../core/state.js';
 import { endFrame } from '../core/settings.js';
 import { V3, rv } from '../core/util.js';
@@ -81,4 +81,4 @@ requestAnimationFrame(frame);
 // gancho para testes automatizados
 import * as R from '../core/render.js';
 window.__r = R;
-window.__game = { airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };
+window.__game = { renderer, renderFrame, afterRender, updateHUD, airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };

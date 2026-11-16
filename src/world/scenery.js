@@ -5,6 +5,15 @@ import { V3, QUAT, UP, rand, srand, hash2 } from '../core/util.js';
 import { H, LIMIT, INNER, POINTS, SPAWN, FW, FD, roadDist, maskGrass, HMAP, AIRFIELDS, onAirfield } from './terrain.js';
 import { addStaticBox } from './physics.js';
 import { sndCrack } from '../fx/audio.js';
+// Instâncias em blocos espaciais (células de `cell` m): cada bloco tem a própria esfera envolvente, então o corte por
+// frustum funciona nos três passes (cor, sombra, normais do GTAO). Um InstancedMesh único com milhares de árvores
+// espalhadas por 9 km era desenhado INTEIRO em todos eles.
+function chunked(geo, mat, items, cell, place) {
+  const by = new Map(), out = [];
+  for (const it of items) { const k = Math.floor(it[0] / cell) + ',' + Math.floor(it[1] / cell); if (!by.has(k)) by.set(k, []); by.get(k).push(it); }
+  for (const list of by.values()) { const im = new THREE.InstancedMesh(geo, mat, list.length); list.forEach((it, i) => place(it, i, im)); im.computeBoundingSphere(); scene.add(im); out.push(im); }
+  return out;
+}
 
 // =====================================================================
 // Obstáculos (AABB para balística/IA) com grade espacial + colisores Rapier
@@ -180,14 +189,12 @@ const vegMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughn
     }
     if (pts.length > 2) HEDGES.push(seg(pts));
   }
-  const mesh = new THREE.InstancedMesh(bush, new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), list.length);
   const m = new THREE.Matrix4(), q = new QUAT(), s = new V3(), p = new V3(), c = new THREE.Color();
-  list.forEach(([x, z], i) => {
+  for (const mesh of chunked(bush, new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), list, 160, ([x, z], i, mesh) => {
     const sc = rand(1.2, 1.8); p.set(x, H(x, z) + sc * 0.6, z); q.setFromEuler(new THREE.Euler(rand(0, 3), rand(0, 3), 0)); s.set(sc, sc * rand(0.9, 1.35), sc);
     m.compose(p, q, s); mesh.setMatrixAt(i, m); c.setRGB(rand(.05, .08), rand(.09, .13), rand(.03, .045)); mesh.setColorAt(i, c);
     maskGrass(x - 1.5, z - 1.5, x + 1.5, z + 1.5);
-  });
-  mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh);
+  })) mesh.castShadow = mesh.receiveShadow = true;
 }
 // Árvores da área de combate (derrubáveis) e florestas distantes
 // Colisão das árvores com aviões: grade de células de 32 m com { x, z, r (copa), top (altura do topo) }
@@ -235,9 +242,7 @@ export let treeMesh;
     if (Math.sin(x * 0.004) * Math.cos(z * 0.0035) + Math.sin(x * 0.011 + z * 0.007) * 0.5 < 0.55) continue;
     far.push([x, z, 0.9 + srand() * 0.7]);
   }
-  const fm = new THREE.InstancedMesh(oak, vegMat(), far.length);
-  far.forEach(([x, z, sc], i) => { p.set(x, H(x, z) - 1.6, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc * 1.4, sc * 1.4, sc * 1.4); m.compose(p, q, s); fm.setMatrixAt(i, m); col.setScalar(rand(.75, 1.2)); fm.setColorAt(i, col); regTree(x, z, 2.6 * sc, H(x, z) - 1.6 + 9 * sc * 1.4); });
-  fm.castShadow = true; scene.add(fm);
+  for (const fm of chunked(oak, vegMat(), far, 1125, ([x, z, sc], i, fm) => { p.set(x, H(x, z) - 1.6, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc * 1.4, sc * 1.4, sc * 1.4); m.compose(p, q, s); fm.setMatrixAt(i, m); col.setScalar(rand(.75, 1.2)); fm.setColorAt(i, col); regTree(x, z, 2.6 * sc, H(x, z) - 1.6 + 9 * sc * 1.4); })) fm.castShadow = true;
 }
 export function resetTrees() {
   const m = new THREE.Matrix4(), s = new V3(), p = new V3();
