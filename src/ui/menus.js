@@ -4,7 +4,7 @@ import { S } from '../core/state.js';
 import { settings, saveSettings, resetSettings, ACTIONS, QUALITY, keyName, clearInput } from '../core/settings.js';
 import { $ } from '../core/util.js';
 import { H, SPAWN } from '../world/terrain.js';
-import { VEHICLES, LINEUP, GUNS, hePen, DEG, G, RHO } from '../data/vehicles.js';
+import { VEHICLES, LINEUP, ERAS, setEra, GUNS, hePen, DEG, G, RHO } from '../data/vehicles.js';
 import { buildTank, setArmorView } from '../vehicles/tank.js';
 import { buildPlane } from '../vehicles/plane.js';
 import { audioInit, audioPause, sndUi, eng } from '../fx/audio.js';
@@ -61,12 +61,22 @@ function syncLineup() {
   fillSheet(choice); buildShowcase(choice);
 }
 export function initMenus() {
-  const box = $('#lineup'); box.innerHTML = '';
-  for (const key of LINEUP) {
-    const b = document.createElement('button'); b.className = 'slot'; b.innerHTML = slotHtml(key); b.dataset.k = key;
-    b.onclick = () => { choice = key; sndUi(); syncLineup(); };
-    b.ondblclick = () => { choice = key; begin(); };
-    box.appendChild(b);
+  const fill = () => {
+    const box = $('#lineup'); box.innerHTML = '';
+    for (const key of LINEUP) {
+      const b = document.createElement('button'); b.className = 'slot'; b.innerHTML = slotHtml(key); b.dataset.k = key;
+      b.onclick = () => { choice = key; sndUi(); syncLineup(); };
+      b.ondblclick = () => { choice = key; begin(); };
+      box.appendChild(b);
+    }
+  };
+  fill();
+  // era da partida: troca o elenco inteiro
+  const eb = $('#eras'); eb.innerHTML = '';
+  for (const k in ERAS) {
+    const b = document.createElement('button'); b.textContent = ERAS[k].name; b.setAttribute('aria-pressed', k === (S.era || 'ww2'));
+    b.onclick = () => { S.era = k; setEra(k); choice = LINEUP[0]; sndUi(); fill(); syncLineup(); eb.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+    eb.appendChild(b);
   }
   syncLineup();
   $('#vExt').onclick = () => { armorView = false; $('#vExt').setAttribute('aria-pressed', true); $('#vArm').setAttribute('aria-pressed', false); buildShowcase(choice); };

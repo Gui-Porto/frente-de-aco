@@ -384,7 +384,8 @@ export class Tank {
     let elev = Math.atan2(p.y, hd);
     if (this.compensate) elev += ballistic(this.ammo, hd).ang;
     const tgt = clamp(elev, -g.dep * DEG, g.elev * DEG);
-    const er = g.elevRate * DEG * dt * (this.mods.elev.broken ? 0.15 : 1);
+    // estabilizador (tanques modernos): a elevação corrige o balanço do casco quase na hora
+    const er = g.elevRate * DEG * dt * (this.mods.elev.broken ? 0.15 : g.stab ? 8 : 1);
     if (gunner) this.gunPitch += clamp(tgt - this.gunPitch, -er, er);
     this.aimErr = Math.abs(angDiff(this.turretYaw, want)) + Math.abs(tgt - this.gunPitch) + (Math.abs(elev - tgt) > 0.01 ? 1 : 0);
   }

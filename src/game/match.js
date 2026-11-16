@@ -3,7 +3,7 @@ import { S, tanks, planes, TICKETS } from '../core/state.js';
 import { V3, rand, rv, clamp } from '../core/util.js';
 import { POINTS, SPAWN, AIRSPAWN } from '../world/terrain.js';
 import { resetTrees, hideCraters } from '../world/scenery.js';
-import { VEHICLES } from '../data/vehicles.js';
+import { VEHICLES, ERAS } from '../data/vehicles.js';
 import { Tank } from '../vehicles/tank.js';
 import { Plane } from '../vehicles/plane.js';
 import { TankBrain, PlaneBrain } from '../ai/brains.js';
@@ -15,7 +15,7 @@ import { cam } from './camera.js';
 import { $ } from '../core/util.js';
 
 const NAMES = { 1: ['Sgt. Moura', 'Cb. Teixeira', 'Ten. Barros', 'Sd. Ribeiro'], '-1': ['Ofw. Brandt', 'Ltn. Krause', 'Uffz. Lenz', 'St. Sokolov', 'Sgt. Orlov'] };
-const GROUND = ['t34', 'tiger'];
+const era = () => ERAS[S.era || 'ww2'];
 let respawns = [], lastPlane = { 1: -999, '-1': -999 }, ticketT = 0;
 
 export function mkWho(name, team, isPlayer) {
@@ -41,9 +41,9 @@ function botPick(team) {
   const enemyPlanes = planes.some(p => p.alive && p.team !== team);
   const haveAA = tanks.some(t => t.alive && t.team === team && t.type === 'spaa');
   const myPlanes = planes.some(p => p.alive && p.team === team);
-  if (enemyPlanes && !haveAA && Math.random() < 0.55) return 'wirbel';
-  if (!myPlanes && S.now - lastPlane[team] > 75 && S.matchT > 40 && Math.random() < 0.45) return ['p47', 'il2', 'fw190'][Math.floor(Math.random() * 3)];
-  return GROUND[Math.floor(Math.random() * GROUND.length)];
+  if (era().aa && enemyPlanes && !haveAA && Math.random() < 0.55) return era().aa;
+  if (era().planes.length && !myPlanes && S.now - lastPlane[team] > 75 && S.matchT > 40 && Math.random() < 0.45) return era().planes[Math.floor(Math.random() * era().planes.length)];
+  return era().ground[Math.floor(Math.random() * era().ground.length)];
 }
 export function clearWorld() {
   while (tanks.length) tanks[0].remove();
@@ -59,8 +59,8 @@ export function startMatch() {
   clearWorld();
   S.stats = { kills: 0, airKills: 0, deaths: 0, shots: 0, hits: 0, pens: 0 }; S.matchT = 0;
   S.me = mkWho('Você', 1, true); S.me.sp = 300; S.me.used = new Set(); S.me.firstSpawn = true;
-  NAMES[1].forEach((n, i) => spawnVehicle(mkWho(n, 1, false), GROUND[Math.floor(Math.random() * GROUND.length)], i < 2 ? i : i + 1));
-  NAMES[-1].forEach((n, i) => spawnVehicle(mkWho(n, -1, false), GROUND[Math.floor(Math.random() * GROUND.length)], i));
+  NAMES[1].forEach((n, i) => spawnVehicle(mkWho(n, 1, false), era().ground[Math.floor(Math.random() * era().ground.length)], i < 2 ? i : i + 1));
+  NAMES[-1].forEach((n, i) => spawnVehicle(mkWho(n, -1, false), era().ground[Math.floor(Math.random() * era().ground.length)], i));
   S.paused = false;
   $('#caps').innerHTML = POINTS.map(p => `<div class="cap">${p.id}<i></i></div>`).join('');
   openSpawn('Primeiro spawn sem custo. Aviões liberam com SP, ganhos por abates e capturas.');

@@ -11,7 +11,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // Coordenadas do arquivo já no mundo dele: +y cima, +z frente (cano), metros, chão em y = 0.
 // O arquivo não precisa ter nós separados: a torre é achada pelo material e o canhão é recortado dela em `cut`.
 // Sem arquivo (ou falha ao carregar) o jogo segue com o tanque procedural.
-// Trem de rolamento (opcional): `run: { plate: [largura, espessura máx.], wheels: [[y, z, raio], ...] }`. A malha do material
+// Trem de rolamento (opcional): `run: { plate: [largura, espessura máx.], wheels: [[y, z, raio], ...], linkW?, period?, tol? }` (plate[2] = folga da largura; plate = a peça
+// que existe UMA vez por elo e marca o laço; linkW = meia-largura da esteira quando essa peça é estreita). A malha do material
 // `track` vem fundida; ela é quebrada em peças soltas (ilhas de triângulos) e cada peça vira roda (cabe no disco de um eixo e
 // está centrada nele, ou é miúda), elo de esteira (perto do laço formado pelas sapatas) ou fica parada (braços, batentes).
 // A esteira é UM elo (o do meio do trecho de baixo) instanciado ao longo do laço e deslocado pela fase do passo.
@@ -47,6 +48,21 @@ function pick(g, tris, mat) {
   for (const n in g.attributes) { const a = g.attributes[n], s = a.itemSize, o = new Float32Array(tris.length * 3 * s); tris.forEach((t, i) => o.set(a.array.subarray(t * 3 * s, (t * 3 + 3) * s), i * 3 * s)); r.setAttribute(n, new THREE.BufferAttribute(o, s)); }
   return mat ? r.applyMatrix4(mat) : r;
 }
+// Quadros dos elos ao longo do laço: a linha que passa pelos centros das sapatas (pts = [[y, z], ...], fechada e em
+// ordem) é REAMOSTRADA em passo uniforme = passo do elo (mediana da distância entre sapatas a `per` de distância).
+// Assim sapata faltando, peça detectada a mais ou tipos alternados não deformam a esteira: todo elo é instância do
+// mesmo elo de referência, que fica no quadro 0 (meio das sapatas ref..ref+per−1).
+function loopFrames(pts, per, ref) {
+  const n = pts.length, seg = i => Math.hypot(pts[(i + 1) % n][0] - pts[i % n][0], pts[(i + 1) % n][1] - pts[i % n][1]);
+  const cum = [0]; for (let i = 0; i < n; i++) cum.push(cum[i] + seg(i));
+  const L = cum[n], run = i => { let t = 0; for (let k = 0; k < per; k++) t += seg(i + k); return t; };
+  const P = Array.from({ length: n }, (_, i) => run(i)).sort((a, b) => a - b)[n >> 1], M = Math.max(4, Math.round(L / P)), ds = L / M;
+  const at = t => { t = ((t % L) + L) % L; let i = 0; while (i < n - 1 && cum[i + 1] < t) i++; const u = (t - cum[i]) / (seg(i) || 1), a = pts[i], b = pts[(i + 1) % n]; return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]; };
+  let s0 = cum[ref]; for (let k = 0, h = 0; k < per - 1; k++) { h += seg(ref + k); if (k === per - 2) s0 += h / 2; }
+  const frames = [];
+  for (let j = 0; j < M; j++) { const c = at(s0 + j * ds), a = at(s0 + j * ds - ds / 2), b = at(s0 + j * ds + ds / 2); frames.push({ y: c[0], z: c[1], th: Math.atan2(-(b[0] - a[0]), b[1] - a[1]) }); }
+  return { frames, pitch: ds };
+}
 function runningGear(g, R) {
   const pos = g.attributes.position, isl = islands(pos), comps = new Map();
   for (let t = 0; t < isl.length; t++) {
@@ -60,31 +76,62 @@ function runningGear(g, R) {
   for (const side of [1, -1]) {
     const mine = all.filter(c => c.c[0] * side > 0);
     // sapatas: largura conhecida e finas; ordenadas em volta do centro do laço
-    let pl = mine.filter(c => Math.abs(c.sz[0] - R.plate[0]) < 0.015 && Math.hypot(c.sz[1], c.sz[2]) < R.plate[1]);
+    let pl = mine.filter(c => Math.abs(c.sz[0] - R.plate[0]) < (R.plate[2] || 0.015) && Math.hypot(c.sz[1], c.sz[2]) < R.plate[1]);
     const cnt = new Map(); for (const c of pl) cnt.set(c.tris.length, (cnt.get(c.tris.length) || 0) + 1);
-    const mode = [...cnt].sort((a, b) => b[1] - a[1])[0]; pl = mode ? pl.filter(c => c.tris.length === mode[0]) : [];
+    // a mesma peça de cada elo: contagem de triângulos igual à mais comum, com folga (esteira deformada por curva varia um pouco)
+    const mode = [...cnt].sort((a, b) => b[1] - a[1])[0]; pl = mode ? pl.filter(c => Math.abs(c.tris.length - mode[0]) <= Math.max(2, mode[0] * (R.tol || 0.08))) : [];
+    if (R.debug) console.log('BOX esteira lado', side, 'sapatas', pl.length, 'moda', mode);
     if (pl.length < 20) { still.push(...mine); continue; }
     const cy = pl.reduce((s, c) => s + c.c[1], 0) / pl.length, cz = pl.reduce((s, c) => s + c.c[2], 0) / pl.length;
+    // sapatas alternadas de dois tipos têm o centro em alturas diferentes: traz o 2º tipo para a linha do 1º (senão a
+    // ordem por ângulo embaralha vizinhas e os quadros ficam em zigue-zague)
+    if (mode && (R.period || 1) > 1) {
+      const isA = c => Math.abs(c.tris.length - mode[0]) <= 2, low = pl.filter(c => c.c[1] < cy), mean = l => l.reduce((t, c) => t + c.c[1], 0) / (l.length || 1);
+      const off = mean(low.filter(c => !isA(c))) - mean(low.filter(isA));
+      pl = pl.map(c => isA(c) ? c : { c: [c.c[0], c.c[1] - off, c.c[2]], tris: c.tris });
+    }
     pl.sort((a, b) => Math.atan2(a.c[1] - cy, a.c[2] - cz) - Math.atan2(b.c[1] - cy, b.c[2] - cz));
+    // laço aberto (modelos que não trazem o trecho de cima, escondido pelas saias): fecha o maior vão passando pelos
+    // pontos de R.fill ([[y, z], ...], por cima das rodas) com sapatas fantasmas no mesmo passo
+    if (R.fill) {
+      const d = pl.map((c, i) => { const n = pl[(i + 1) % pl.length].c; return Math.hypot(n[1] - c.c[1], n[2] - c.c[2]); });
+      const step = [...d].sort((a, b) => a - b)[d.length >> 1], gi = d.indexOf(Math.max(...d));
+      if (d[gi] > step * 3) {
+        const A = pl[gi].c, B = pl[(gi + 1) % pl.length].c, len = q => q.reduce((t, w, i) => i ? t + Math.hypot(w[0] - q[i - 1][0], w[1] - q[i - 1][1]) : 0, 0);
+        const fwd = [[A[1], A[2]], ...R.fill, [B[1], B[2]]], rev = [[A[1], A[2]], ...[...R.fill].reverse(), [B[1], B[2]]], path = len(fwd) <= len(rev) ? fwd : rev;
+        let n = Math.round(len(path) / step) - 1; const per = R.period || 1; while ((pl.length + n) % per) n++;
+        const L = len(path), add = [];
+        for (let k = 1; k <= n; k++) {
+          let t = L * k / (n + 1), i = 1; while (i < path.length - 1 && t > Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1])) { t -= Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]); i++; }
+          const sl = Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]) || 1, u = t / sl;
+          add.push({ c: [A[0], path[i - 1][0] + (path[i][0] - path[i - 1][0]) * u, path[i - 1][1] + (path[i][1] - path[i - 1][1]) * u], tris: [], ghost: true });
+        }
+        pl.splice(gi + 1, 0, ...add);
+      }
+    }
     const N = pl.length, px = pl.reduce((s, c) => s + c.c[0], 0) / N;
-    const frames = pl.map((c, i) => { const a = pl[(i + N - 1) % N].c, b = pl[(i + 1) % N].c; return { y: c.c[1], z: c.c[2], th: Math.atan2(-(b[1] - a[1]), b[2] - a[2]) }; });
     // elo de referência: o do meio do trecho de baixo
-    let ref = -1; for (let i = 0; i < N; i++) if (pl[i].c[1] < cy && (ref < 0 || Math.abs(pl[i].c[2] - cz) < Math.abs(pl[ref].c[2] - cz))) ref = i;
+    let ref = -1; for (let i = 0; i < N; i++) if (!pl[i].ghost && pl[i].c[1] < cy && (ref < 0 || Math.abs(pl[i].c[2] - cz) < Math.abs(pl[ref].c[2] - cz))) ref = i;
+    // elo = `per` sapatas seguidas; com duas, o par é o das sapatas mais próximas entre si
+    const per = R.period || 1, gapAt = i => Math.hypot(pl[(i + 1) % N].c[1] - pl[i].c[1], pl[(i + 1) % N].c[2] - pl[i].c[2]);
+    if (per === 2 && ref > 0 && gapAt(ref) > gapAt(ref - 1)) ref--;
+    const { frames, pitch } = loopFrames(pl.map(c => [c.c[1], c.c[2]]), per, ref);
     const link = [];
     for (const c of mine) {
       // elo: peça perto de uma sapata do laço
-      let bi = -1, bd = 0.13; pl.forEach((q, i) => { const d = Math.hypot(c.c[1] - q.c[1], c.c[2] - q.c[2]); if (d < bd) { bd = d; bi = i; } });
-      if (bi >= 0 && Math.abs(c.c[0] - px) < R.plate[0] * 0.95) { if (bi === ref) link.push(...c.tris); continue; }
+      let bi = -1, bd = 0.13; pl.forEach((q, i) => { if (q.ghost) return; const d = Math.hypot(c.c[1] - q.c[1], c.c[2] - q.c[2]); if (d < bd) { bd = d; bi = i; } });
+      if (bi >= 0 && Math.abs(c.c[0] - px) < (R.linkW || R.plate[0] * 0.95)) { if (bi >= ref && bi < ref + per) link.push(...c.tris); continue; }
       // roda: cabe inteira no disco do eixo mais próximo e está centrada nele (ou é miúda: parafuso, calota)
       let wi = -1, wd = 1e9; R.wheels.forEach(([y, z], i) => { const d = Math.hypot(c.c[1] - y, c.c[2] - z); if (d < wd) { wd = d; wi = i; } });
       const [wy, wz, wr] = R.wheels[wi], far = Math.max(...[c.mn, c.mx].flatMap(a => [c.mn, c.mx].map(b => Math.hypot(a[1] - wy, b[2] - wz))));
       if (far < wr + 0.015 && (wd < 0.03 || Math.hypot(...c.sz) < 0.2)) { (wheels[wi + (side > 0 ? 0 : R.wheels.length)] ||= { side, y: wy, z: wz, r: wr, tris: [] }).tris.push(...c.tris); continue; }
       still.push(c);
     }
-    const f = frames[ref], inv = new THREE.Matrix4().makeRotationX(-f.th).multiply(new THREE.Matrix4().makeTranslation(0, -f.y, -f.z));
+    const f = frames[0], inv = new THREE.Matrix4().makeRotationX(-f.th).multiply(new THREE.Matrix4().makeTranslation(0, -f.y, -f.z));
     // sentido: andando para frente o trecho de baixo corre para trás (z diminui)
-    const nx = frames[(ref + 1) % N];
-    tracks.push({ side, parts: [{ g: pick(g, link, inv) }], frames, period: 1, dir: nx.z < f.z ? 1 : -1, pitch: Math.hypot(nx.y - f.y, nx.z - f.z) });
+    const nx = frames[1];
+    if (R.debug) console.log('BOX elo', side, 'tris', link.length, 'sapatas', N, 'elos', frames.length, 'passo', pitch.toFixed(3));
+    tracks.push({ side, parts: [{ g: pick(g, link, inv) }], frames, period: 1, dir: nx.z < f.z ? 1 : -1, pitch });
   }
   return {
     still: pick(g, still.flatMap(c => c.tris)), tracks,
@@ -98,10 +145,9 @@ function preparedGear(wheelNodes, linkNodes) {
   const wheels = [], tracks = [];
   for (const [n, parts] of wheelNodes) { const e = n.userData; wheels.push({ side: e.side, r: e.r, at: [0, e.y, e.z], parts: parts.map(q => ({ g: q.g.translate(0, -e.y, -e.z), mi: q.mi })) }); }
   for (const [n, parts] of linkNodes) {
-    const e = n.userData, c = e.centers, N = c.length / 2, P = i => { i = ((i % N) + N) % N; return [c[i * 2], c[i * 2 + 1]]; };
-    const frames = []; for (let i = 0; i < N; i++) { const [y, z] = P(i), a = P(i - 1), b = P(i + 1); frames.push({ y, z, th: Math.atan2(-(b[0] - a[0]), b[1] - a[1]) }); }
-    const f = frames[e.ref], nx = frames[(e.ref + 1) % N], inv = new THREE.Matrix4().makeRotationX(-f.th).multiply(new THREE.Matrix4().makeTranslation(0, -f.y, -f.z));
-    tracks.push({ side: e.side, parts: parts.map(q => ({ g: q.g.applyMatrix4(inv), mi: q.mi })), frames, period: e.period || 1, dir: nx.z < f.z ? 1 : -1, pitch: Math.hypot(nx.y - f.y, nx.z - f.z) });
+    const e = n.userData, c = e.centers, pts = []; for (let i = 0; i < c.length; i += 2) pts.push([c[i], c[i + 1]]);
+    const { frames, pitch } = loopFrames(pts, e.period || 1, e.ref), f = frames[0], nx = frames[1], inv = new THREE.Matrix4().makeRotationX(-f.th).multiply(new THREE.Matrix4().makeTranslation(0, -f.y, -f.z));
+    tracks.push({ side: e.side, parts: parts.map(q => ({ g: q.g.applyMatrix4(inv), mi: q.mi })), frames, period: 1, dir: nx.z < f.z ? 1 : -1, pitch });
   }
   return { wheels, tracks };
 }
@@ -122,7 +168,11 @@ function prepare(D, scene) {
     let node = null, nobj = null; for (let q = o; q && !node; q = q.parent) { node = (/^(hull|turret|gun|track|wheel|link)/.exec(q.name) || [])[1]; nobj = q; }
     if (node === 'wheel' || node === 'link') { const m = node === 'wheel' ? wheelNodes : linkNodes; if (!m.has(nobj)) m.set(nobj, []); m.get(nobj).push({ g, mi }); return; }
     if (node === 'gun') parts.gun.push({ g: g.translate(-M.trunnion[0], -M.trunnion[1], -M.trunnion[2]), mi });
-    else if (node === 'turret') parts.turret.push({ g: g.translate(-M.ring[0], -M.ring[1], -M.ring[2]), mi });
+    else if (node === 'turret' && M.cut == null) parts.turret.push({ g: g.translate(-M.ring[0], -M.ring[1], -M.ring[2]), mi });
+    else if (node === 'turret') { // torre e canhão no mesmo objeto: recorta em z > cut
+      const [gun, tur] = splitGeo(g.toNonIndexed(), (x, y, z) => z > M.cut);
+      parts.gun.push({ g: gun.translate(-M.trunnion[0], -M.trunnion[1], -M.trunnion[2]), mi }); parts.turret.push({ g: tur.translate(-M.ring[0], -M.ring[1], -M.ring[2]), mi });
+    }
     else if (node) parts[node].push({ g, mi });
     else if (mat.name === M.turret) {
       const [gun, tur] = splitGeo(g.toNonIndexed(), (x, y, z) => z > M.cut);
@@ -143,7 +193,7 @@ function prepare(D, scene) {
 export async function preloadTankModels(defs) {
   await Promise.all(defs.filter(D => D.model && !cache.has(D.key) && !failed.has(D.key)).map(async D => {
     try { cache.set(D.key, prepare(D, (await loader.loadAsync(D.model.url)).scene)); }
-    catch (e) { failed.add(D.key); console.warn(`[modelos] ${D.key}: ${D.model.url} indisponível, usando procedural`); }
+    catch (e) { failed.add(D.key); console.warn(`[modelos] ${D.key}: ${D.model.url} indisponível, usando procedural`, e); }
   }));
 }
 export const hasTankModel = D => !!(D.model && cache.has(D.key));

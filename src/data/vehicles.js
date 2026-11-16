@@ -37,6 +37,22 @@ export const TANKS = {
         { name: 'O-365K', type: 'HE', v: 793, m: 9.5, tnt: 0.74, count: 20 }] },
     mg: { name: 'DT', cal: 7.62, rpm: 600, v: 840, m: 0.0096, pen: 9, he: 0, belt: 63, total: 1953, tracer: 5 }
   },
+  t72: {
+    key: 't72', type: 'tank', name: 'T-72M1', nation: 'URSS', year: 1982, color: 0x4a5236, sp: 260,
+    mass: 41500, hp: 780, rpm: 2000, vmax: 60 * 1.15 / 3.6, vrev: 4 * 1.25 / 3.6, wheels: 6, rpmTraverse: false,
+    L: 6.86, W: 3.58, Hh: 0.93, clr: 0.45, trackW: 0.58, transFront: false,
+    turret: { w: 2.7, l: 2.9, h: 0.85, z: -0.05, shape: 'round' },
+    // "T72M1" de DustyMojito, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/prep.py
+    model: { url: '/models/t72.glb', ring: [0, 1.38, -0.05], trunnion: [-0.01, 1.72, 1.2], cut: 1.5, muzzle: 5.95,
+      run: { plate: [0.46, 0.32, 0.07], tol: 0.7, period: 2, fill: [[1.24, 2.89], [1.02, 2.2], [1.02, -2.2]], wheels: [[0.83, -2.89, 0.40], [0.46, -1.96, 0.40], [0.46, -1.15, 0.40], [0.46, -0.29, 0.40], [0.46, 0.53, 0.40], [0.46, 1.38, 0.40], [0.46, 2.21, 0.40], [0.85, 2.89, 0.30]] } },
+    // blindagem em equivalente contra energia cinética (a composta do glacis e a torre fundida entram pelo valor efetivo)
+    armor: { front: [140, 68], lfront: [80, 60], side: [80, 0], rear: [45, 10], top: 30, bottom: 20, tFront: [380, 0], tSide: [190, 0], tRear: [65, 0], tTop: 45 },
+    gun: { name: '125 mm 2A46', cal: 125, len: 6.0, reload: 7.1, trav: 24, elevRate: 3.5, dep: 6, elev: 14, brake: false, stab: true,
+      ammo: [
+        { name: '3BM22', type: 'APFSDS', pen: 380, v: 1760, m: 4.5, count: 22 },
+        { name: '3OF19', type: 'HE', v: 850, m: 23, tnt: 3.15, count: 17 }] },
+    mg: { name: 'PKT', cal: 7.62, rpm: 700, v: 855, m: 0.0096, pen: 9, he: 0, belt: 250, total: 2000, tracer: 5 }
+  },
   pz4: {
     key: 'pz4', type: 'tank', name: 'Pz.Kpfw. IV H', nation: 'Alemanha', year: 1943, color: 0x6f6541, sp: 150,
     mass: 25900, hp: 300, rpm: 3000, vmax: 38 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: true,
@@ -317,7 +333,13 @@ for (const D of Object.values(PLANES)) {
 }
 export const VEHICLES = Object.assign({}, TANKS, PLANES);
 // elenco enxuto a pedido do dono: Sherman e Pz IV continuam nos dados, só saíram da partida
-export const LINEUP = ['t34', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'];
+// Eras: cada partida usa só os veículos de uma (antigo não enfrenta moderno). LINEUP é o elenco da era ativa.
+export const ERAS = {
+  ww2: { name: 'Segunda Guerra', lineup: ['t34', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'], ground: ['t34', 'tiger'], planes: ['p47', 'il2', 'fw190'], aa: 'wirbel' },
+  mod: { name: 'Moderno', lineup: ['t72'], ground: ['t72'], planes: [], aa: null }
+};
+export const LINEUP = [...ERAS.ww2.lineup];
+export function setEra(e) { LINEUP.splice(0, LINEUP.length, ...ERAS[e].lineup); }
 
 // ---------- Balística: arrasto quadrático a = -k|v|v, k = ½ρ·Cd·A/m ----------
 export function prepAmmo(am, cal, cd) {

@@ -126,7 +126,7 @@ export function evalArmor(t, hit, am, speed) {
   const eff = thick / Math.cos(angN * DEG);
   const pen = penAt(am, speed) * rand(0.95, 1.05);
   const over = am.cal > 3 * arm.t;
-  const [r0, r1] = am.type === 'APCR' ? [60, 68] : am.type === 'MG' || am.type === 'HEF' ? [55, 70] : [70, 80];
+  const [r0, r1] = am.type === 'APFSDS' ? [78, 84] : am.type === 'APCR' ? [60, 68] : am.type === 'MG' || am.type === 'HEF' ? [55, 70] : [70, 80];
   const ricoP = over || ang <= r0 || am.type === 'HE' ? 0 : clamp((ang - r0) / (r1 - r0), 0, 1);
   return { arm, ang, eff, pen, ricoP, track };
 }
@@ -294,7 +294,7 @@ function postPen(t, pr, hit, dir, E) {
   } else {
     // munição sólida: trajetória interna + estilhaços da chapa (cone)
     const len = shell ? Math.min(4, 0.8 + (E.pen - E.eff) / 35) : Math.min(1.2, 0.3 + (E.pen - E.eff) / 20);
-    const spall = shell ? (am.type === 'APCR' ? 0.18 : 0.35) : 0.05;
+    const spall = shell ? ((am.type === 'APCR' || am.type === 'APFSDS') ? 0.18 : 0.35) : 0.05;
     const bx = lp.x + ld.x * len, by = lp.y + ld.y * len, bz = lp.z + ld.z * len;
     end = [bx, by, bz];
     for (const c of comps) {
@@ -304,9 +304,9 @@ function postPen(t, pr, hit, dir, E) {
       if (d < c.r + spall && Math.random() < (d < c.r ? (shell ? 1 : 0.5) : 0.6)) hits.add(c);
       if (!shell) continue;
       const vx = c.p[0] - lp.x, vy = c.p[1] - lp.y, vz = c.p[2] - lp.z, dd = Math.hypot(vx, vy, vz);
-      if (dd < 2.8 && (vx * ld.x + vy * ld.y + vz * ld.z) / dd > 0.95 && Math.random() < (am.type === 'APCR' ? .25 : .45)) hits.add(c);
+      if (dd < 2.8 && (vx * ld.x + vy * ld.y + vz * ld.z) / dd > 0.95 && Math.random() < ((am.type === 'APCR' || am.type === 'APFSDS') ? .25 : .45)) hits.add(c);
     }
-    if (shell) for (let i = 0; i < (am.type === 'APCR' ? 8 : 16); i++) { const v = ld.clone().add(rv(.28)).normalize().multiplyScalar(rand(1.2, 2.8)); frags.push([[lp.x, lp.y, lp.z], [lp.x + v.x, lp.y + v.y, lp.z + v.z]]); }
+    if (shell) for (let i = 0; i < ((am.type === 'APCR' || am.type === 'APFSDS') ? 8 : 16); i++) { const v = ld.clone().add(rv(.28)).normalize().multiplyScalar(rand(1.2, 2.8)); frags.push([[lp.x, lp.y, lp.z], [lp.x + v.x, lp.y + v.y, lp.z + v.z]]); }
   }
   const before = comps.map(c => c.kind === 'crew' ? c.ref.alive : !(c.name in t.mods) || !t.mods[c.name].broken);
   const names = applyCompHits(t, hits, am.type === 'APHE' ? 0.45 : 0.28);
