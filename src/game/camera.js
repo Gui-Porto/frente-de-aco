@@ -8,7 +8,7 @@ import { raycast } from '../combat/ballistics.js';
 
 export const cam = {
   yaw: 0, pitch: -0.05, dist: 11, sniper: false, binoc: false, fov: 9, orbit: 0, drag: false,
-  rangeT: 0, range: 0, aimDir: new V3(0, 0, 1), hangar: null, pos: new V3(), init: false,
+  rangeT: 0, range: 0, aimDir: new V3(0, 0, 1), want: new V3(0, 0, 1), hangar: null, pos: new V3(), init: false,
 };
 const _dir = new V3(), _cp = new V3(), _ca = new V3(), _cb = new V3(), _fwd = new V3();
 export function camDir(out) { return out.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch)); }
@@ -47,12 +47,17 @@ export function updateCamera(dt) {
   } else {
     const t = v, D = t.def;
     const sight = (cam.sniper || cam.binoc) && t.alive && t.turretOn && t === p;
+    let look = _dir;
     if (sight) {
-      t.turret.localToWorld(_cp.set(D.turret.w * .22, D.turret.h + .1, D.turret.l * .3));
+      // mira do atirador: a luneta é solidária ao canhão — a imagem só anda na velocidade da torre/elevação;
+      // o mouse move o ponto desejado (cam.want, o círculo na luneta) e o canhão corre atrás. Binóculo: olhar livre.
+      if (cam.binoc) t.turret.localToWorld(_cp.set(D.turret.w * .22, D.turret.h + .1, D.turret.l * .3));
+      else { t.gunPivot.localToWorld(_cp.set(0, .28, .7)); look = _fwd.set(0, 0, 1).transformDirection(t.gunPivot.matrixWorld); }
       camera.position.copy(_cp); t.root.visible = false; cam.init = false;
       setFov(cam.binoc ? Math.min(cam.fov, 8) : cam.fov);
       if (!cam.binoc) t.aimPoint.copy(_cp).addScaledVector(_dir, 1500);
-      if ((cam.rangeT -= dt) <= 0) { cam.rangeT = .25; const h = raycast(_cp, _dir, 2000, t); cam.range = h ? h.t * 2000 : 0; }
+      cam.want.copy(_dir);
+      if ((cam.rangeT -= dt) <= 0) { cam.rangeT = .25; const h = raycast(_cp, look, 2000, t); cam.range = h ? h.t * 2000 : 0; }
     } else {
       t.root.visible = true;
       setFov(isDown('t_zoom') && t === p ? 32 : 60);
@@ -64,7 +69,7 @@ export function updateCamera(dt) {
       camera.position.copy(cam.pos);
       if (t.alive && t === p && !isDown('freelook')) { const h = raycast(camera.position, _dir, 1800, t); if (h) t.aimPoint.copy(h.point); else t.aimPoint.copy(camera.position).addScaledVector(_dir, 1800); }
     }
-    camera.lookAt(_cb.copy(camera.position).add(_dir));
+    camera.lookAt(_cb.copy(camera.position).add(look));
   }
   if (S.shake > 0 && !REDUCED) { camera.rotation.x += rand(-1, 1) * S.shake * .01; camera.rotation.y += rand(-1, 1) * S.shake * .01; }
   S.shake = Math.max(0, S.shake - dt * 1.5);

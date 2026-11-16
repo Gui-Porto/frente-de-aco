@@ -237,6 +237,10 @@ function drawScope(t) {
   } else {
     sctx.fillRect(cx - R, cy - 1.5, R - 60, 3); sctx.fillRect(cx + 60, cy - 1.5, R - 60, 3); sctx.fillRect(cx - 1.5, cy + 60, 3, R - 60);
     sctx.beginPath(); sctx.moveTo(cx - 9, cy + 14); sctx.lineTo(cx, cy); sctx.lineTo(cx + 9, cy + 14); sctx.stroke();
+    // para onde o atirador quer levar o canhão (some quando o canhão chega lá)
+    _a.copy(camera.position).addScaledVector(cam.want, 1000).project(camera);
+    const wx = cx + _a.x * w / 2, wy = cy - _a.y * h / 2;
+    if (_a.z < 1 && Math.hypot(wx - cx, wy - cy) > 5) { sctx.save(); sctx.strokeStyle = 'rgba(221,214,183,.9)'; sctx.lineWidth = 1.5; sctx.beginPath(); const k = Math.min(1, R * .94 / Math.hypot(wx - cx, wy - cy)); sctx.arc(cx + (wx - cx) * k, cy + (wy - cy) * k, 9, 0, Math.PI * 2); sctx.stroke(); sctx.restore(); }
     const am = t.ammo;
     sctx.font = '500 12px "IBM Plex Mono", monospace'; sctx.textAlign = 'right'; sctx.textBaseline = 'middle';
     for (let r = 200; r <= 2000; r += 200) {
