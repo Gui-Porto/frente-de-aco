@@ -53,6 +53,8 @@ export const TANKS = {
     mass: 56900, hp: 650, rpm: 2500, vmax: 40 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: true,
     L: 6.3, W: 3.56, Hh: 1.45, clr: 0.47, trackW: 0.72, transFront: true,
     turret: { w: 2.3, l: 2.9, h: 0.9, z: -0.1, shape: 'box' },
+    // "Tiger I (PzKpfw VI Ausf. E)" de M1RON, CC BY 4.0 (ver CREDITOS.md)
+    model: { url: '/models/tiger.glb', turret: 'turret', ring: [0.02, 1.8, -0.1], trunnion: [0.035, 2.27, 1.0], cut: 1.0, muzzle: 5.5 },
     armor: { front: [100, 9], lfront: [100, 24], side: [80, 0], rear: [80, 9], top: 25, bottom: 25, tFront: [120, 0], tSide: [80, 0], tRear: [80, 0], tTop: 25 },
     gun: { name: '88 mm KwK 36', cal: 88, len: 5.3, reload: 8.7, trav: 13, elevRate: 5, dep: 8, elev: 15, brake: true,
       ammo: [

@@ -34,6 +34,10 @@ Módulos ES; o estado mutável compartilhado fica em `core/state.js` (`S`, `tank
 | `air/hud/` | `kit.js` (canvas/primitivas), `themes.js` (ww2/nato/sov), `flight.js` (painel inf. dir.), `scopes.js` (radar B-scope + RWR inf. esq., mapa tático), `warnings.js` (alertas só por sistema) |
 | `game/` | `loop.js` (física em passo fixo 1/120 s), `match.js` (tickets, captura, SP, respawn), `controls.js`, `camera.js` |
 
+## Blindados — modelo glTF
+
+`def.model = { url, turret, ring, trunnion, cut, muzzle }` (`vehicles/tankModel.js`, carregado em `main.js` antes do jogo): a torre é achada pelo nome do material e o canhão/mantelete é recortado dela em `z > cut`; `ring`/`trunnion` são os pivôs. Sem arquivo, cai no procedural (`buildTank`). Rodas e esteiras do modelo ainda não animam. Todo modelo de terceiro entra em `CREDITOS.md` (só CC0/CC-BY, nunca extraído de outro jogo). Bancada: `tools/bench.html?k=tiger&tur=50&el=12` mostra torre girada/canhão elevado. Curva: `STEER` (lagarta de dentro) e freio proporcional ao comando em `tank.js` — medir giro parado (~18°/s Tiger) e curva a 35 km/h (deve manter ~15 km/h) ao mexer.
+
 ## Física — decisões importantes
 
 - Tanques: o Rapier integra o corpo e resolve colisões; suspensão e tração são forças nossas aplicadas a cada passo, com a **normal local do terreno em cada contato** e trecho inclinado da esteira (ângulo de ataque). O motor sempre empurra no sentido comandado (corrige o bug de travar em rampa). Todos os tanques sobem 30°.

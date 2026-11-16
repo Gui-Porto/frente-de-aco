@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { hasTankModel, gltfTank } from './tankModel.js';
 import { scene } from '../core/render.js';
 import { S, tanks } from '../core/state.js';
 import { V3, QUAT, UP, clamp, rand, rv, angDiff } from '../core/util.js';
@@ -17,6 +18,7 @@ import { addTankDetail } from './tankDetail.js';
 // =====================================================================
 export const CREW = [['driver', 'Motorista', 'MOT'], ['radio', 'Op. de rádio', 'RÁD'], ['gunner', 'Atirador', 'ATI'], ['commander', 'Comandante', 'CMD'], ['loader', 'Municiador', 'MUN']];
 export const MODS = { engine: ['Motor', 22], transmission: ['Transmissão', 25], tracks: ['Esteira', 11], breech: ['Culatra', 18], drive: ['Giro da torre', 15] };
+const STEER = 1.55; // lagarta de dentro em curva: 1 = solta, > 1 = contra-rotação (1,6 parava o tanque na curva)
 export const GEARS = [0.15, 0.3, 0.5, 0.74, 1.0];
 
 export function hullProfile(D) {
@@ -75,6 +77,7 @@ function tagArmor(mesh, D, part) {
 }
 
 export function buildTank(D) {
+  if (hasTankModel(D)) return gltfTank(D, tagArmor);
   const root = new THREE.Group();
   const camo = new THREE.MeshStandardMaterial({ map: camoTexture(D), roughness: .78, metalness: .25 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c19, roughness: .95, metalness: .1 });
@@ -242,14 +245,19 @@ export class Tank {
     let Fe = this.shiftT > 0 ? 0 : P / Math.max(vTrack, 0.8);
     Fe = Math.min(Fe, 0.9 * D.mass * G);
     if (x >= 1 && Math.abs(this.vFwd) >= top * 0.98) Fe = 0; // regulador de velocidade
+    // giro parado: a taxa é limitada pela relação potência/peso (Tiger ~20°/s, médios ~28°/s), não pela 1ª marcha
+    if (Math.abs(thr) < 0.05) Fe *= clamp(1 - Math.abs(this.w.dot(_ay)) / ((D.pivot || 1.8 * D.hp / (D.mass / 1000)) * DEG), 0, 1) * 4;
+    Fe = Math.min(Fe, 0.9 * D.mass * G);
     // mistura de comandos por lagarta (+1 = esquerda, local +x)
     let cl, cr;
     if (Math.abs(thr) < 0.05) { cl = -st; cr = st; }
-    else if (st > 0) { cl = thr * (1 - 1.6 * st); cr = thr; }
-    else if (st < 0) { cl = thr; cr = thr * (1 + 1.6 * st); }
+    else if (st > 0) { cl = thr * (1 - STEER * st); cr = thr; }
+    else if (st < 0) { cl = thr; cr = thr * (1 + STEER * st); }
     else { cl = cr = thr; }
     this.cmd = [clamp(cl, -1, 1), clamp(cr, -1, 1)];
-    this.Fside = [this.cmd[0] * Fe / 2, this.cmd[1] * Fe / 2];
+    // em curva a potência que sai da lagarta de dentro vai para a de fora (direção regenerativa), senão o tanque morre na curva
+    const sh = Fe / Math.max(1, Math.abs(this.cmd[0]) + Math.abs(this.cmd[1]));
+    this.Fside = [this.cmd[0] * sh, this.cmd[1] * sh];
   }
 
   makeBody() {
@@ -303,7 +311,7 @@ export class Tank {
       if (Math.abs(cmd) > 0.02) {
         // o motor sempre empurra no sentido comandado; freia só se a lagarta corre de fato no sentido oposto
         Fl = this.Fside[si] / cnt;
-        if (vl * cmd < 0 && Math.abs(vl) > 0.6) Fl += clamp(-vl * m / nc * 4, -0.7 * mu * N, 0.7 * mu * N);
+        if (vl * cmd < 0 && Math.abs(vl) > 0.6) { const bk = 0.7 * Math.abs(cmd) * mu * N; Fl += clamp(-vl * m / nc * 4, -bk, bk); } // freio proporcional ao comando: em curva a lagarta de dentro arrasta, não trava
       } else Fl = clamp(-vl * m / nc * (Math.abs(vl) < 0.7 ? 6 : 1.2), -(Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N, (Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N);
       Fl -= Math.sign(vl) * Math.min(0.035 * N, Math.abs(vl) * m / nc * 3);
       Fl = clamp(Fl, -mu * N, mu * N);

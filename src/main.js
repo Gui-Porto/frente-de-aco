@@ -6,6 +6,8 @@ import RAPIER from '@dimforge/rapier3d-compat';
 const status = document.querySelector('#boot');
 try {
   await RAPIER.init();
+  const [{ TANKS }, { preloadTankModels }] = await Promise.all([import('./data/vehicles.js'), import('./vehicles/tankModel.js')]);
+  await preloadTankModels(Object.values(TANKS));
   await import('./game/loop.js');
   status?.remove();
 } catch (e) {
