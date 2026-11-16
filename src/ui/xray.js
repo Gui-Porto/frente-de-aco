@@ -21,10 +21,12 @@ void main(){ vec4 p = vec4(position, 1.0); vec3 n = normal;
   p = instanceMatrix * p; n = mat3(instanceMatrix) * n;
 #endif
   vec4 mv = modelViewMatrix * p; vN = normalize(normalMatrix * n); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`;
-// casca: brilha nas bordas (fresnel), quase some de frente — dá para ver o interior
+// casca em "vidro": um pré-passe grava só a profundidade da casca e a cor sai apenas na camada da frente (EqualDepth),
+// então cada pixel recebe UMA face — borda clara (fresnel), frente quase transparente, interior visível por trás.
+const ghostPre = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }', colorWrite: false, side: THREE.DoubleSide });
 const ghost = new THREE.ShaderMaterial({
-  vertexShader: VS, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-  fragmentShader: 'varying vec3 vN; varying vec3 vV; void main(){ float f = 1.0 - abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(vec3(0.42, 0.72, 0.86) * (0.025 + 0.34 * f * f * f), 1.0); }'
+  vertexShader: VS, transparent: true, depthWrite: false, depthFunc: THREE.LessEqualDepth, side: THREE.DoubleSide,
+  fragmentShader: 'varying vec3 vN; varying vec3 vV; void main(){ float f = 1.0 - abs(dot(normalize(vN), normalize(vV))); float e = f * f; gl_FragColor = vec4(mix(vec3(0.32, 0.56, 0.68), vec3(0.66, 0.93, 1.0), e), 0.07 + 0.8 * e); }'
 });
 // peças internas: cor chapada com sombreado simples; `glow` acende quando é atingida
 const solidProto = new THREE.ShaderMaterial({
@@ -43,7 +45,12 @@ function ghostOf(D, slot = 'hit') {
   const key = slot + ':' + D.key; let g = ghosts.get(key);
   if (!g) {
     g = buildTank(D);
-    g.root.traverse(o => { if (o.isMesh) { o.material = ghost; o.castShadow = o.receiveShadow = false; o.renderOrder = 2; } else if (o.isSprite || o.isLine) o.visible = false; });
+    const ms = []; g.root.traverse(o => { if (o.isMesh) ms.push(o); else if (o.isSprite || o.isLine) o.visible = false; });
+    for (const o of ms) {
+      o.castShadow = o.receiveShadow = false;
+      const pre = o.clone(false); pre.material = ghostPre; pre.renderOrder = 1; o.parent.add(pre); // irmão: herda a mesma transformação
+      o.material = ghost; o.renderOrder = 2;
+    }
     ghosts.set(key, g);
   }
   return g;
@@ -70,7 +77,7 @@ const path = new THREE.Mesh(GEO.shell, pathMat), path2 = new THREE.Mesh(GEO.shel
 const fragGeo = new THREE.BufferGeometry(), frags = new THREE.LineSegments(fragGeo, lineMat);
 for (const m of [path, path2, blast, frags]) { m.renderOrder = 5; m.frustumCulled = false; scene.add(m); }
 // compila tudo já (um fantasma qualquer não é preciso: os programas são os mesmos para qualquer geometria)
-{ const tmp = new THREE.Mesh(GEO.box, ghost), tmp2 = new THREE.Mesh(GEO.box, solidProto); scene.add(tmp, tmp2); renderer.compile(scene, cam); scene.remove(tmp, tmp2); }
+{ const tmp = [ghost, ghostPre, solidProto].map(m => new THREE.Mesh(GEO.box, m)); scene.add(...tmp); renderer.compile(scene, cam); scene.remove(...tmp); }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 function stretch(m, p0, p1, k) { _a.fromArray(p0); _b.fromArray(p1); m.position.copy(_a); m.lookAt(_b); m.scale.set(1, 1, Math.max(0.001, _a.distanceTo(_b) * k)); }
@@ -175,7 +182,7 @@ export function drawXray() {
 const stc = $('#status'), stx = stc.getContext('2d');
 const sScene = new THREE.Scene(), sCam = new THREE.PerspectiveCamera(28, 230 / 190, 0.1, 100), sInner = new THREE.Group(); sScene.add(sInner);
 let sGhost = null, sFor = null;
-const MODLBL = { engine: 'MOTOR', transmission: 'TRANSMISSÃO', tracks: 'ESTEIRA', breech: 'CULATRA', drive: 'GIRO DA TORRE' };
+const MODSHORT = { engine: 'MOTOR', transmission: 'TRANS', tracks: 'ESTEIRA', breech: 'CULATRA', drive: 'GIRO' }, VIEW = 0.7;
 afterRender.push(() => {
   const t = S.player;
   if (!t || t.type === 'plane' || S.mode === 'air' || S.state !== 'play' || !stc.offsetParent) return;
@@ -198,21 +205,37 @@ afterRender.push(() => {
   sCam.position.set(Math.sin(yaw) * Math.cos(pit) * dist, cy + Math.sin(pit) * dist, Math.cos(yaw) * Math.cos(pit) * dist + D.L * 0.08); sCam.lookAt(0, cy, D.L * 0.08);
   const Hc = renderer.domElement.clientHeight, pr = renderer.getPixelRatio();
   renderer.getViewport(_vp); renderer.getScissor(_sc); const st = renderer.getScissorTest(), ac = renderer.autoClear, a0 = renderer.getClearAlpha(); renderer.getClearColor(_cc);
-  sCam.aspect = r.width / r.height; sCam.updateProjectionMatrix();
+  const vh = r.height * VIEW; // o 3D ocupa a parte de cima; embaixo ficam as fileiras
+  sCam.aspect = r.width / vh; sCam.updateProjectionMatrix();
   renderer.setRenderTarget(null); renderer.autoClear = false; renderer.setScissorTest(true);
-  renderer.setViewport(r.left, Hc - r.bottom, r.width, r.height); renderer.setScissor(r.left, Hc - r.bottom, r.width, r.height);
+  renderer.setViewport(r.left, Hc - r.top - vh, r.width, vh); renderer.setScissor(r.left, Hc - r.top - vh, r.width, vh);
   renderer.setClearColor(0x10140f, 1); renderer.clear(true, true, false);
   renderer.render(sScene, sCam);
   renderer.setClearColor(_cc, a0); renderer.setViewport(_vp); renderer.setScissor(_sc); renderer.setScissorTest(st); renderer.autoClear = ac;
   // cópia para o canvas do painel (2× para ficar nítido) + avisos por cima
   const W = Math.round(r.width * 2), Hh = Math.round(r.height * 2); if (stc.width !== W || stc.height !== Hh) { stc.width = W; stc.height = Hh; }
   stx.clearRect(0, 0, W, Hh);
-  stx.drawImage(renderer.domElement, r.left * pr, r.top * pr, r.width * pr, r.height * pr, 0, 0, W, Hh);
-  const bad = Object.keys(t.mods).filter(k => t.mods[k].broken).map(k => MODLBL[k] || k.toUpperCase());
-  const dead = t.crew.filter(c => !c.alive).length;
-  stx.font = '600 20px "IBM Plex Mono", monospace'; stx.textAlign = 'left'; stx.textBaseline = 'top';
-  bad.forEach((b, i) => { stx.fillStyle = `rgba(255,90,64,${0.7 + 0.3 * pulse})`; stx.fillRect(10, 12 + i * 26, 10, 16); stx.fillText(b, 28, 10 + i * 26); });
-  stx.textAlign = 'right'; stx.fillStyle = dead ? '#efa53c' : 'rgba(221,214,183,.75)'; stx.fillText(`${t.crew.length - dead}/${t.crew.length}`, W - 10, 10);
+  const V2 = Math.round(Hh * VIEW);
+  stx.drawImage(renderer.domElement, r.left * pr, r.top * pr, r.width * pr, vh * pr, 0, 0, W, V2);
+  // fileiras: tripulação (posto) e módulos; verde/cinza = inteiro, âmbar = trocando de posto/em reparo, vermelho = fora
+  const row = (items, y) => {
+    const gap = 6, w = (W - 16 - gap * (items.length - 1)) / items.length, h = (Hh - V2 - 22) / 2;
+    const fs = Math.round(Math.min(h * 0.5, (w - 8) / Math.max(...items.map(it => it[0].length)) * 1.6));
+    stx.font = `600 ${fs}px "IBM Plex Mono", monospace`; stx.textAlign = 'center'; stx.textBaseline = 'middle';
+    items.forEach(([label, st], i) => {
+      const x = 8 + i * (w + gap), col = st === 'bad' ? `rgba(255,84,60,${0.75 + 0.25 * pulse})` : st === 'warn' ? '#efa53c' : st === 'crew' ? '#93cf6c' : 'rgba(201,196,171,.8)';
+      stx.fillStyle = st === 'bad' ? 'rgba(120,24,16,.55)' : 'rgba(255,255,255,.04)'; stx.fillRect(x, y, w, h);
+      stx.strokeStyle = col; stx.lineWidth = 2; stx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      stx.fillStyle = col; stx.fillText(label, x + w / 2, y + h / 2 + 1);
+      if (st === 'bad') { stx.beginPath(); stx.moveTo(x + 4, y + h - 4); stx.lineTo(x + w - 4, y + 4); stx.stroke(); }
+    });
+    return h;
+  };
+  const h1 = row(t.crew.map(c => [c.short, !c.alive ? 'bad' : swap.has(c) ? 'warn' : 'crew']), V2 + 6);
+  row(Object.keys(t.mods).map(k => [MODSHORT[k] || k, t.mods[k].broken ? (t.repairT > 0 ? 'warn' : 'bad') : 'ok']), V2 + 12 + h1);
+  stx.font = '600 20px "IBM Plex Mono", monospace'; stx.textBaseline = 'top'; stx.textAlign = 'right';
+  const dead = t.crew.filter(c => !c.alive).length, af = t.ammoFrac();
+  stx.fillStyle = 'rgba(221,214,183,.75)'; stx.fillText(`MUN ${Math.round(af * 100)}%`, W - 10, 10);
   if (t.repairT > 0) { stx.strokeStyle = '#efa53c'; stx.lineWidth = 7; stx.beginPath(); stx.arc(W - 34, Hh - 34, 22, -Math.PI / 2, -Math.PI / 2 + (1 - t.repairT / t.repairMax) * Math.PI * 2); stx.stroke(); }
   if (t.fire > 0) { stx.strokeStyle = `rgba(255,120,40,${0.5 + 0.5 * pulse})`; stx.lineWidth = 6; stx.strokeRect(3, 3, W - 6, Hh - 6); }
 });

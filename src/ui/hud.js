@@ -172,6 +172,8 @@ function reticles(t) {
       cls = E.ricoP > .5 || E.pen < E.eff ? 'nopen' : E.pen < E.eff * 1.15 ? 'maybe' : 'pen';
     }
     gunret.className = cls + (t.canFire() ? '' : ' unready');
+    // na luneta o canhão é o próprio centro: sem bolinha; a chance de perfurar pinta o chevron do retículo
+    cam.penCls = cls; if (cam.sniper) gunret.hidden = true;
     if (settings.gameplay.tankAssist && !t.def.gun.auto) { const ip = predictImpact(t, new V3()); if (ip) toScreen(ip, drop); }
   } else gunret.hidden = true;
 }
@@ -195,11 +197,9 @@ function drawScope(t) {
     for (let m = -40; m <= 40; m += 10) { const x = cx + Math.tan(m / 1000) * f; sctx.fillRect(x - 1, cy - (m % 20 ? 5 : 10), 2, m % 20 ? 10 : 20); }
   } else {
     sctx.fillRect(cx - R, cy - 1.5, R - 60, 3); sctx.fillRect(cx + 60, cy - 1.5, R - 60, 3); sctx.fillRect(cx - 1.5, cy + 60, 3, R - 60);
+    sctx.save(); sctx.strokeStyle = { pen: '#58c26a', maybe: '#e8b23c', nopen: '#e2553f' }[cam.penCls] || 'rgba(10,10,10,.85)'; sctx.lineWidth = 2.5;
     sctx.beginPath(); sctx.moveTo(cx - 9, cy + 14); sctx.lineTo(cx, cy); sctx.lineTo(cx + 9, cy + 14); sctx.stroke();
-    // para onde o atirador quer levar o canhão (some quando o canhão chega lá)
-    _a.copy(camera.position).addScaledVector(cam.want, 1000).project(camera);
-    const wx = cx + _a.x * w / 2, wy = cy - _a.y * h / 2;
-    if (_a.z < 1 && Math.hypot(wx - cx, wy - cy) > 5) { sctx.save(); sctx.strokeStyle = 'rgba(221,214,183,.9)'; sctx.lineWidth = 1.5; sctx.beginPath(); const k = Math.min(1, R * .94 / Math.hypot(wx - cx, wy - cy)); sctx.arc(cx + (wx - cx) * k, cy + (wy - cy) * k, 9, 0, Math.PI * 2); sctx.stroke(); sctx.restore(); }
+    sctx.restore();
     const am = t.ammo;
     sctx.font = '500 12px "IBM Plex Mono", monospace'; sctx.textAlign = 'right'; sctx.textBaseline = 'middle';
     for (let r = 200; r <= 2000; r += 200) {

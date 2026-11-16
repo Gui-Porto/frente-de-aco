@@ -135,10 +135,10 @@ h1 span{display:block;color:var(--amber)}
 #boot{position:fixed;inset:0;display:grid;place-items:center;background:var(--ink);color:var(--khaki);font-family:var(--display);font-size:28px;letter-spacing:.04em;z-index:50}
 #mini{left:auto;right:16px;bottom:16px;width:220px;height:220px;transition:width .15s,height .15s}
 #mini.big{width:min(70vh,640px);height:min(70vh,640px);right:50%;bottom:50%;transform:translate(50%,50%)}
-#vehHud{position:absolute;left:16px;bottom:16px;display:flex;flex-direction:column;gap:6px;width:250px}
+#vehHud{position:absolute;left:16px;bottom:16px;display:flex;flex-direction:column;gap:6px;width:300px}
 .vcard{background:rgba(16,20,14,.78);border:1px solid var(--line);padding:8px 10px;display:flex;flex-direction:column;gap:6px}
 .vcard .ptitle b{font-family:var(--display);font-weight:400;font-size:20px}
-#status{width:230px;height:190px;display:block;align-self:center}
+#status{width:280px;height:250px;display:block;align-self:center}
 .readouts{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
 .readouts div{display:flex;flex-direction:column;align-items:flex-start;background:rgba(255,255,255,.04);padding:3px 6px;border:1px solid rgba(255,255,255,.07)}
 .readouts small{font-size:10px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
