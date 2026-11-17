@@ -2,7 +2,7 @@ import { S, tanks, planes } from '../core/state.js';
 import { V3, UP, clamp, rand, angDiff } from '../core/util.js';
 import { H, POINTS, AIRSPAWN, AIRLIMIT } from '../world/terrain.js';
 import { obstNear } from '../world/scenery.js';
-import { G } from '../data/vehicles.js';
+import { G, DEG, penAt, ballistic } from '../data/vehicles.js';
 import { los, losPts } from '../combat/ballistics.js';
 import { _az, _tmp } from '../vehicles/tank.js';
 import { _pf, _pt } from '../vehicles/plane.js';
@@ -17,7 +17,7 @@ export class TankBrain {
     this.stuck = 0; this.rev = 0; this.revSteer = 1; this.hold = false; this.goal = null;
     this.style = Math.random() < .45 ? 'sniper' : 'brawler'; this.side = Math.random() < .5 ? 1 : -1;
     this.offset = Math.random() * Math.PI * 2; this.pref = Math.floor(Math.random() * 3); this.extAt = rand(2.5, 6);
-    this.part = 'hull'; this.avoid = 0; this.spaa = t.type === 'spaa';
+    this.part = 'hull'; this.avoid = 0; this.peek = 0; this.spaa = t.type === 'spaa';
   }
   decide() {
     const t = this.t; let best = null, bd = 1e9;
@@ -38,11 +38,14 @@ export class TankBrain {
       this.err.set(rand(-1, 1), rand(-.4, 1), rand(-1, 1)).multiplyScalar(bd * 0.012);
       this.part = Math.random() < .5 ? 'hull' : 'turret';
       if (best && !this.spaa && best.type !== 'plane') {
-        const am = t.gun.ammo, thick = best.def.armor.front[0] >= 100;
-        let s = 0;
-        if (best.type === 'spaa' && am[2]) s = 2;
-        else if (thick && am[0].pen < 170 && t.ammoLeft[1] > 0) s = 1;
-        if (t.ammoLeft[s] > 0) t.selectAmmo(s);
+        // munição: a primeira que fura a frente do alvo naquela distância (HE contra antiaérea); se nenhuma fura, a de
+        // maior perfuração e a mira desce para a placa inferior
+        const am = t.gun.ammo, A = best.def.armor, he = am.findIndex(a => a.type === 'HE');
+        const eff = a => A.front[0] / Math.cos(A.front[1] * DEG) * (a.type === 'HEAT' ? A.ce || 1 : 1), pen = a => penAt(a, ballistic(a, bd).v);
+        const ok = am.map((a, i) => i).filter(i => am[i].type !== 'HE' && t.ammoLeft[i] > 0);
+        let s = best.type === 'spaa' && he >= 0 && t.ammoLeft[he] > 0 ? he : ok.find(i => pen(am[i]) > eff(am[i]) * 1.05);
+        if (s === undefined) { const low = a => pen(a) / (A.lfront[0] / Math.cos(A.lfront[1] * DEG) * (a.type === 'HEAT' ? A.ce || 1 : 1)); s = ok.sort((a, b) => low(am[b]) - low(am[a]))[0]; this.part = 'low'; } // a que mais sobra contra a placa inferior
+        if (s !== undefined && s !== t.loaded) t.selectAmmo(s);
       }
     }
     const open = POINTS.filter(p => p.owner !== t.team || p.contested);
@@ -62,8 +65,14 @@ export class TankBrain {
     if (this.rev > 0) { this.rev -= dt; thr = -1; st = this.revSteer; }
     else if (this.hold && this.target && this.target.type !== 'plane') {
       const b = Math.atan2(this.target.pos.x - t.pos.x, this.target.pos.z - t.pos.z);
-      const ang = t.def.key === 't34' ? 0 : t.def.key === 'tiger' ? .5 * this.side : .3 * this.side; // inclinar o casco
+      // inclinar o casco: glacis muito deitada já rende de frente; chapa vertical ganha espessura em diagonal (mais se a lateral for grossa)
+      const A = t.def.armor, ang = A.front[1] >= 55 ? 0 : (A.side[0] >= 60 ? .5 : .3) * this.side;
       const e = angDiff(yaw, b + ang); st = Math.abs(e) > 0.05 ? clamp(e * 3, -1, 1) : 0;
+      // atira e recua: enquanto o municiador carrega o tanque dá ré (sai da mira de quem respondeu); carregado, volta ao ponto de tiro
+      if (this.style === 'sniper' && !t.gun.auto && t.gun.reload > 4) {
+        if (t.loaded < 0 && this.peek < 2.5) { thr = -0.8; this.peek += dt; }
+        else if (t.loaded >= 0 && this.peek > 0) { thr = 0.8; this.peek -= dt; }
+      }
     } else if (this.goal) {
       const dx = this.goal.x - t.pos.x, dz = this.goal.z - t.pos.z, d = Math.hypot(dx, dz);
       let diff = angDiff(yaw, Math.atan2(dx, dz));
@@ -89,7 +98,7 @@ export class TankBrain {
       t.firing = this.aimT > 0.6 && t.aimErr < 0.04 && d < 1600;
     } else if (tg) {
       this.aimT += dt;
-      const D2 = tg.def, y = this.part === 'hull' ? D2.clr + D2.Hh * .55 : D2.clr + D2.Hh + D2.turret.h * .5;
+      const D2 = tg.def, y = this.part === 'low' ? D2.clr + D2.Hh * .2 : this.part === 'hull' ? D2.clr + D2.Hh * .55 : D2.clr + D2.Hh + D2.turret.h * .5;
       const aim = _tmp.set(0, y, 0).applyMatrix4(tg.root.matrixWorld);
       const d = t.pos.distanceTo(tg.pos), tof = d / t.ammo.v * 1.06;
       aim.addScaledVector(tg.vel, tof);
