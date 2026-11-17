@@ -7,7 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 //   (arquivo com nós hull/turret/gun dispensa turret e cut; `off` translada o arquivo)
 //   def.model = { url, turret: 'nome do material da torre', ring: [x, y, z] (centro do anel da torre),
 //                 trunnion: [x, y, z] (munhão do canhão), cut: z a partir do qual a malha da torre é canhão/mantelete,
-//                 muzzle: z da boca do cano, scale?, rot? }
+//                 muzzle: z da boca do cano, muzzles?: [[x, y], ...] (vários canos), scale?, rot? }
 // Coordenadas do arquivo já no mundo dele: +y cima, +z frente (cano), metros, chão em y = 0.
 // O arquivo não precisa ter nós separados: a torre é achada pelo material e o canhão é recortado dela em `cut`.
 // Sem arquivo (ou falha ao carregar) o jogo segue com o tanque procedural.
@@ -235,7 +235,8 @@ export function gltfTank(D, tagArmor, proc) {
     }
   };
   put(C.parts.hull, root, 'hull'); put(C.parts.track, root, 'track'); put(C.parts.turret, turret, 'turret'); put(C.parts.gun, gunPivot, 'mantlet');
-  const mz = new THREE.Object3D(); mz.position.set(0, 0, M.muzzle - M.trunnion[2]); gunPivot.add(mz);
+  // bocas: uma no eixo do canhão, ou `muzzles: [[x, y], ...]` (antiaérea de vários canos, coordenadas do arquivo)
+  const muzzles = (M.muzzles || [[M.trunnion[0], M.trunnion[1]]]).map(([x, y]) => { const mz = new THREE.Object3D(); mz.position.set(x - M.trunnion[0], y - M.trunnion[1], M.muzzle - M.trunnion[2]); gunPivot.add(mz); return mz; });
   const mgMuzzle = new THREE.Object3D(); mgMuzzle.position.set(D.turret.w * .14, .05, .7); gunPivot.add(mgMuzzle);
   const still = () => ({ map: { offset: { x: 0 } } }), wheels = []; // a esteira do modelo anda por trackAnim, não por textura
   let trackAnim = null;
@@ -278,5 +279,5 @@ export function gltfTank(D, tagArmor, proc) {
     f ? shadowOnly.delete(lo.root) : shadowOnly.add(lo.root);
   };
   const lodSync = () => { lo.turret.rotation.y = turret.rotation.y; lo.gunPivot.rotation.x = gunPivot.rotation.x; };
-  return { root, turret, gunPivot, muzzles: [mz], mgMuzzle, mats: [...mats, ...lo.mats], wheels, armorMeshes, trackL: still(), trackR: still(), trackAnim, lod: lo, setLod, lodSync };
+  return { root, turret, gunPivot, muzzles, mgMuzzle, mats: [...mats, ...lo.mats], wheels, armorMeshes, trackL: still(), trackR: still(), trackAnim, lod: lo, setLod, lodSync };
 }

@@ -6,10 +6,9 @@ Lista viva dos pedidos, na ordem em que serão feitos. Cada item vira uma branch
 
 Feito em 2026-11-17 e integrado em `develop`: M1 Abrams, jatos de ataque na era Moderna, estradas, minimapa orientado, distância na mira, revisão da HUD por captura, medição de desempenho (sem regressão) e a autocrítica em `docs/AVALIACAO.md`. Não foram entregues pelos agentes: P-47 com modelo real (segue na lista abaixo).
 
-Pendente:
+Antiaéreas com modelo real feitas em 2026-11-17: Wirbelwind (Prak) e Gepard (xFORTUNAx), esteiras ainda paradas (sem `run`).
 
-1. Antiaérea com modelo real — **aguardando o dono autorizar o download**: "FlakPanzer IV Wirbelwind" de Prak (Sketchfab `0995d38d4b1f4648b5c1bc1384f4eeaf`, CC BY, 42,9 mil faces; página conferida em 2026-11-17, descrição sem indício de extração de jogo). Era Moderna: Gepard de xFORTUNAx `67815bf4efae4f3da979dbb3696daf85` (23,9 mil triângulos, feito do zero no Blender, peças separadas — preferido) ou Tunguska de usedm `54ff4d655755473d99eab1ccc7eb6bfc`. Baixar pelo Chrome logado, preparar com `tools/blender/prep.py`.
-2. Próximos passos sugeridos pela avaliação: texturas/adereços do mapa, tripulação por veículo (`def.crew`), HEAT.
+Pendente: tripulação por veículo (`def.crew`), HEAT, texturas/adereços do mapa, esteiras animadas das antiaéreas.
 
 ## Em andamento / próximos
 
@@ -30,7 +29,6 @@ Pendente:
   - Rejeitar autores com rips de jogo: KojfDiscord, 42manako, MirzaArrafiERV_45, Jeyhun1985, manbs999, scout., s9pata, fuzion_z3, manilov.ap.
   - Tanque moderno exige regras novas: estabilizador, APFSDS, blindagem composta, telêmetro.
 - **Era Moderna** (menu → Era): hoje só o T-72M1 dos dois lados. Falta o M1 Abrams (arquivo baixado, `m1_abrams.glb` de Artem.Goyko: malha única e em escala minúscula — precisa de separação por ilhas como o T-34), HEAT, telêmetro a laser, tripulação de 3 (o jogo assume 5) e aviões modernos na batalha de tanques.
-- **Wirbelwind (antiaérea)** segue procedural; precisa de modelo.
 
 ## Pendências menores
 

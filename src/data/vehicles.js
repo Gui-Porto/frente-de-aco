@@ -102,11 +102,28 @@ export const TANKS = {
     mass: 22000, hp: 300, rpm: 3000, vmax: 38 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: false,
     L: 5.9, W: 2.88, Hh: 1.3, clr: 0.4, trackW: 0.4, transFront: true,
     turret: { w: 2.2, l: 2.2, h: 0.75, z: -0.2, shape: 'open' },
+    // "FlakPanzer IV Wirbelwind" de Prak, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/prep.py (sem textura: cor lisa)
+    model: { url: '/models/wirbel.glb', ring: [0.06, 1.85, -0.13], trunnion: [0.06, 2.55, -0.1], muzzle: 2.26, muzzles: [[-0.3, 2.75], [0.42, 2.75], [-0.3, 2.35], [0.42, 2.35]] },
     armor: { front: [80, 10], lfront: [80, 14], side: [30, 0], rear: [20, 10], top: 12, bottom: 10, tFront: [16, 25], tSide: [16, 25], tRear: [16, 25], tTop: 0 },
     gun: { name: '4× 2 cm FlaK 38', cal: 20, len: 1.9, auto: true, barrels: 4, rpm: 1800, clip: 80, reload: 6.0, trav: 60, elevRate: 45, dep: 10, elev: 90, brake: false,
       ammo: [
         { name: 'Sprgr (HEFI-T)', type: 'HEF', pen: 6, v: 900, m: 0.12, tnt: 0.008, count: 1600, tracer: 2, dmg: 3 },
         { name: 'PzGr 40 (APCR)', type: 'APCR', pen: 43, v: 1050, m: 0.1, count: 800, tracer: 3, dmg: 2 }] },
+    mg: null
+  },
+  gepard: {
+    key: 'gepard', type: 'spaa', name: 'Flakpanzer Gepard', short: 'Gepard', nation: 'Alemanha', year: 1976, color: 0x4f5a3a, sp: 160,
+    mass: 47500, hp: 830, rpm: 2200, vmax: 65 * 1.15 / 3.6, vrev: 24 * 1.25 / 3.6, wheels: 7, rpmTraverse: false,
+    L: 7.0, W: 3.25, Hh: 1.1, clr: 0.44, trackW: 0.55, transFront: false,
+    turret: { w: 2.6, l: 3.6, h: 1.1, z: 0.2, shape: 'hex' },
+    // "Flakpanzer Gepard — Animated Low Poly" de xFORTUNAx, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/prep.py
+    model: { url: '/models/gepard.glb', ring: [0, 1.57, 0.22], trunnion: [0, 2.33, 0.09], muzzle: 3.93, muzzles: [[-1.17, 2.33], [1.17, 2.33]] },
+    armor: { front: [70, 60], lfront: [70, 50], side: [35, 0], rear: [25, 10], top: 20, bottom: 15, tFront: [40, 20], tSide: [25, 0], tRear: [25, 0], tTop: 15 },
+    // 2× 35 mm Oerlikon KDA, 550 tiros/min por cano
+    gun: { name: '2× 35 mm KDA', cal: 35, len: 3.15, auto: true, barrels: 2, rpm: 1100, clip: 160, reload: 7.0, trav: 90, elevRate: 60, dep: 10, elev: 85, brake: false, stab: true,
+      ammo: [
+        { name: 'DM21 (HEI-T)', type: 'HEF', pen: 10, v: 1175, m: 0.55, tnt: 0.098, count: 640, tracer: 2, dmg: 9 },
+        { name: 'DM13 (APDS)', type: 'APCR', pen: 110, v: 1400, m: 0.29, count: 40, tracer: 3, dmg: 5 }] },
     mg: null
   }
 };
@@ -358,7 +375,7 @@ export const VEHICLES = Object.assign({}, TANKS, PLANES);
 // Eras: cada partida usa só os veículos de uma (antigo não enfrenta moderno). LINEUP é o elenco da era ativa.
 export const ERAS = {
   ww2: { name: 'Segunda Guerra', lineup: ['t34', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'], ground: ['t34', 'tiger'], planes: ['p47', 'il2', 'fw190'], aa: 'wirbel' },
-  mod: { name: 'Moderno', lineup: ['t72', 'm1', 'f4e', 'mig21'], ground: ['t72', 'm1'], planes: ['f4e', 'mig21'], aa: null }
+  mod: { name: 'Moderno', lineup: ['t72', 'm1', 'gepard', 'f4e', 'mig21'], ground: ['t72', 'm1'], planes: ['f4e', 'mig21'], aa: 'gepard' }
 };
 export const LINEUP = [...ERAS.ww2.lineup];
 export function setEra(e) { LINEUP.splice(0, LINEUP.length, ...ERAS[e].lineup); }
