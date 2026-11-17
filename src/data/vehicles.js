@@ -118,7 +118,9 @@ export const TANKS = {
     L: 7.0, W: 3.25, Hh: 1.1, clr: 0.44, trackW: 0.55, transFront: false,
     turret: { w: 2.6, l: 3.6, h: 1.1, z: 0.2, shape: 'hex' },
     // "Flakpanzer Gepard — Animated Low Poly" de xFORTUNAx, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/prep.py
-    model: { url: '/models/gepard.glb', ring: [0, 1.57, 0.22], trunnion: [0, 2.33, 0.09], muzzle: 3.93, muzzles: [[-1.17, 2.33], [1.17, 2.33]] },
+    model: { url: '/models/gepard.glb', ring: [0, 1.57, 0.22], trunnion: [0, 2.33, 0.09], muzzle: 3.93, muzzles: [[-1.17, 2.33], [1.17, 2.33]],
+      // a esteira do arquivo é uma cinta lisa (fica parada) com as garras soltas por cima: as garras é que andam
+      run: { plate: [0.59, 0.1], wheels: [[0.72, -2.86, 0.25], [0.41, -1.98, 0.345], [0.41, -1.31, 0.345], [0.41, -0.64, 0.345], [0.41, 0.04, 0.345], [0.41, 0.71, 0.345], [0.41, 1.38, 0.345], [0.41, 2.05, 0.345], [0.65, 2.76, 0.29]] } },
     armor: { front: [70, 60], lfront: [70, 50], side: [35, 0], rear: [25, 10], top: 20, bottom: 15, tFront: [40, 20], tSide: [25, 0], tRear: [25, 0], tTop: 15 },
     // 2× 35 mm Oerlikon KDA, 550 tiros/min por cano
     gun: { name: '2× 35 mm KDA', cal: 35, len: 3.15, auto: true, barrels: 2, rpm: 1100, clip: 160, reload: 7.0, trav: 90, elevRate: 60, dep: 10, elev: 85, brake: false, stab: true,

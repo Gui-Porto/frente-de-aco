@@ -10,7 +10,7 @@ Antiaéreas com modelo real feitas em 2026-11-17: Wirbelwind (Prak) e Gepard (xF
 
 Também feitos: tripulação por veículo (`def.crew`) e munição HEAT com fator de blindagem composta (`armor.ce`).
 
-Pendente: texturas/adereços do mapa, esteiras animadas das antiaéreas, IA usando HEAT/cobertura.
+Pendente: texturas/adereços do mapa, esteira do Wirbelwind (malha única soldada: exige recorte no Blender; a do Gepard já anda), IA usando HEAT/cobertura.
 
 ## Em andamento / próximos
 
