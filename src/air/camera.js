@@ -89,6 +89,7 @@ export function updateAirCamera(dt) {
   // Plano próximo curto só aqui (painel a ~0,8 m, consoles e trilhos da capota mais perto que os 0,3 m de sempre)
   v.root.visible = true;
   if (v.pilotMesh) v.pilotMesh.visible = !cockpit;
+  if (v.skinView && v._skinCock !== cockpit) v.skinView(v._skinCock = cockpit);
   const near = cockpit ? 0.04 : 0.3; if (camera.near !== near) { camera.near = near; camera.updateProjectionMatrix(); }
   fwdQ(viewQ, _f); upQ(viewQ, _u);
   // A suavização é feita no DESLOCAMENTO em relação ao avião (não na posição do mundo):

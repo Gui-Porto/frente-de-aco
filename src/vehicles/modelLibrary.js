@@ -22,13 +22,15 @@ export const hasModel = D => !!(D.model && cache.has(D.model.url));
 // r = o que buildPlane() montou. Esconde a chapa pintada e as insígnias projetadas nela e pendura a pele.
 export function applySkin(D, r) {
   const src = cache.get(D.model.url); if (!src) return;
-  const paint = new Set(r.mats), keep = new Set(D.model.solo ? [r.gearMesh] : [r.gearMesh, ...r.bombMeshes, ...r.rocketMeshes, ...(r.ordFit || [])]); // solo: o armamento pendurado já vem na pele
+  const paint = new Set(r.mats), keep = new Set(D.model.solo ? (D.jet ? [r.gearMesh] : [r.gearMesh, r.prop]) : // hélice: sempre a do jogo (gira, borra e para)
+    [r.gearMesh, ...r.bombMeshes, ...r.rocketMeshes, ...(r.ordFit || [])]); // solo: o armamento pendurado já vem na pele
   // model.solo: a pele é o avião inteiro (formas que o procedural não faz, como o A-10) — da estrutura só aparecem o
   // trem e os efeitos; senão some só a chapa (às vezes [pintura, ventre]) e os decalques
+  const hidden = [];
   const hide = o => {
     const decal = o.isMesh && [o.material].flat().some(m => m.polygonOffset); // insígnia projetada na chapa (vem marcada como fx)
     if (keep.has(o) || (o.userData.fx && !decal)) return;
-    if (o.isMesh && (D.model.solo || decal || [o.material].flat().some(m => paint.has(m)))) { o.visible = false; o.layers.set(1); } // camada 1: o raio das marcas de bala passa direto e pega a pele
+    if (o.isMesh && (D.model.solo || decal || [o.material].flat().some(m => paint.has(m)))) { o.visible = false; o.layers.set(1); hidden.push(o); } // camada 1: o raio das marcas de bala passa direto e pega a pele
     for (const c of o.children) hide(c);
   };
   hide(r.root);
@@ -40,5 +42,8 @@ export function applySkin(D, r) {
     if (!o.isMesh) return;
     o.castShadow = o.receiveShadow = true; o.material = o.material.clone(); o.userData.normalMat = o.material; r.mats.push(o.material); // material por avião: o fogo escurece só o dele
   });
-  for (const [n, g] of [['wingL', r.wingL], ['wingR', r.wingR], ['tail', r.tail]]) { const o = body.getObjectByName(n); if (o) g.attach(o); }
+  const nodes = [body];
+  for (const [n, g] of [['wingL', r.wingL], ['wingR', r.wingR], ['tail', r.tail]]) { const o = body.getObjectByName(n); if (o) { g.attach(o); nodes.push(o); } }
+  // solo: na vista de cabine volta a estrutura procedural (é ela que tem painel, assento e vidro por dentro) e a pele some
+  if (D.model.solo) r.skinView = cockpit => { for (const o of hidden) o.visible = cockpit; for (const o of nodes) o.visible = !cockpit; };
 }

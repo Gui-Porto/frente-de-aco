@@ -52,6 +52,14 @@ for o in objs: o.data.transform(Matrix.Translation(-c))
 span = max(abs(v.co.x) for o in objs for v in o.data.vertices) * 2; k = cfg['span'] / span
 for o in objs: o.data.transform(Matrix.Scale(k, 4)); o.data.update()
 print('escala %.4f (envergadura do arquivo %.2f)' % (k, span))
+# cutBoxes: [[x0, x1, y0, y1, z0, z1], ...] em coordenadas finais do glTF (x lado, y cima, z nariz): faces com o centro dentro
+# de uma caixa saem — é como se tira o trem de pouso de um arquivo sem peças nomeadas (o trem do jogo é o procedural)
+for bx in cfg.get('cutBoxes', []):
+    for o in objs:
+        bm = bmesh.new(); bm.from_mesh(o.data)
+        dead = [f for f in bm.faces if (lambda c: bx[0] <= c.x <= bx[1] and bx[2] <= c.z <= bx[3] and bx[4] <= -c.y <= bx[5])(f.calc_center_median())]
+        if dead: bmesh.ops.delete(bm, geom=dead, context='FACES'); bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS'); bm.to_mesh(o.data)
+        bm.free()
 # papéis
 W = cfg.get('wings', {}); groups = {'fuse': [], 'wingL': [], 'wingR': [], 'tail': []}
 def split(o, pred):                   # separa as faces de o em que pred(face) é verdadeiro; devolve o objeto novo (ou None)

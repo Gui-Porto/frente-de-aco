@@ -12,7 +12,9 @@ Também feitos: tripulação por veículo (`def.crew`) e munição HEAT com fato
 
 Também feitos (2026-11-17, 2ª rodada): esteira do Wirbelwind em elos, IA de tanque (munição por perfuração, atira-e-recua) e de ataque aéreo (bombardeio nivelado dos jatos), abetos novos, peles glTF para aeronaves (P-47 de vachtar; A-10A de AIRMAN Magazine, novo na era Moderna), som (motores dos outros blindados, zumbido do GAU-8, tiro/explosão com filtro varrendo).
 
-Pendente: decidir com o dono se o som volta a usar gravações reais (a síntese tem teto); chão com textura PBR; IA procurando cobertura; peles para os outros aviões; ficha do A-10 na Batalha Aérea.
+3ª rodada (2026-11-17): avião na batalha de tanques (retículos de impacto, marcadores, avistamento, rearme na base), gravações CC0 de som + pasta `public/audio/local/`, peles reais para MiG-21, F-4E e Il-2.
+
+Pendente: ouvir e ajustar volumes das gravações (ninguém ouviu ainda); chama da pós-combustão alinhada às peles; peles para Fw 190, Spitfire, F-86, MiG-15; chão com textura PBR; IA procurando cobertura; ficha do A-10 na Batalha Aérea; mod de som do WT só com autorização do autor.
 
 ## Em andamento / próximos
 

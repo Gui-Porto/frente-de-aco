@@ -154,6 +154,8 @@ export const PLANES = {
   },
   il2: {
     key: 'il2', type: 'plane', gear: { track: 3.85, ret: 'in' }, name: 'Il-2 (1942)', short: 'Il-2', nation: 'URSS', year: 1942, color: 0x3d4a2c, sp: 340,
+    // pele: "Ilyushin IL-2 Sturmovik" de helijah, CC BY 4.0 (ver CREDITOS.md)
+    model: { url: '/models/il2.glb', solo: true, fz: 3.6 }, // fz: leva a hélice procedural até o nariz da pele
     mass: 6100, S: 38.5, span: 14.6, L: 11.6, cla: 4.5, clmax: 1.4, cd0: 0.026, e: 0.8, engine: 'am38',
     vne: 620 / 3.6, glim: 9, kda: 0.035, kde: 0.3, kdr: 0.05, armor: { pilot: 12, engine: 6, fuel: 6 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 30, fuel: 22, fuse: 55 },
@@ -246,6 +248,8 @@ export const PLANES = {
   // wave: arrasto de onda transônico/supersônico { mcr, peak (ΔCD no pico), mpk (Mach do pico) }
   f4e: {
     key: 'f4e', type: 'plane', marks: { serial: 'AF 67-270', decalZ: -0.33 }, gear: { track: 5.45, ret: 'in', mw: 0.26, twinN: true }, name: 'F-4E Phantom II', short: 'F-4E', nation: 'EUA', year: 1967, color: 0x7a7d63, sp: 640, jet: true, sweep: 45,
+    // pele: "McDonnell Douglas F-4 Phantom II" de andertan, CC BY 4.0 (ver CREDITOS.md)
+    model: { url: '/models/f4e.glb', solo: true },
     mass: 18200, fuel: 4000, S: 49.2, span: 11.7, L: 19.2, cla: 3.5, clmax: 1.25, cd0: 0.021, e: 0.7, engine: 'j79', engines: 2, rcs: 6,
     mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.72, 0.2], inertia: [223700, 44700, 253500], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² [arfagem, rolagem, guinada] do F-4C/E publicado (a estimativa por L² dava 2–2,4× mais)
     vne: 1400 / 3.6, glim: 9.5, kda: 0.05, kde: 0.36, kdr: 0.03, armor: { pilot: 6 },
@@ -294,6 +298,8 @@ export const PLANES = {
   },
   mig21: {
     key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, fences: [{ ws: 0.5, h: 0.17, len: 0.85 }], ventral: { zf: -0.3, h: 0.45, c: 1.6 }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
+    // pele: "MiG-21bis Fishbed - Game-Ready Jet" de xFORTUNAx, CC BY 4.0 (ver CREDITOS.md)
+    model: { url: '/models/mig21.glb', solo: true },
     mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0195, e: 0.7, engine: 'r13', rcs: 3,
     mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.75, 0.17], inertia: [57000, 7000, 61000], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² aproximados do MiG-21 (asa curta e fuselagem fina)
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },
