@@ -16,7 +16,7 @@ import { destroyVehicle } from '../combat/ballistics.js';
 import { buildPanels, hint } from './hud.js';
 
 const typeLabel = D => (D.type === 'plane' ? 'AVIÃO' : D.type === 'spaa' ? 'AA' : 'TANQUE');
-let choice = 'sherman', show = null, armorView = false;
+let choice = LINEUP[0], show = null, armorView = false;
 const HANGAR = new THREE.Vector3(0, 0, 334);
 
 // ---------- Hangar ----------

@@ -205,16 +205,18 @@ function drawScope(t) {
     sctx.restore();
     const am = t.ammo;
     sctx.font = '500 12px "IBM Plex Mono", monospace'; sctx.textAlign = 'right'; sctx.textBaseline = 'middle';
-    for (let r = 200; r <= 2000; r += 200) {
+    // munição rápida (APFSDS) cai pouco: marcas de 400 em 400 m até 4 km, senão a escala amontoava no centro
+    const st = am.v > 1200 ? 400 : 200; let ly = -1e9;
+    for (let r = st; r <= Math.min(st * 10, (am.tab.length - 1) * 25); r += st) {
       const y = cy + Math.tan(ballistic(am, r).ang) * f; if (y > cy + R * .95) break;
-      const big = r % 400 === 0; sctx.fillRect(cx - (big ? 46 : 30), y - 1, big ? 28 : 16, 2);
-      if (big) sctx.fillText(String(r / 100), cx - 50, y);
+      const big = r % (st * 2) === 0; sctx.fillRect(cx - (big ? 46 : 30), y - 1, big ? 28 : 16, 2);
+      if (big && y - ly >= 13) { sctx.fillText(String(r / 100), cx - 50, y); ly = y; }
     }
   }
   sctx.textAlign = 'center'; sctx.fillStyle = 'rgba(221,214,183,.85)'; sctx.font = '500 12px "IBM Plex Mono", monospace';
   const zoom = Math.tan(30 * Math.PI / 180) / Math.tan(camera.fov * Math.PI / 360);
   const rng = t.seat('commander').alive && cam.range ? `≈ ${Math.round(cam.range / 25) * 25} m` : 'sem telemetria';
-  sctx.fillText(`×${zoom.toFixed(1)}  ·  ${cam.binoc ? 'binóculo' : t.ammo.name}  ·  ${rng}`, cx, cy + R - 24);
+  sctx.fillText(`×${zoom.toFixed(1)}  ·  ${cam.binoc ? 'binóculo' : t.ammo.name}  ·  ${rng}`, cx, Math.min(cy + R - 24, h - 118)); // acima do painel de munição (ficava escondido atrás dele)
 }
 
 // ---------- Placar ----------

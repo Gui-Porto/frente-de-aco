@@ -227,7 +227,8 @@ function terrainMaterial() {
           vec3 dirt = vec3(0.2, 0.16, 0.105) * (0.45 + dd * 1.15);
           c = mix(c, dirt * 0.8, max(dm.b, (1.0 - smoothstep(0.0, 3.2, e)) * (0.3 + 0.6 * nz)) * 0.85);
           vec3 bed = vec3(0.27, 0.215, 0.145) * (0.5 + dd) * (0.85 + 0.3 * pv);
-          float rut = (1.0 - smoothstep(0.16, 0.42, abs(e + 0.8))) + (1.0 - smoothstep(0.16, 0.42, abs(e + 2.35)));
+          float er = dm.r * 16.0 - 4.0 + (nz - 0.5) * 0.25; // trilhos seguem o eixo da estrada: só um tremor leve (com o ruído da borda ziguezagueavam)
+          float rut = (1.0 - smoothstep(0.16, 0.42, abs(er + 0.8))) + (1.0 - smoothstep(0.16, 0.42, abs(er + 2.35)));
           bed *= 1.0 - 0.32 * rut * clamp(0.4 / max(px, 0.001), 0.0, 1.0);
           c = mix(c, bed, 1.0 - smoothstep(-0.5, 0.25, e));
           float cr = dm.g * 2.0 - 1.0;
