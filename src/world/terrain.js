@@ -76,15 +76,35 @@ export function H(x, z) {
 }
 export function terrainNormal(x, z, out) { const e = 0.8; return out.set(H(x - e, z) - H(x + e, z), 2 * e, H(x, z - e) - H(x, z + e)).normalize(); }
 
+// Estradas: polilinhas [ax, az, bx, bz, meia-largura] com curvas suaves (desvio lateral que zera nas pontas, então
+// continuam passando pelos pontos e spawns). Estrada principal L–O (A–B–C) e N–S (spawns–B); caminhos de roça nas diagonais.
 export const ROADS = [];
-for (const p of POINTS) { ROADS.push([SPAWN[1].x, SPAWN[1].z, p.x, p.z]); ROADS.push([SPAWN[-1].x, SPAWN[-1].z, p.x, p.z]); }
-ROADS.push([POINTS[0].x, POINTS[0].z, POINTS[1].x, POINTS[1].z], [POINTS[1].x, POINTS[1].z, POINTS[2].x, POINTS[2].z]);
-ROADS.push([-2600, 60, -190, 25], [190, -25, 2600, -80], [0, 300, 40, 2600], [0, -300, -60, -2600]);
+function road(ax, az, bx, bz, w, bend, k, step = 26) {
+  const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(L / step)), nx = -(bz - az) / L, nz = (bx - ax) / L; let px = ax, pz = az;
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, o = Math.sin(t * Math.PI) ** 2 * bend * (Math.sin(t * 5.1 + k) * 0.6 + Math.sin(t * 11.3 + k * 2.3) * 0.4), x = ax + (bx - ax) * t + nx * o, z = az + (bz - az) * t + nz * o;
+    ROADS.push([px, pz, x, z, w]); px = x; pz = z;
+  }
+}
+{
+  const [A, B, C] = POINTS, S1 = SPAWN[1], S2 = SPAWN[-1];
+  road(A.x, A.z, B.x, B.z, 3.2, 11, 0.4); road(B.x, B.z, C.x, C.z, 3.2, 11, 2.9); road(S1.x, S1.z, B.x, B.z, 3.2, 13, 1.7); road(S2.x, S2.z, B.x, B.z, 3.2, 13, 4.1);
+  road(S1.x, S1.z, A.x, A.z, 1.9, 16, 0.9); road(S1.x, S1.z, C.x, C.z, 1.9, 16, 3.3); road(S2.x, S2.z, A.x, A.z, 1.9, 16, 5.2); road(S2.x, S2.z, C.x, C.z, 1.9, 16, 2.2);
+  road(-2600, 60, A.x, A.z, 3.2, 70, 1.1, 120); road(C.x, C.z, 2600, -80, 3.2, 70, 3.9, 120); road(S1.x, S1.z, 40, 2600, 3.2, 70, 0.2, 120); road(S2.x, S2.z, -60, -2600, 3.2, 70, 4.6, 120);
+}
 function segDist2D(px, pz, ax, az, bx, bz) {
   const dx = bx - ax, dz = bz - az, t = clamp(((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz), 0, 1);
   return Math.hypot(px - ax - dx * t, pz - az - dz * t);
 }
-export const roadDist = (x, z) => { let d = 1e9; for (const r of ROADS) d = Math.min(d, segDist2D(x, z, r[0], r[1], r[2], r[3])); return d; };
+// distância até a BORDA da estrada mais próxima (negativa dentro do leito), exata até 40 m; grade de 32 m com os trechos vizinhos
+const RGRID = new Map(), RC = 32;
+export function roadEdge(x, z) {
+  const i = Math.floor(x / RC), j = Math.floor(z / RC), k = (i + 2048) * 4096 + j + 2048; let l = RGRID.get(k);
+  if (!l) { const cx = (i + .5) * RC, cz = (j + .5) * RC; l = ROADS.filter(r => segDist2D(cx, cz, r[0], r[1], r[2], r[3]) < 44 + RC * .71); RGRID.set(k, l); }
+  let d = 40; for (const r of l) d = Math.min(d, segDist2D(x, z, r[0], r[1], r[2], r[3]) - r[4]);
+  return d;
+}
+export const roadDist = (x, z) => roadEdge(x, z) + 2;
 
 // Mosaico de lotes cultivados (Normandia)
 export const FW = 64, FD = 52;
@@ -94,15 +114,15 @@ const CROP_AVG = [0, 1, 2].map(k => CROPS.reduce((a, c) => a + c[k], 0) / CROPS.
 export function cropAt(x, z) { const [i, j] = fieldCell(x, z); return Math.floor(hash2(i, j) * CROPS.length); }
 // cor macro + pesos (grama, terra, rocha)
 // macro = true: sem o lote de lavoura (cor média) — fora do campo dos tanques o shader pinta lotes, cercas e mata por pixel
-export function groundSample(x, z, col, w, macro = false) {
+// noRoad: a malha do campo dos tanques não leva a estrada na cor do vértice (3 m por vértice borrava) — o shader pinta por pixel
+export function groundSample(x, z, col, w, macro = false, noRoad = false) {
   const ci = macro ? 0 : cropAt(x, z), c = macro ? CROP_AVG : CROPS[ci];
   const n = 0.5 + 0.5 * (Math.sin(x * 0.045) * Math.sin(z * 0.038) * 0.6 + 0.4 * Math.sin(x * 0.11 + z * 0.083));
   let r = c[0] * (0.85 + n * 0.3), g = c[1] * (0.85 + n * 0.3), b = c[2] * (0.85 + n * 0.3);
   let wg = ci === 2 && !macro ? 0.25 : 1, wd = ci === 2 && !macro ? 0.75 : 0, wr = 0;
-  if (ci === 2 && !macro) { const s = 0.5 + 0.5 * Math.sin(x * 1.6); r *= 0.85 + s * 0.2; g *= 0.85 + s * 0.2; }
   const slope = Math.hypot(H(x + 1, z) - H(x - 1, z), H(x, z + 1) - H(x, z - 1)) / 2;
   if (slope > 0.3) { const k = clamp((slope - 0.3) * 3, 0, 0.85); r = lerp(r, 0.17, k); g = lerp(g, 0.155, k); b = lerp(b, 0.12, k); wr = k; wg *= 1 - k; }
-  const rd = roadDist(x, z);
+  const rd = noRoad ? 99 : roadDist(x, z);
   if (rd < 6.5) { const k = clamp((6.5 - rd) / 3, 0, 1) * 0.95; r = lerp(r, 0.17, k); g = lerp(g, 0.13, k); b = lerp(b, 0.075, k); wd = Math.max(wd, k); wg *= 1 - k; }
   for (const p of POINTS) { const d = Math.hypot(x - p.x, z - p.z); if (d < 30) { const k = (1 - d / 30) * 0.65; r = lerp(r, 0.16, k); g = lerp(g, 0.13, k); b = lerp(b, 0.085, k); wd = Math.max(wd, k); wg *= 1 - k; } }
   if (col) col.setRGB(r, g, b);
@@ -126,15 +146,39 @@ function detailTex(kind, size = 512) {
 }
 const TX = { grass: detailTex('grass'), dirt: detailTex('dirt'), rock: detailTex('rock') };
 
+// Mapa de detalhe do campo dos tanques (1024², ~0,9 m por texel), lido por pixel no shader do terreno:
+// R = borda da estrada (−4..12 m), G = cratera (0,5 neutro; menos = queimado, mais = terra revirada da borda),
+// B = lama/terra batida (pátios), A = sulcos de lavoura (0,5 neutro; mais = fileiras ao longo de x, menos = ao longo de z)
+export const DMAP = (() => {
+  const N = 1024, step = INNER / N, data = new Uint8Array(N * N * 4), FUR = [0, 0.45, 1, 0, 0.6];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const x = -INNER / 2 + (i + 0.5) * step, z = -INNER / 2 + (j + 0.5) * step, o = (j * N + i) * 4, [ci, cj] = fieldCell(x, z), f = FUR[cropAt(x, z)] * (hash2(ci + 31, cj) < 0.5 ? 1 : -1);
+    data[o] = clamp((roadEdge(x, z) + 4) / 16, 0, 1) * 255; data[o + 1] = 128; data[o + 2] = 0; data[o + 3] = 128 + f * 127;
+  }
+  const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat, THREE.UnsignedByteType);
+  tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true; tex.anisotropy = 4; tex.needsUpdate = true;
+  return { tex, N, step, data };
+})();
+// carimbo circular num canal do mapa de detalhe: f(t) com t = 0 no centro e 1 na borda devolve 0..1 (fica o valor mais longe do neutro)
+export function stampGround(ch, x, z, r, f) {
+  const { N, step, data, tex } = DMAP, mid = ch === 1 ? 128 : 0;
+  const i0 = Math.max(0, Math.floor((x - r + INNER / 2) / step)), i1 = Math.min(N - 1, Math.floor((x + r + INNER / 2) / step)), j0 = Math.max(0, Math.floor((z - r + INNER / 2) / step)), j1 = Math.min(N - 1, Math.floor((z + r + INNER / 2) / step));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    const t = Math.hypot(-INNER / 2 + (i + 0.5) * step - x, -INNER / 2 + (j + 0.5) * step - z) / r; if (t >= 1) continue;
+    const v = f(t) * 255, o = (j * N + i) * 4 + ch; if (Math.abs(v - mid) > Math.abs(data[o] - mid)) data[o] = v;
+  }
+  tex.needsUpdate = true;
+}
+
 function terrainMaterial() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
   m.onBeforeCompile = sh => {
-    sh.uniforms.tGrass = { value: TX.grass }; sh.uniforms.tDirt = { value: TX.dirt }; sh.uniforms.tRock = { value: TX.rock };
+    sh.uniforms.tGrass = { value: TX.grass }; sh.uniforms.tDirt = { value: TX.dirt }; sh.uniforms.tRock = { value: TX.rock }; sh.uniforms.tMap = { value: DMAP.tex };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec3 splat; varying vec3 vSplat; varying vec3 vWP;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvSplat = splat; vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D tGrass; uniform sampler2D tDirt; uniform sampler2D tRock; varying vec3 vSplat; varying vec3 vWP;\nfloat det(sampler2D t, vec2 p){ return texture2D(t, p * 0.33).r * 0.6 + texture2D(t, p * 0.047).r * 0.4; }\nfloat hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(hsh(i), hsh(i + vec2(1.0, 0.0)), f.x), mix(hsh(i + vec2(0.0, 1.0)), hsh(i + 1.0), f.x), f.y); }\nfloat fb(vec2 p){ float s = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { s += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; } return s / 0.9375; }')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D tGrass; uniform sampler2D tDirt; uniform sampler2D tRock; uniform sampler2D tMap; varying vec3 vSplat; varying vec3 vWP;\nfloat det(sampler2D t, vec2 p){ return texture2D(t, p * 0.33).r * 0.6 + texture2D(t, p * 0.047).r * 0.4; }\nfloat hsh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(hsh(i), hsh(i + vec2(1.0, 0.0)), f.x), mix(hsh(i + vec2(0.0, 1.0)), hsh(i + 1.0), f.x), f.y); }\nfloat fb(vec2 p){ float s = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { s += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; } return s / 0.9375; }')
       .replace('#include <color_fragment>', `#include <color_fragment>
         float dg = det(tGrass, vWP.xz), dd = det(tDirt, vWP.xz), dr = det(tRock, vWP.xz * 0.6);
         float d = dg * vSplat.x + dd * vSplat.y + dr * vSplat.z;
@@ -171,6 +215,25 @@ function terrainMaterial() {
           c = mix(c, diffuseColor.rgb * vec3(0.95, 0.92, 0.85), hi * 0.7);
           diffuseColor.rgb = mix(diffuseColor.rgb, c, mac);
         }
+        // ---- campo dos tanques: estradas com trilhos, lama, sulcos de lavoura, manchas de pasto e crateras por pixel ----
+        if (mac < 1.0) {
+          vec4 dm = texture2D(tMap, (vWP.xz + ${(INNER / 2).toFixed(1)}) / ${INNER.toFixed(1)});
+          float px = max(fwidth(vWP.x), fwidth(vWP.z)), nz = fb(vWP.xz * 0.21), pv = fb(vWP.xz / 26.0 + 5.0), dry = smoothstep(0.5, 0.75, fb(vWP.xz / 61.0 + 11.0));
+          vec3 c = diffuseColor.rgb * (0.78 + 0.44 * pv);
+          c = mix(c, c * vec3(1.5, 1.25, 0.8), dry * 0.55 * vSplat.x);
+          float fa = dm.a * 2.0 - 1.0, fc = fa > 0.0 ? vWP.z : vWP.x;
+          c *= 1.0 + 0.32 * abs(fa) * sin(fc * 6.98) * clamp(0.3 / max(px, 0.001), 0.0, 1.0);
+          float e = dm.r * 16.0 - 4.0 + (nz - 0.5) * 1.6;
+          vec3 dirt = vec3(0.2, 0.16, 0.105) * (0.45 + dd * 1.15);
+          c = mix(c, dirt * 0.8, max(dm.b, (1.0 - smoothstep(0.0, 3.2, e)) * (0.3 + 0.6 * nz)) * 0.85);
+          vec3 bed = vec3(0.27, 0.215, 0.145) * (0.5 + dd) * (0.85 + 0.3 * pv);
+          float rut = (1.0 - smoothstep(0.16, 0.42, abs(e + 0.8))) + (1.0 - smoothstep(0.16, 0.42, abs(e + 2.35)));
+          bed *= 1.0 - 0.32 * rut * clamp(0.4 / max(px, 0.001), 0.0, 1.0);
+          c = mix(c, bed, 1.0 - smoothstep(-0.5, 0.25, e));
+          float cr = dm.g * 2.0 - 1.0;
+          c = cr < 0.0 ? mix(c, vec3(0.035, 0.03, 0.026) * (0.6 + dd), -cr) : mix(c, dirt * 1.3, cr);
+          diffuseColor.rgb = mix(c, diffuseColor.rgb, mac);
+        }
         float fade = smoothstep(80.0, 600.0, length(vWP - cameraPosition));
         diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.97, fade);`);
   };
@@ -183,7 +246,7 @@ function terrainMesh(size, seg, drop, holeR, macro = false) {
     const x = pos.getX(i), z = pos.getZ(i);
     const ed = holeR ? 0 : sstep(INNER / 2 - 50, INNER / 2, Math.max(Math.abs(x), Math.abs(z))) * 1.4;
     pos.setY(i, H(x, z) - drop - ed);
-    groundSample(x, z, c, w, macro);
+    groundSample(x, z, c, w, macro, !macro);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; sp[i * 3] = w[0]; sp[i * 3 + 1] = w[1]; sp[i * 3 + 2] = w[2];
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('splat', new THREE.BufferAttribute(sp, 3));
