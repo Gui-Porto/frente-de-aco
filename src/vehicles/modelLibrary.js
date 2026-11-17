@@ -22,11 +22,18 @@ export const hasModel = D => !!(D.model && cache.has(D.model.url));
 // r = o que buildPlane() montou. Esconde a chapa pintada e as insígnias projetadas nela e pendura a pele.
 export function applySkin(D, r) {
   const src = cache.get(D.model.url); if (!src) return;
-  const paint = new Set(r.mats);
-  r.root.traverse(o => {
-    if (!o.isMesh || ![o.material].flat().some(m => paint.has(m) || m.polygonOffset)) return; // chapa (às vezes [pintura, ventre]) e decalques
-    o.visible = false; o.layers.set(1); // camada 1: o raio das marcas de bala passa direto e pega a pele
-  });
+  const paint = new Set(r.mats), keep = new Set(D.model.solo ? [r.gearMesh] : [r.gearMesh, ...r.bombMeshes, ...r.rocketMeshes, ...(r.ordFit || [])]); // solo: o armamento pendurado já vem na pele
+  // model.solo: a pele é o avião inteiro (formas que o procedural não faz, como o A-10) — da estrutura só aparecem o
+  // trem e os efeitos; senão some só a chapa (às vezes [pintura, ventre]) e os decalques
+  const hide = o => {
+    const decal = o.isMesh && [o.material].flat().some(m => m.polygonOffset); // insígnia projetada na chapa (vem marcada como fx)
+    if (keep.has(o) || (o.userData.fx && !decal)) return;
+    if (o.isMesh && (D.model.solo || decal || [o.material].flat().some(m => paint.has(m)))) { o.visible = false; o.layers.set(1); } // camada 1: o raio das marcas de bala passa direto e pega a pele
+    for (const c of o.children) hide(c);
+  };
+  hide(r.root);
+  // solo: o alojamento do trem é o da estrutura (invisível, noutra altura) — recolhido, o trem some em vez de ficar sobre a asa da pele
+  if (D.model.solo && r.gearMesh.userData.anim) { const g = r.gearMesh, anim = g.userData.anim; g.userData.anim = (k, ...a) => { anim(k, ...a); g.visible = k > 0.03; }; }
   const body = src.clone(true); if (D.model.off) body.position.fromArray(D.model.off);
   r.root.add(body); r.root.updateMatrixWorld(true);
   body.traverse(o => {

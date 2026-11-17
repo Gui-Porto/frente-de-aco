@@ -7,12 +7,15 @@
 #       wings: { obj: prefixo do objeto que traz as asas fundidas à fuselagem, root: meia-largura da fuselagem (m, já na
 #                escala final), zmin: z a partir do qual é asa (o que fica atrás é cauda/fuselagem) }
 #       wingObjs: prefixos de objetos que são da asa inteiros (ailerons, flaps): o lado sai do centro do objeto
-#       colors: { material: [r, g, b] } para materiais sem textura
+#       colors: { material: [r, g, b] } para materiais sem textura   dropMats: [materiais] cujas peças saem
+#       wings.obj = '*': arquivo sem peças nomeadas — junta tudo e separa só por geometria; wings.ymax: acima disso não é
+#       asa (motores em casulo); tailZ: tudo atrás desse z vira cauda
 # Saída em metros, +z nariz, +y cima, +x asa esquerda, origem no CG na linha de centro.
 import bpy, bmesh, sys, json, math
 from mathutils import Matrix, Vector
 src, dst, cfg = sys.argv[sys.argv.index('--') + 1:][:3]; cfg = json.loads(cfg)
 dropped = lambda n: any(n == p or (p.endswith('*') and n.startswith(p[:-1])) for p in cfg.get('drop', []))   # nome exato, ou prefixo com *
+DM = set(cfg.get('dropMats', []))      # materiais que saem (rodas, armamento) quando o arquivo não tem nomes de peça
 if src.endswith('.blend'): bpy.ops.wm.open_mainfile(filepath=src)
 else: bpy.ops.wm.read_factory_settings(use_empty=True); bpy.ops.import_scene.gltf(filepath=src)
 sc = bpy.context.scene
@@ -36,7 +39,7 @@ for m in bpy.data.materials:
     else: b.inputs['Base Color'].default_value = (*(col or m.diffuse_color[:3]), 1)
 # malhas no mundo, com modificadores aplicados
 dg = bpy.context.evaluated_depsgraph_get(); objs = []
-for o in [o for o in bpy.data.objects if o.type == 'MESH' and not dropped(o.name)]:
+for o in [o for o in bpy.data.objects if o.type == 'MESH' and not dropped(o.name) and not (DM and all(m and m.name in DM for m in o.data.materials))]:
     me = bpy.data.meshes.new_from_object(o.evaluated_get(dg)); me.transform(o.matrix_world)
     n = bpy.data.objects.new('s_' + o.name, me); sc.collection.objects.link(n); n['src'] = o.name; objs.append(n)
 # eixos: nariz -> −Y do Blender (= +z do glTF), cima +Z; CG e linha de centro na origem; escala pela envergadura
@@ -61,13 +64,20 @@ def split(o, pred):                   # separa as faces de o em que pred(face) �
     me = bpy.data.meshes.new(o.name + '_p'); b2.to_mesh(me); b2.free()
     for m in o.data.materials: me.materials.append(m)
     n = bpy.data.objects.new(o.name + '_p', me); sc.collection.objects.link(n); return n
+if W.get('obj') == '*':
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs: o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]; bpy.ops.object.join(); objs = [bpy.context.view_layer.objects.active]; objs[0]['src'] = '*'
+    if 'tailZ' in cfg:
+        t = split(objs[0], lambda f, ob: -f.calc_center_median().y < cfg['tailZ'])
+        if t: groups['tail'].append(t)
 for o in objs:
     s = o['src']; cx = sum(v.co.x for v in o.data.vertices) / len(o.data.vertices)
     if any(s.startswith(p) for p in cfg.get('tail', [])): groups['tail'].append(o)
     elif any(s.startswith(p) for p in cfg.get('wingObjs', [])): groups['wingL' if cx > 0 else 'wingR'].append(o)
-    elif W and s.startswith(W['obj']):
+    elif W and (s == '*' or s.startswith(W['obj'])):
         for side, g in ((1, 'wingL'), (-1, 'wingR')):
-            w = split(o, lambda f, ob: f.calc_center_median().x * side > W['root'] and -f.calc_center_median().y > W.get('zmin', -1e9))
+            w = split(o, lambda f, ob: f.calc_center_median().x * side > W['root'] and -f.calc_center_median().y > W.get('zmin', -1e9) and f.calc_center_median().z < W.get('ymax', 1e9))
             if w: groups[g].append(w)
         groups['fuse'].append(o)
     else: groups['fuse'].append(o)

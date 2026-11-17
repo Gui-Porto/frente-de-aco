@@ -26,7 +26,7 @@ export function spawnVehicle(who, key, slot) {
   const D = VEHICLES[key]; let v;
   if (D.type === 'plane') {
     const s = AIRSPAWN[who.team], off = (slot - 2) * 60;
-    v = new Plane(key, who.team, who, new V3(s.x + off, s.y + rand(-50, 50), s.z), s.yaw, D.jet ? 200 : 125, { msl: false }); // jato nasce mais rápido (125 m/s é perto do estol dele); mísseis ar-ar ficam na Batalha Aérea
+    v = new Plane(key, who.team, who, new V3(s.x + off, s.y + rand(-50, 50), s.z), s.yaw, D.vspawn || (D.jet ? 200 : 125), { msl: false }); // jato nasce mais rápido (125 m/s é perto do estol dele); mísseis ar-ar ficam na Batalha Aérea
     if (!who.isPlayer) v.brain = new PlaneBrain(v);
     lastPlane[who.team] = S.now;
   } else {

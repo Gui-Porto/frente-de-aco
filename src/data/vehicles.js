@@ -273,6 +273,25 @@ export const PLANES = {
     bombs: [{ name: 'Mk 82 500 lb', m: 241, tnt: 87, d: 0.273, n: 6, x: [0, 0.32, -0.32, 0, 0.32, -0.32], z: [0.75, 0.75, 0.75, -0.75, -0.75, -0.75] }],
     rockets: { name: 'FFAR 70 mm', m: 9.3, tnt: 1.0, v: 600, n: 38, cal: 70, pod: { x: [2.81, -2.81], r: 0.2, len: 2.4, ph: 0.3 } }
   },
+  // A-10A: só na batalha de tanques (sem ficha na Batalha Aérea). O visual é todo da pele glTF (model.solo): a estrutura
+  // procedural não tem motores em casulo nem dois lemes — dela ficam só o trem, as bombas/casulos e os efeitos
+  a10: {
+    key: 'a10', type: 'plane', gear: { track: 5.25, ret: 'in' }, name: 'A-10A Thunderbolt II', short: 'A-10A', nation: 'EUA', year: 1977, color: 0x6f7a72, sp: 620, jet: true,
+    mass: 14800, fuel: 3200, S: 47.0, span: 17.53, L: 16.26, cla: 5.0, clmax: 1.6, cd0: 0.030, e: 0.82, engine: 'tf34', engines: 2, rcs: 10,
+    mcrit: 0.72, wave: { mcr: 0.7, peak: 0.05, mpk: 1.0 }, flapV: [370, 300, 250], inertia: [150000, 75000, 213000], // kg·m² publicados (a estimativa pela envergadura dava 2,4× mais em rolagem)
+    vne: 830 / 3.6, vspawn: 150, glim: 7.3, kda: 0.05, kde: 0.34, kdr: 0.04, armor: { pilot: 38 }, // banheira de titânio
+    hpParts: { wingL: 80, wingR: 80, tail: 55, engine: 55, fuel: 40, fuse: 90 },
+    fuseR: 0.75, noseR: 0.45, wingZ: 0.3, chord: 3.0, tipChord: 2.0, cowl: 'intake', dih: 5, nozzles: 2, finish: 'camo', rwr: 'apr36',
+    // "A-10 Thunderbolt II" de AIRMAN Magazine (modelo de Alfredo Tirado), CC BY 4.0 (ver CREDITOS.md); preparada por tools/blender/skin.py
+    model: { url: '/models/a10.glb', solo: true },
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanques da fuselagem', z: 0.04, y: 0.2, s: [0.6, 0.4, 1.4] }, { id: 'fuelW', k: 'fuel', n: 'Tanque da asa', w: [0.2, 0.4], s: [1.0, 0.12, 0.8] },
+      { id: 'hydA', k: 'act', n: 'Hidráulico A', does: ['flaps', 'brake', 'ctl'], x: 0.4, z: -0.1, y: 0, s: [0.25, 0.2, 0.5] }, { id: 'hydB', k: 'act', n: 'Hidráulico B', does: ['guns', 'ctl'], x: -0.4, z: -0.1, y: 0, s: [0.25, 0.2, 0.5] }],
+    // canhão de 7 canos no nariz; 6 Mk 82 nos pilones da asa e dois casulos LAU-3 nos externos
+    guns: [{ w: 'GAU8', n: 1, span: [0], z: 6.6, ammo: 1174 }],
+    missiles: [],
+    bombs: [{ name: 'Mk 82 500 lb', m: 241, tnt: 87, d: 0.273, n: 6, x: [2.1, -2.1, 3.3, -3.3, 4.6, -4.6], ph: 0.25 }],
+    rockets: { name: 'FFAR 70 mm', m: 9.3, tnt: 1.0, v: 600, n: 38, cal: 70, pod: { x: [5.9, -5.9], r: 0.2, len: 2.4, ph: 0.3 } }
+  },
   mig21: {
     key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, fences: [{ ws: 0.5, h: 0.17, len: 0.85 }], ventral: { zf: -0.3, h: 0.45, c: 1.6 }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
     mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0195, e: 0.7, engine: 'r13', rcs: 3,
@@ -314,6 +333,7 @@ export const GUNS = {
   M3: { name: '12,7 mm M3', cal: 12.7, rpm: 1200, v: 890, m: 0.046, pen: 24, he: 0, dmg: 1.2, tracer: 4 },
   N37: { name: '37 mm N-37D', cal: 37, rpm: 400, v: 690, m: 0.735, pen: 40, he: 0.04, dmg: 12, tracer: 2 },
   NR23: { name: '23 mm NR-23', cal: 23, rpm: 850, v: 680, m: 0.2, pen: 25, he: 0.015, dmg: 3.6, tracer: 3 },
+  GAU8: { name: '30 mm GAU-8/A Avenger', cal: 30, rpm: 3900, v: 1010, m: 0.39, pen: 76, he: 0.02, dmg: 9, tracer: 6 },
   M61: { name: '20 mm M61A1 Vulcan', cal: 20, rpm: 6000, v: 1030, m: 0.1, pen: 22, he: 0.011, dmg: 3.2, tracer: 5 },
   GSh23: { name: '23 mm GSh-23L', cal: 23, rpm: 3400, v: 715, m: 0.175, pen: 24, he: 0.015, dmg: 3.6, tracer: 4 }
 };
@@ -381,7 +401,7 @@ export const VEHICLES = Object.assign({}, TANKS, PLANES);
 // Eras: cada partida usa só os veículos de uma (antigo não enfrenta moderno). LINEUP é o elenco da era ativa.
 export const ERAS = {
   ww2: { name: 'Segunda Guerra', lineup: ['t34', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'], ground: ['t34', 'tiger'], planes: ['p47', 'il2', 'fw190'], aa: 'wirbel' },
-  mod: { name: 'Moderno', lineup: ['t72', 'm1', 'gepard', 'f4e', 'mig21'], ground: ['t72', 'm1'], planes: ['f4e', 'mig21'], aa: 'gepard' }
+  mod: { name: 'Moderno', lineup: ['t72', 'm1', 'gepard', 'a10', 'f4e', 'mig21'], ground: ['t72', 'm1'], planes: ['a10', 'f4e', 'mig21'], aa: 'gepard' }
 };
 export const LINEUP = [...ERAS.ww2.lineup];
 export function setEra(e) { LINEUP.splice(0, LINEUP.length, ...ERAS[e].lineup); }
