@@ -76,7 +76,9 @@ export function audioInit() {
       // rpm real do motor, carga 0..1 (acelerador), velocidade da esteira em m/s
       const set = (on, rpm, load, sp) => {
         const t = AC.currentTime, k = 0.06;
-        g.gain.setTargetAtTime(on ? 0.10 + load * 0.11 : 0, t, k);
+        const rt = eng.recT;
+        g.gain.setTargetAtTime(on ? (0.10 + load * 0.11) * (rt ? 0.35 : 1) : 0, t, k);
+        if (rt) { rt.g.gain.setTargetAtTime(on ? 0.32 + load * 0.3 : 0, t, 0.08); if (on) { rt.s.playbackRate.setTargetAtTime(0.72 + clamp((rpm - 700) / 2300, 0, 1) * 0.75, t, 0.06); rt.f.frequency.setTargetAtTime(1800 + load * 6000 + rpm * 1.5, t, 0.1); } }
         if (!on) { tg.gain.setTargetAtTime(0, t, k); sqg.gain.setTargetAtTime(0, t, k); return; }
         o.frequency.setTargetAtTime(rpm / 120, t, 0.03);
         fl.frequency.setTargetAtTime(260 + rpm * 0.12 + load * 900, t, 0.09);
@@ -162,15 +164,19 @@ export function audioInit() {
 // Se um arquivo existir, a gravação vira a base daquele som e a síntese fica só de tempero (rotação, apito,
 // sub-grave); se faltar, tudo segue sintetizado. SMP.meta traz o "pico" dos rasantes (s) para alinhar o vush.
 export const SMP = {};
-const FILES = ['piston', 'jet', 'jetcab', 'mg', 'mgloop', 'cannon', 'boom', 'boom_small', 'jetby', 'propby', 'hit1', 'hit2', 'hit3', 'hit4', 'snap1', 'snap2', 'snap3', 'abstart'];
+const FILES = ['tankshot', 'tank', 'piston', 'jet', 'jetcab', 'mg', 'mgloop', 'cannon', 'boom', 'boom_small', 'jetby', 'propby', 'hit1', 'hit2', 'hit3', 'hit4', 'snap1', 'snap2', 'snap3', 'abstart'];
 async function loadSamples() {
   try { SMP.meta = await (await fetch(new URL('audio/meta.json', document.baseURI))).json(); } catch (e) { SMP.meta = {}; }
   await Promise.all(FILES.map(async k => {
-    try { const r = await fetch(new URL(`audio/${k}.ogg`, document.baseURI)); if (r.ok) SMP[k] = await AC.decodeAudioData(await r.arrayBuffer()); }
-    catch (e) { /* sem o arquivo: fica a síntese */ }
+    // audio/local/ (fora do git) tem prioridade: sons do próprio jogador, para uso pessoal — ver public/audio/LEIAME.md
+    for (const f of ['local/' + k + '.wav', 'local/' + k + '.ogg', 'local/' + k + '.mp3', k + '.wav', k + '.ogg']) { // .wav: preparados por tools/audio_prep.py
+      try { const r = await fetch(new URL(`audio/${f}`, document.baseURI)); if (r.ok && !/html/.test(r.headers.get('content-type') || '')) { SMP[k] = await AC.decodeAudioData(await r.arrayBuffer()); break; } }
+      catch (e) { /* sem o arquivo: fica a síntese */ }
+    }
   }));
   // laços de motor gravados: um para o avião principal e um por voz dos outros aviões
   const loopOf = (buf, dest) => { const s = AC.createBufferSource(); s.buffer = buf; s.loop = true; const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 16000; const g = AC.createGain(); g.gain.value = 0; s.connect(f); f.connect(g); g.connect(dest); s.start(0, Math.random() * buf.duration); return { s, f, g }; };
+  if (SMP.tank) eng.recT = loopOf(SMP.tank, engBus);       // motor do seu tanque: gravação em laço, tom e volume pela rotação/carga
   if (SMP.piston) eng.recP = loopOf(SMP.piston, engBus);
   if (SMP.jet) eng.recJ = loopOf(SMP.jet, engBus);
   if (SMP.jetcab) eng.recC = loopOf(SMP.jetcab, engBus);  // jato ouvido de dentro da cabine
@@ -316,13 +322,17 @@ export function audioPause(p) { if (AC) p ? AC.suspend() : AC.resume(); }
 // calibre, e o eco que volta do terreno. De perto (o seu canhão) entra o tranco da culatra e o estojo caindo.
 export function sndShot(pos, cal) {
   const a = at(pos, 1.6 * cal / 80); if (!a) return; const o = out(a, 1.5), v = Math.min(a.vol, 1.3), big = clamp((cal - 37) / 60, 0, 1.3);
-  if (SMP.boom_small) { playRec(SMP.boom_small, a, v * 1.2, rand(0.62, 0.7), o); thump(a.t, Math.min(a.vol, 1), 60, 0.6, o); return; }
+  if (SMP.tankshot) { // gravação de peça de artilharia: calibre maior toca mais grave; o sub, o eco e a culatra continuam sintetizados por cima
+    playRec(SMP.tankshot, a, v * 1.5, clamp(1.3 - cal / 300, 0.82, 1.15) * rand(0.97, 1.03), o);
+    thump(a.t, Math.min(a.vol * 1.1, 1.1), 70 - big * 25, 0.5 + big * 0.4, o);
+  } else {
   noiseBurst(a.t, v, 5200, 0.045, 0.7, o, 'highpass', noiseBuf, 0.001);
   noiseBurst(a.t, v * 1.2, 3600 / (1 + a.d / 400), 0.55 + big * 0.5, 0.8, o, 'lowpass', noiseBuf, 0.003, 240);
   noiseBurst(a.t + 0.01, v, 700 - big * 180, 1.1 + big * 0.8, 0.7, o, 'lowpass', noiseBuf, 0.006, 140);
   noiseBurst(a.t, v, 190 - big * 60, 1.8 + big * 1.2, 0.7, o, 'lowpass', brownBuf, 0.008);
   thump(a.t, Math.min(a.vol * 1.2, 1.2), 82 - big * 30, 0.5 + big * 0.5, o);
   thump(a.t, Math.min(a.vol, 1) * big, 38, 0.9, o);
+  }
   // eco do terreno: repetição mais grave e fraca, mais longe = mais atrasada
   const e = 0.28 + Math.min(a.d, 600) / 1500; noiseBurst(a.t + e, v * 0.22, 700, 1.4, 0.6, o, 'lowpass', brownBuf, 0.05);
   if (a.d < 12) { // dentro/junto do tanque: culatra recuando e voltando, estojo no piso
