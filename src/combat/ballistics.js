@@ -146,7 +146,7 @@ const bombGeo = (() => { const b = new THREE.CylinderGeometry(0.5, 0.5, 2.6, 10)
 const bombMat = new THREE.MeshStandardMaterial({ color: 0x3d4130, roughness: .7, metalness: .3 });
 for (const pd of Object.values(PLANES)) {
   for (const b of pd.bombs) { b.type = 'BOMB'; b.cal = b.d * 1000; prepAmmo(Object.assign(b, { v: 200 }), b.cal, 0.22); }
-  if (pd.rockets) { const r = pd.rockets; r.type = 'ROCKET'; r.cal = r.m > 20 ? 127 : 82; prepAmmo(r, r.cal, 0.35); }
+  if (pd.rockets) { const r = pd.rockets; r.type = 'ROCKET'; r.cal = r.cal || (r.m > 20 ? 127 : 82); prepAmmo(r, r.cal, 0.35); }
 }
 export function fireProj(owner, pos, vel, am, kind, extra) {
   const pr = Object.assign({ p: pos.clone(), v: vel.clone(), am, owner, kind, life: kind === 'bomb' ? 40 : kind === 'bullet' ? 4 : 8, age: 0, bounced: false, ignore: owner, tracer: false }, extra || {});
@@ -170,7 +170,7 @@ export function updateProjs(dt) {
     for (let k = 0; k < n && !dead; k++) {
       const sp = pr.v.length(), kk = pr.am.k * sp;
       pr.v.x += -kk * pr.v.x * h; pr.v.y += (-G - kk * pr.v.y) * h; pr.v.z += -kk * pr.v.z * h;
-      if (pr.kind === 'rocket' && pr.age < 1.1) { pr.v.addScaledVector(_n.copy(pr.v).normalize(), 260 * h); }
+      if (pr.kind === 'rocket' && pr.age < 1.1) { pr.v.addScaledVector(_n.copy(pr.v).normalize(), 0.5 * pr.am.v * h); } // sai a 0,45·v e o motor dá o resto em 1,1 s: am.v = velocidade real no fim da queima
       _q.copy(pr.p).addScaledVector(pr.v, h);
       const hit = segmentHit(pr.p, _q, pr.ignore, pr.kind === 'bullet' && pr.p.y > 400 ? null : null);
       if (hit) dead = onImpact(pr, hit);
@@ -208,7 +208,7 @@ function onImpact(pr, hit) {
     if (pr.age < 1.0) { fxDust(hit.point, 10, 1); sndClank(hit.point); return true; } // espoleta não armada
     blast(hit.point, am.tnt, pr.owner, { bomb: true, direct: hit.type === 'tank' ? hit.tank : null }); return true;
   }
-  if (pr.kind === 'rocket') { blast(hit.point, am.tnt, pr.owner, { direct: hit.type === 'tank' ? hit.tank : null, kinetic: am.m > 20 ? 30 : 12 }); return true; }
+  if (pr.kind === 'rocket') { blast(hit.point, am.tnt, pr.owner, { direct: hit.type === 'tank' ? hit.tank : null, kinetic: am.pen ? (hit.type === 'tank' ? am.pen : 0) : am.m > 20 ? 30 : 12 }); return true; } // am.pen: carga oca, só no impacto direto
   if (hit.type === 'ground') {
     terrainNormal(hit.point.x, hit.point.z, _n);
     const cosI = -dir.dot(_n);

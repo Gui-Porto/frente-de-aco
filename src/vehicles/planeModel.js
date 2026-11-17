@@ -893,18 +893,30 @@ export function buildPlane(D) {
   }
   // pontos duros: bombas, foguetes e mísseis
   // bombas e foguetes presos por pilone/trilhos ao intradorso (ou ao ventre) — antes flutuavam sob o avião
-  const bombMeshes = [], under0 = (x, z) => (Math.abs(x) > fr * 0.9 ? wingY(wingCfg(Math.sign(x)), x, z, -1) : at(z / L).yc - at(z / L).h);
+  const bombMeshes = [], ordFit = [], fit = m => { if (jet) ordFit.push(m); return m; }, under0 = (x, z) => (Math.abs(x) > fr * 0.9 ? wingY(wingCfg(Math.sign(x)), x, z, -1) : at(z / L).yc - at(z / L).h);
+  // asa enflechada: o pilone vai a 42% da corda da estação (com z fixo caía à frente do bordo de ataque)
+  const hardZ = (x, z) => { if (!D.sweep || Math.abs(x) <= fr * 0.9) return z; const o = wingCfg(Math.sign(x)); return station(o, (Math.abs(x) - o.x0) / o.half, 0.42)[2]; };
   for (const b of D.bombs) for (let i = 0; i < b.n; i++) {
-    const x = b.x[i] || 0, z = D.wingZ - .2, len = b.d * 4.5, py = under0(x, z), ph = 0.12, y = py - ph - b.d / 2;
+    const x = b.x[i] || 0, z = hardZ(x, D.wingZ - .2 + (b.z ? b.z[i] : 0)), len = b.d * 4.5, py = under0(x, z), ph = b.ph || 0.12, y = py - ph - b.d / 2;
     const m = add(DT.latheZ([V2(b.d * 0.3, -len / 2), V2(b.d / 2, -len * 0.3), V2(b.d / 2, len * 0.25), V2(b.d * 0.35, len * 0.45), V2(0.001, len / 2 + b.d * 0.3)], 16), dark, root, x, y, z);
     for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.01, b.d * 0.7, b.d * 0.9).translate(0, b.d * 0.35, -len / 2 + b.d * 0.3).rotateZ(Math.PI / 4 + k * Math.PI / 2), dark, m); // empenas
-    add(new THREE.BoxGeometry(0.07, ph + 0.06, len * 0.45), under, root, x, py - ph / 2 + 0.02, z);                       // pilone
-    for (const dz of [-1, 1]) add(new THREE.CylinderGeometry(0.012, 0.012, ph + b.d * 0.3, 6), steel, root, x + b.d * 0.3, py - ph / 2 - b.d * 0.1, z + dz * len * 0.18); // escoras
+    fit(add(new THREE.BoxGeometry(0.07, ph + 0.06, len * 0.45), under, root, x, py - ph / 2 + 0.02, z));                     // pilone
+    for (const dz of [-1, 1]) fit(add(new THREE.CylinderGeometry(0.012, 0.012, ph + b.d * 0.3, 6), steel, root, x + b.d * 0.3, py - ph / 2 - b.d * 0.1, z + dz * len * 0.18)); // escoras
     bombMeshes.push(m);
   }
   const rocketMeshes = [];
-  if (D.rockets) for (let i = 0; i < D.rockets.n; i++) {
-    const side = i % 2 ? -1 : 1, k = Math.floor(i / 2), x = side * (D.span * 0.22 + k * 0.45), z = D.wingZ + .2, py = under0(x, z), y = py - 0.13 - 0.06;
+  if (D.rockets && D.rockets.pod) {
+    // casulos (LAU-3, UB-16): um por estação de pod.x, sob o pilone; os foguetes saem da boca, alternando os casulos
+    const P = D.rockets.pod, mouths = P.x.map(x => {
+      const o = wingCfg(Math.sign(x)), wg = x > 0 ? wingL : wingR, par = (Math.abs(x) - o.x0) / o.half > sB ? wg.userData.tip : wg;
+      const z = hardZ(x, D.wingZ), py = under0(x, z), y = py - P.ph - P.r, e = new THREE.Object3D();
+      fit(add(DT.latheZ([V2(0.001, -P.len / 2 - P.r), V2(P.r * 0.8, -P.len / 2), V2(P.r, -P.len * 0.3), V2(P.r, P.len / 2 - 0.06), V2(P.r * 0.88, P.len / 2), V2(0.001, P.len / 2)], 16), paint, par, x, y, z));
+      fit(add(new THREE.BoxGeometry(0.07, P.ph + 0.06, P.len * 0.4), paint, par, x, py - P.ph / 2 + 0.02, z));                 // pilone
+      e.position.set(x, y, z + P.len / 2); par.add(e); return e;
+    });
+    for (let i = 0; i < D.rockets.n; i++) rocketMeshes.push(mouths[i % mouths.length]);
+  } else if (D.rockets) for (let i = 0; i < D.rockets.n; i++) {
+    const side = i % 2 ? -1 : 1, k = Math.floor(i / 2), x = side * ((D.rockets.x0 || D.span * 0.22) + k * 0.45), z = D.wingZ + .2, py = under0(x, z), y = py - 0.13 - 0.06;
     rocketMeshes.push(add(new THREE.CylinderGeometry(.06, .06, 1.4, 10).rotateX(Math.PI / 2), dark, root, x, y, z));
     for (const dz of [0.45, -0.35]) add(new THREE.BoxGeometry(0.035, 0.15, 0.1), steel, root, x, py - 0.07, z + dz);        // postes de lançamento
   }
@@ -949,11 +961,11 @@ export function buildPlane(D) {
   // efeitos presos ao avião (chama da PC, fogo do WEP, cone de vapor) — fora da fusão de malhas
   const fx = buildPlaneFx(D, root, nozzles, stacks);
   // une as peças estáticas por material (menos draw calls); superfícies que se soltam ou somem ficam à parte
-  const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes]);
+  const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes, ...ordFit]);
   for (const grp of [root, wingL, wingR, wingL.userData.tip, wingR.userData.tip, tail]) mergeStatic(grp, keep);
   root.traverse(o => { if (o.userData.loose) mergeStatic(o, keep); });
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
-  return { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };
+  return { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, ordFit, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };
 }
 // Trem de pouso: pernas principais na asa, bequilha (pistão) ou trem do nariz (jato). userData.lift = altura
 // do CG ao chão com o trem baixado; userData.pitch = atitude parado (cauda baixa no pistão).

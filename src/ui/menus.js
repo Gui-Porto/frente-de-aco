@@ -26,7 +26,7 @@ function buildShowcase(key) {
   show = D.type === 'plane' ? buildPlane(D) : buildTank(D);
   const y = H(HANGAR.x, HANGAR.z);
   show.root.position.set(HANGAR.x, y + (D.type === 'plane' ? 2.4 : 0), HANGAR.z);
-  if (D.type === 'plane') show.root.rotation.z = 0.12;
+  if (D.type === 'plane') { show.root.rotation.z = 0.12; for (const m of show.missileMeshes || []) m.visible = false; } // sem mísseis na batalha de tanques
   scene.add(show.root);
   if (D.type !== 'plane') setArmorView(show, armorView);
   $('#vArm').disabled = D.type === 'plane';
@@ -39,7 +39,7 @@ function fillSheet(key) {
   $('#shName').textContent = D.name;
   let rows;
   if (D.type === 'plane') {
-    rows = [['Massa de combate', `${(D.mass / 1000).toFixed(1).replace('.', ',')} t`], ['Carga alar', `${Math.round(D.mass / D.S)} kg/m²`], ['Motor', `${D.hp} hp (${D.wep} hp WEP)`], ['Potência/peso', `${(D.hp / (D.mass / 1000)).toFixed(0)} hp/t`],
+    rows = [['Massa de combate', `${(D.mass / 1000).toFixed(1).replace('.', ',')} t`], ['Carga alar', `${Math.round(D.mass / D.S)} kg/m²`], ...(D.jet ? [['Motor', `${D.engines > 1 ? D.engines + '× ' : ''}${(D.thrust / D.engines).toFixed(1).replace('.', ',')} kN`], ['Empuxo/peso', (D.thrust * 1000 / (D.mass * G)).toFixed(2).replace('.', ',')]] : [['Motor', `${D.hp} hp (${D.wep} hp WEP)`], ['Potência/peso', `${(D.hp / (D.mass / 1000)).toFixed(0)} hp/t`]]),
       ['Estol (limpo)', `${Math.round(Math.sqrt(2 * D.mass * G / (RHO * D.S * D.clmax)) * 3.6)} km/h`], ['Vel. máx. de mergulho', `${Math.round(D.vne * 3.6)} km/h`],
       ['Armamento', D.guns.map(g => `${g.n}× ${GUNS[g.w].name.split(' ').slice(0, 2).join(' ')}`).join(', ')],
       ['Carga externa', [...D.bombs.map(b => `${b.n}× ${b.name}`), D.rockets ? `${D.rockets.n}× ${D.rockets.name}` : null].filter(Boolean).join(', ')]];

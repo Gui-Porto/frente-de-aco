@@ -53,6 +53,21 @@ export const TANKS = {
         { name: '3OF19', type: 'HE', v: 850, m: 23, tnt: 3.15, count: 17 }] },
     mg: { name: 'PKT', cal: 7.62, rpm: 700, v: 855, m: 0.0096, pen: 9, he: 0, belt: 250, total: 2000, tracer: 5 }
   },
+  m1: {
+    key: 'm1', type: 'tank', name: 'M1A1 Abrams', nation: 'EUA', year: 1985, color: 0x6e6b4f, sp: 280,
+    mass: 57000, hp: 1500, rpm: 3000, vmax: 67 * 1.15 / 3.6, vrev: 40 * 1.25 / 3.6, wheels: 7, rpmTraverse: false,
+    L: 7.9, W: 3.66, Hh: 1.05, clr: 0.48, trackW: 0.6, transFront: false,
+    turret: { w: 3.2, l: 3.9, h: 0.85, z: 0.34, shape: 'hex' },
+    // "M1 Abrams" de Artem.Goyko, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/m1.py
+    model: { url: '/models/m1.glb', ring: [0, 1.53, 0.34], trunnion: [0.01, 1.9, 1.6], muzzle: 5.9 },
+    // blindagem em equivalente contra energia cinética: glacis fino mas quase deitado; composta na frente da torre e do casco
+    armor: { front: [80, 82], lfront: [330, 25], side: [60, 0], rear: [30, 10], top: 25, bottom: 20, tFront: [600, 0], tSide: [300, 0], tRear: [40, 0], tTop: 40 },
+    gun: { name: '120 mm M256', cal: 120, len: 5.3, reload: 6, trav: 40, elevRate: 20, dep: 10, elev: 20, brake: false, stab: true,
+      ammo: [
+        { name: 'M829', type: 'APFSDS', pen: 490, v: 1670, m: 4.3, count: 27 },
+        { name: 'M830 (HE)', type: 'HE', v: 1140, m: 13.5, tnt: 1.8, count: 13 }] },
+    mg: { name: 'M240', cal: 7.62, rpm: 750, v: 853, m: 0.0096, pen: 9, he: 0, belt: 250, total: 4000, tracer: 5 }
+  },
   pz4: {
     key: 'pz4', type: 'tank', name: 'Pz.Kpfw. IV H', nation: 'Alemanha', year: 1943, color: 0x6f6541, sp: 150,
     mass: 25900, hp: 300, rpm: 3000, vmax: 38 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: true,
@@ -107,9 +122,12 @@ export const PLANES = {
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque principal', z: 0.04, y: -0.4, s: [0.55, 0.35, 0.6] }, { id: 'fuelA', k: 'fuel', n: 'Tanque auxiliar', z: -0.1, y: -0.45, s: [0.5, 0.3, 0.4] },
       { id: 'turbo', k: 'turbo', n: 'Turbocompressor', z: -0.3, y: -0.6, s: [0.35, 0.3, 0.45] }, { id: 'oilc', k: 'cool', n: 'Radiadores de óleo', z: 0.26, y: -0.75, s: [0.55, 0.18, 0.35] },
       { id: 'hyd', k: 'act', n: 'Hidráulico', does: ['flaps'], z: -0.12, y: -0.1, s: [0.3, 0.2, 0.3] }],
-    guns: [{ w: 'M2', n: 8, span: [1.9, 2.6, 3.0, 3.4], z: 0.9, ammo: 425 }],
-    bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.0, -2.0] }],
-    rockets: { name: 'M8/HVAR', m: 61, tnt: 3.5, v: 330, n: 6 }
+    // 8 M2 juntas, por fora do trem e do disco da hélice (antes abertas de 1,9 a 3,4 m: a de dentro atirava pela hélice)
+    guns: [{ w: 'M2', n: 8, span: [2.55, 2.75, 2.95, 3.15], z: 0.9, ammo: 425 }],
+    // pilones por fora do trem (em x = 2,0 ficavam na porta do alojamento); D-28: 2 lançadores triplos M10 com foguetes M8 de 4,5 pol
+    // (o HVAR de 127 mm em trilho só veio no D-30/D-40). rockets.v = velocidade no fim da queima, relativa ao avião
+    bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.9, -2.9] }],
+    rockets: { name: 'M8 4,5 pol', m: 17.5, tnt: 1.95, v: 260, n: 6, cal: 114, x0: 3.5 }
   },
   il2: {
     key: 'il2', type: 'plane', gear: { track: 3.85, ret: 'in' }, name: 'Il-2 (1942)', short: 'Il-2', nation: 'URSS', year: 1942, color: 0x3d4a2c, sp: 340,
@@ -123,7 +141,7 @@ export const PLANES = {
       { id: 'pneu', k: 'act', n: 'Pneumático', does: ['flaps'], z: -0.18, y: 0, s: [0.25, 0.25, 0.3] }],
     guns: [{ w: 'VYa', n: 2, span: [2.4], z: 0.6, ammo: 150 }, { w: 'ShKAS', n: 2, span: [2.0], z: 0.6, ammo: 750 }],
     bombs: [{ name: 'FAB-100', m: 100, tnt: 40, d: 0.27, n: 4, x: [1.5, -1.5, 2.2, -2.2] }],
-    rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 350, n: 8 }
+    rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 340, n: 8 }
   },
   fw190: {
     key: 'fw190', type: 'plane', gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
@@ -136,7 +154,7 @@ export const PLANES = {
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque dianteiro', z: 0.04, y: -0.5, s: [0.45, 0.25, 0.45] }, { id: 'fuelA', k: 'fuel', n: 'Tanque traseiro', z: -0.1, y: -0.45, s: [0.45, 0.28, 0.5] },
       { id: 'oilc', k: 'cool', n: 'Radiador de óleo (anel)', z: 0.42, s: [0.6, 0.6, 0.1], hp: 14 }, { id: 'elec', k: 'act', n: 'Sistema elétrico', does: ['flaps', 'guns'], z: -0.2, y: 0, s: [0.3, 0.25, 0.3] }],
     guns: [{ w: 'MG131', n: 2, span: [0.25], z: 2.0, ammo: 475 }, { w: 'MG151', n: 2, span: [0.9], z: 0.9, ammo: 250 }],
-    bombs: [{ name: 'SC 500', m: 500, tnt: 220, d: 0.47, n: 1, x: [0] }, { name: 'SC 50', m: 50, tnt: 25, d: 0.2, n: 2, x: [1.6, -1.6] }],
+    bombs: [{ name: 'SC 500', m: 500, tnt: 220, d: 0.47, n: 1, x: [0] }, { name: 'SC 50', m: 50, tnt: 25, d: 0.2, n: 4, x: [2.3, -2.3, 2.75, -2.75] }], // F-8: ETC 501 no ventre + 4 ETC 50 sob as asas, por fora do trem
     rockets: null
   },
   // ---- Batalha aérea: caças sem carga externa e os primeiros jatos ----
@@ -228,7 +246,9 @@ export const PLANES = {
     // freios sob as asas, atrás do trem principal (abrem para baixo)
     brake: [{ ws: 0.16, cf: 0.62, ax: 1, w: 0.75, len: 0.8, open: 'down', deg: 50 }, { ws: 0.16, cf: 0.62, ax: -1, w: 0.75, len: 0.8, open: 'down', deg: 50 }],
     missiles: [{ w: 'AIM7E', n: 4 }, { w: 'AIM9J', n: 4 }],
-    bombs: [], rockets: null
+    // ataque ao solo (batalha de tanques): 6 Mk 82 no MER do ventre (duas fileiras de 3: z por bomba) e dois casulos LAU-3 de 19 FFAR nos pilones internos
+    bombs: [{ name: 'Mk 82 500 lb', m: 241, tnt: 87, d: 0.273, n: 6, x: [0, 0.32, -0.32, 0, 0.32, -0.32], z: [0.75, 0.75, 0.75, -0.75, -0.75, -0.75] }],
+    rockets: { name: 'FFAR 70 mm', m: 9.3, tnt: 1.0, v: 600, n: 38, cal: 70, pod: { x: [2.81, -2.81], r: 0.2, len: 2.4, ph: 0.3 } }
   },
   mig21: {
     key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, fences: [{ ws: 0.5, h: 0.17, len: 0.85 }], ventral: { zf: -0.3, h: 0.45, c: 1.6 }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
@@ -254,7 +274,9 @@ export const PLANES = {
     // dois freios ventrais à frente e um atrás (abrem para baixo)
     brake: [{ zf: 0.15, ax: 0.45, ay: -1, w: 0.4, len: 0.72, open: 'down', deg: 40 }, { zf: 0.15, ax: -0.45, ay: -1, w: 0.4, len: 0.72, open: 'down', deg: 40 }, { zf: -0.3, ax: 0, ay: -1, w: 0.42, len: 0.5, open: 'down', deg: 40 }],
     missiles: [{ w: 'R3R', n: 2 }, { w: 'R3S', n: 2 }],
-    bombs: [], rockets: null
+    // ataque ao solo (batalha de tanques): 2 FAB-250 nos pilones internos e 2 casulos UB-16-57 (16 S-5K de carga oca cada) nos externos
+    bombs: [{ name: 'FAB-250', m: 250, tnt: 99, d: 0.325, n: 2, x: [1.72, -1.72], ph: 0.2 }],
+    rockets: { name: 'S-5K 57 mm', m: 3.65, tnt: 0.3, pen: 130, v: 600, n: 32, cal: 57, pod: { x: [2.43, -2.43], r: 0.17, len: 1.9, ph: 0.2 } }
   }
 };
 
@@ -264,7 +286,7 @@ export const GUNS = {
   ShKAS: { name: '7,62 mm ShKAS', cal: 7.62, rpm: 1800, v: 825, m: 0.0096, pen: 10, he: 0, dmg: 0.45, tracer: 4 },
   VYa: { name: '23 mm VYa-23', cal: 23, rpm: 600, v: 905, m: 0.2, pen: 35, he: 0.01, dmg: 3.2, tracer: 3 },
   MG131: { name: '13 mm MG 131', cal: 13, rpm: 900, v: 750, m: 0.034, pen: 18, he: 0.001, dmg: 1.1, tracer: 4 },
-  MG151: { name: '20 mm MG 151/20', cal: 20, rpm: 740, v: 705, m: 0.092, pen: 8, he: 0.0185, dmg: 3.5, tracer: 3 },
+  MG151: { name: '20 mm MG 151/20', cal: 20, rpm: 740, v: 785, m: 0.092, pen: 17, he: 0.0185, dmg: 3.5, tracer: 3 },
   Hispano: { name: '20 mm Hispano Mk II', cal: 20, rpm: 600, v: 880, m: 0.13, pen: 20, he: 0.011, dmg: 3.4, tracer: 3 },
   M3: { name: '12,7 mm M3', cal: 12.7, rpm: 1200, v: 890, m: 0.046, pen: 24, he: 0, dmg: 1.2, tracer: 4 },
   N37: { name: '37 mm N-37D', cal: 37, rpm: 400, v: 690, m: 0.735, pen: 40, he: 0.04, dmg: 12, tracer: 2 },
@@ -336,7 +358,7 @@ export const VEHICLES = Object.assign({}, TANKS, PLANES);
 // Eras: cada partida usa só os veículos de uma (antigo não enfrenta moderno). LINEUP é o elenco da era ativa.
 export const ERAS = {
   ww2: { name: 'Segunda Guerra', lineup: ['t34', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'], ground: ['t34', 'tiger'], planes: ['p47', 'il2', 'fw190'], aa: 'wirbel' },
-  mod: { name: 'Moderno', lineup: ['t72'], ground: ['t72'], planes: [], aa: null }
+  mod: { name: 'Moderno', lineup: ['t72', 'm1', 'f4e', 'mig21'], ground: ['t72', 'm1'], planes: ['f4e', 'mig21'], aa: null }
 };
 export const LINEUP = [...ERAS.ww2.lineup];
 export function setEra(e) { LINEUP.splice(0, LINEUP.length, ...ERAS[e].lineup); }

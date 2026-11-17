@@ -58,7 +58,7 @@ export class Plane {
     this.elev = 0; this.ail = 0; this.rud = 0; this.throttle = 1; this.wep = false;
     this.flaps = 0; this.flapStage = 0; this.airbrake = false; this.iP = 0; this.gear = 0; this.gearCmd = 0; this.shotsN = 0; this.hitsN = 0;
     this.gStress = 0; this.koT = 0; this.koAge = 0; this.overG = 0; this.n = 1; this.alpha = 0; this.ias = speed; this.dropSign = 1; this.spottedUntil = 0; this.oobT = 0;
-    this.firing = false; this.ordOn = opts.ord !== false; this.beltSel = opts.belts || null; this.onGround = false;
+    this.firing = false; this.ordOn = opts.ord !== false; this.mslOn = opts.msl !== false; this.beltSel = opts.belts || null; this.onGround = false;
     this.inv = new THREE.Matrix4();
     this.outfit();
     this.label = makeLabel(this);
@@ -84,11 +84,12 @@ export class Plane {
     });
     this.bombs = []; this.rockets = 0;
     if (this.ordOn) { for (const b of D.bombs) for (let i = 0; i < b.n; i++) this.bombs.push(b); this.rockets = D.rockets ? D.rockets.n : 0; }
-    else for (const m of [...this.bombMeshes, ...this.rocketMeshes]) m.visible = false;
+    else for (const m of [...this.bombMeshes, ...this.rocketMeshes, ...(this.ordFit || [])]) m.visible = false; // ordFit: pilones/casulos de bomba e foguete dos jatos
     this.ord0 = { bombs: this.bombs.length, rockets: this.rockets }; // carga de saída (o rearme só faz sentido se gastou)
     // estantes de mísseis (uma por tipo) e o selecionado; malhas na mesma ordem do modelo
     let mi = 0;
-    this.racks = (D.missiles || []).map(r => ({ w: r.w, M: MISSILES[r.w], n: r.n, max: r.n, meshes: this.missileMeshes.slice(mi, mi += r.n) }));
+    if (!this.mslOn) for (const m of this.missileMeshes) m.visible = false; // batalha de tanques: sem mísseis
+    this.racks = (this.mslOn && D.missiles || []).map(r => ({ w: r.w, M: MISSILES[r.w], n: r.n, max: r.n, meshes: this.missileMeshes.slice(mi, mi += r.n) }));
     this.sel = 0;
     // aviônicos: só existe o que a ficha da aeronave traz
     this.sys = {};
@@ -217,7 +218,7 @@ export class Plane {
       const kW = (hpL + hpR) / 2;
       const mach = V / _atm.a; this.mach = mach;
       CL += this.flaps * 0.38 * (aa <= as ? 1 : 0.5);
-      const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.flaps * 0.028 + (this.brakeK || 0) * (D.brakeCd || 0.11) + this.gearOut * 0.035 + this.bombs.length * 0.0012 + this.rockets * 0.0004 + this.missiles * 0.0008 + waveDrag(D, mach) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
+      const CD = D.cd0 + CL * CL / (Math.PI * D.e * AR) + CDs + this.flaps * 0.028 + (this.brakeK || 0) * (D.brakeCd || 0.11) + this.gearOut * 0.035 + this.bombs.length * 0.0012 + (this.rockets && D.rockets.pod ? D.rockets.pod.x.length * 2 : this.rockets) * 0.0004 + this.missiles * 0.0008 + waveDrag(D, mach) + (1 - kW) * 0.02 + (this.tailOn ? 0 : 0.01);
       // forças
       _pF.set(0, -m * G, 0);
       _pt.crossVectors(_pv, _pl); const ln = _pt.length();
