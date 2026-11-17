@@ -8,7 +8,9 @@ Feito em 2026-11-17 e integrado em `develop`: M1 Abrams, jatos de ataque na era 
 
 Antiaéreas com modelo real feitas em 2026-11-17: Wirbelwind (Prak) e Gepard (xFORTUNAx), esteiras ainda paradas (sem `run`).
 
-Pendente: tripulação por veículo (`def.crew`), HEAT, texturas/adereços do mapa, esteiras animadas das antiaéreas.
+Também feitos: tripulação por veículo (`def.crew`) e munição HEAT com fator de blindagem composta (`armor.ce`).
+
+Pendente: texturas/adereços do mapa, esteiras animadas das antiaéreas, IA usando HEAT/cobertura.
 
 ## Em andamento / próximos
 

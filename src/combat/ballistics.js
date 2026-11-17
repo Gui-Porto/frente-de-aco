@@ -123,6 +123,8 @@ export function evalArmor(t, hit, am, speed) {
   const angN = Math.max(0, ang - norm);
   let thick = arm.t, track = false;
   if (hit.part === 'hull' && hit.axis === 0 && hit.lp[1] < D.clr + 0.5) { thick += 20; track = true; }
+  // armor.ce: quanto a composta da frente (casco e torre) rende a mais contra carga oca (os valores da ficha são contra energia cinética)
+  if (am.type === 'HEAT' && D.armor.ce && /glacis|frontal|frente/.test(arm.key)) thick *= D.armor.ce;
   const eff = thick / Math.cos(angN * DEG);
   const pen = penAt(am, speed) * rand(0.95, 1.05);
   const over = am.cal > 3 * arm.t;
@@ -212,7 +214,7 @@ function onImpact(pr, hit) {
   if (hit.type === 'ground') {
     terrainNormal(hit.point.x, hit.point.z, _n);
     const cosI = -dir.dot(_n);
-    if (cosI < 0.12 && sp > 300 && !pr.bounced && pr.kind === 'shell' && am.type !== 'HE') {
+    if (cosI < 0.12 && sp > 300 && !pr.bounced && pr.kind === 'shell' && am.type !== 'HE' && am.type !== 'HEAT') {
       pr.v.addScaledVector(_n, -2 * pr.v.dot(_n)).multiplyScalar(0.7);
       pr.p.copy(hit.point).addScaledVector(_n, 0.1); pr.bounced = true; pr.ignore = null;
       fxDust(hit.point, 4, .7); return false;
@@ -223,14 +225,14 @@ function onImpact(pr, hit) {
       return true;
     }
     fxDust(hit.point, 10, 1);
-    if (am.type === 'HE') blast(hit.point, am.tnt, pr.owner, {}); else if (am.type === 'APHE') fxExplosion(hit.point, .45);
+    if (am.type === 'HE' || am.type === 'HEAT') blast(hit.point, am.tnt, pr.owner, {}); else if (am.type === 'APHE') fxExplosion(hit.point, .45);
     sndBoom(hit.point, false); addCrater(hit.point, am.type === 'HE' ? 1.6 : 0.9);
     return true;
   }
   if (hit.type === 'obst') {
     if (pr.kind === 'bullet') { if (Math.random() < .5) fxSparks(hit.point, 2); if (am.type === 'HEF') blast(hit.point, am.tnt, pr.owner, {}); return true; }
     fxDust(hit.point, 8, .9); fxSparks(hit.point, 4); sndBoom(hit.point, false);
-    if (am.type === 'HE') blast(hit.point, am.tnt, pr.owner, {});
+    if (am.type === 'HE' || am.type === 'HEAT') blast(hit.point, am.tnt, pr.owner, {});
     return true;
   }
   if (hit.type === 'plane') return impactPlane(pr, hit, sp, dir);
@@ -238,6 +240,7 @@ function onImpact(pr, hit) {
 }
 
 const _brl = new V3();
+const NARROW = { APCR: true, APFSDS: true, HEAT: true }; // núcleo/dardo/jato: trajeto fino, pouco estilhaço
 function impactTank(pr, hit, sp, dir) {
   const t = hit.tank, am = pr.am, sh = pr.owner, shell = pr.kind === 'shell', isP = sh && sh.isPlayer;
   if (sh && sh.team !== t.team) t.lastHitBy = sh;
@@ -265,11 +268,13 @@ function impactTank(pr, hit, sp, dir) {
     if (shell) {
       fxSparks(hit.point, 8); sndClank(hit.point);
       if (am.type === 'APHE') fxExplosion(hit.point, .35);
+      if (am.type === 'HEAT') blast(hit.point, am.tnt, sh, { direct: t, hit, small: true }); // o jato não passou: sobra a explosão por fora
       if (isP) xrayShot(t, hit, dir, E, am, 'NÃO PENETROU', `${Math.round(E.eff)} mm efetivos · ${Math.round(E.pen)} mm de perfuração`, 'enemy', null);
       if (t.isPlayer) { showDmg(`Impacto na ${E.arm.key} · sem penetração`, true); shakeCam(.25); }
     } else if (Math.random() < .25) fxSparks(hit.point, 2);
     return true;
   }
+  if (am.type === 'HEAT') { fxExplosion(hit.point, .6); sndBoom(hit.point, false); }
   postPen(t, pr, hit, dir, E);
   return true;
 }
@@ -294,7 +299,7 @@ function postPen(t, pr, hit, dir, E) {
   } else {
     // munição sólida: trajetória interna + estilhaços da chapa (cone)
     const len = shell ? Math.min(4, 0.8 + (E.pen - E.eff) / 35) : Math.min(1.2, 0.3 + (E.pen - E.eff) / 20);
-    const spall = shell ? ((am.type === 'APCR' || am.type === 'APFSDS') ? 0.18 : 0.35) : 0.05;
+    const spall = shell ? (NARROW[am.type] ? 0.18 : 0.35) : 0.05;
     const bx = lp.x + ld.x * len, by = lp.y + ld.y * len, bz = lp.z + ld.z * len;
     end = [bx, by, bz];
     for (const c of comps) {
@@ -304,9 +309,9 @@ function postPen(t, pr, hit, dir, E) {
       if (d < c.r + spall && Math.random() < (d < c.r ? (shell ? 1 : 0.5) : 0.6)) hits.add(c);
       if (!shell) continue;
       const vx = c.p[0] - lp.x, vy = c.p[1] - lp.y, vz = c.p[2] - lp.z, dd = Math.hypot(vx, vy, vz);
-      if (dd < 2.8 && (vx * ld.x + vy * ld.y + vz * ld.z) / dd > 0.95 && Math.random() < ((am.type === 'APCR' || am.type === 'APFSDS') ? .25 : .45)) hits.add(c);
+      if (dd < 2.8 && (vx * ld.x + vy * ld.y + vz * ld.z) / dd > 0.95 && Math.random() < (NARROW[am.type] ? .25 : .45)) hits.add(c);
     }
-    if (shell) for (let i = 0; i < ((am.type === 'APCR' || am.type === 'APFSDS') ? 8 : 16); i++) { const v = ld.clone().add(rv(.28)).normalize().multiplyScalar(rand(1.2, 2.8)); frags.push([[lp.x, lp.y, lp.z], [lp.x + v.x, lp.y + v.y, lp.z + v.z]]); }
+    if (shell) for (let i = 0; i < (NARROW[am.type] ? 8 : 16); i++) { const v = ld.clone().add(rv(.28)).normalize().multiplyScalar(rand(1.2, 2.8)); frags.push([[lp.x, lp.y, lp.z], [lp.x + v.x, lp.y + v.y, lp.z + v.z]]); }
   }
   const before = comps.map(c => c.kind === 'crew' ? c.ref.alive : !(c.name in t.mods) || !t.mods[c.name].broken);
   const names = applyCompHits(t, hits, am.type === 'APHE' ? 0.45 : 0.28);

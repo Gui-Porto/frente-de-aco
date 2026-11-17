@@ -46,11 +46,12 @@ export const TANKS = {
     model: { url: '/models/t72.glb', ring: [0, 1.38, -0.05], trunnion: [-0.01, 1.72, 1.2], cut: 1.5, muzzle: 5.95,
       run: { plate: [0.46, 0.32, 0.07], tol: 0.7, period: 2, fill: [[1.24, 2.89], [1.02, 2.2], [1.02, -2.2]], wheels: [[0.83, -2.89, 0.40], [0.46, -1.96, 0.40], [0.46, -1.15, 0.40], [0.46, -0.29, 0.40], [0.46, 0.53, 0.40], [0.46, 1.38, 0.40], [0.46, 2.21, 0.40], [0.85, 2.89, 0.30]] } },
     // blindagem em equivalente contra energia cinética (a composta do glacis e a torre fundida entram pelo valor efetivo)
-    armor: { front: [140, 68], lfront: [80, 60], side: [80, 0], rear: [45, 10], top: 30, bottom: 20, tFront: [380, 0], tSide: [190, 0], tRear: [65, 0], tTop: 45 },
+    armor: { ce: 1.2, front: [140, 68], lfront: [80, 60], side: [80, 0], rear: [45, 10], top: 30, bottom: 20, tFront: [380, 0], tSide: [190, 0], tRear: [65, 0], tTop: 45 },
     gun: { name: '125 mm 2A46', cal: 125, len: 6.0, reload: 7.1, trav: 24, elevRate: 3.5, dep: 6, elev: 14, brake: false, stab: true,
       ammo: [
         { name: '3BM22', type: 'APFSDS', pen: 380, v: 1760, m: 4.5, count: 22 },
-        { name: '3OF19', type: 'HE', v: 850, m: 23, tnt: 3.15, count: 17 }] },
+        { name: '3BK14M', type: 'HEAT', pen: 440, v: 905, m: 19, tnt: 1.6, count: 6 },
+        { name: '3OF19', type: 'HE', v: 850, m: 23, tnt: 3.15, count: 11 }] },
     mg: { name: 'PKT', cal: 7.62, rpm: 700, v: 855, m: 0.0096, pen: 9, he: 0, belt: 250, total: 2000, tracer: 5 }
   },
   m1: {
@@ -61,11 +62,11 @@ export const TANKS = {
     // "M1 Abrams" de Artem.Goyko, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/m1.py
     model: { url: '/models/m1.glb', ring: [0, 1.53, 0.34], trunnion: [0.01, 1.9, 1.6], muzzle: 5.9 },
     // blindagem em equivalente contra energia cinética: glacis fino mas quase deitado; composta na frente da torre e do casco
-    armor: { front: [80, 82], lfront: [330, 25], side: [60, 0], rear: [30, 10], top: 25, bottom: 20, tFront: [600, 0], tSide: [300, 0], tRear: [40, 0], tTop: 40 },
+    armor: { ce: 1.7, front: [80, 82], lfront: [330, 25], side: [60, 0], rear: [30, 10], top: 25, bottom: 20, tFront: [600, 0], tSide: [300, 0], tRear: [40, 0], tTop: 40 },
     gun: { name: '120 mm M256', cal: 120, len: 5.3, reload: 6, trav: 40, elevRate: 20, dep: 10, elev: 20, brake: false, stab: true,
       ammo: [
         { name: 'M829', type: 'APFSDS', pen: 490, v: 1670, m: 4.3, count: 27 },
-        { name: 'M830 (HE)', type: 'HE', v: 1140, m: 13.5, tnt: 1.8, count: 13 }] },
+        { name: 'M830', type: 'HEAT', pen: 600, v: 1140, m: 13.5, tnt: 1.2, count: 13 }] }, // HEAT-MP-T: serve de alto-explosivo também
     mg: { name: 'M240', cal: 7.62, rpm: 750, v: 853, m: 0.0096, pen: 9, he: 0, belt: 250, total: 4000, tracer: 5 }
   },
   pz4: {
@@ -405,4 +406,5 @@ export function ballistic(am, r) {
   return { ang: A.ang + (B.ang - A.ang) * f, v: A.v + (B.v - A.v) * f, t: A.t + (B.t - A.t) * f };
 }
 // Perfuração cai com a velocidade de impacto (relação de De Marre, expoente 1,43)
-export const penAt = (am, v) => am.type === 'HE' ? hePen(am.tnt) : am.pen * Math.pow(v / am.v, 1.43);
+// HEAT (carga oca): a perfuração não depende da velocidade nem da distância
+export const penAt = (am, v) => am.type === 'HE' ? hePen(am.tnt) : am.type === 'HEAT' ? am.pen : am.pen * Math.pow(v / am.v, 1.43);

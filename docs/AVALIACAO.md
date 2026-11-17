@@ -54,3 +54,7 @@ O jogo já tem o **esqueleto certo** — balística com blindagem inclinada, dan
 - Escala de alcance da luneta amontoada com APFSDS; rótulo da luneta escondido atrás do painel de munição.
 - Placar quebrava nomes em duas linhas; trilhos da estrada ziguezagueavam.
 - A bancada de inspeção (`tools/bench.html`) gerava folhas vazias nas 6 vistas.
+
+## Atualização (mesmo dia, mais tarde)
+
+Entraram depois desta avaliação: Wirbelwind e Gepard com modelo real (esteiras ainda paradas), tripulação por veículo e HEAT com fator de composta. Os itens 2 e 4 da lista "o que falta" estão resolvidos; o mapa continua sendo o ponto mais fraco.
