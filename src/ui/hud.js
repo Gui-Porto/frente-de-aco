@@ -3,8 +3,8 @@ import { camera } from '../core/render.js';
 import { S, tanks, planes, TICKETS } from '../core/state.js';
 import { settings } from '../core/settings.js';
 import { V3, $, clamp } from '../core/util.js';
-import { POINTS } from '../world/terrain.js';
-import { VEHICLES, ballistic, hePen } from '../data/vehicles.js';
+import { POINTS, AIRSPAWN, H } from '../world/terrain.js';
+import { VEHICLES, ballistic, hePen, G } from '../data/vehicles.js';
 import { segmentHit, raycast, evalArmor } from '../combat/ballistics.js';
 import { drawXray } from './xray.js';
 import { drawMini } from './minimap.js';
@@ -124,7 +124,33 @@ function updatePanels(v) {
 
 // ---------- Retículos ----------
 const _a = new V3(), _b = new V3(), _c = new V3(), _sp = new V3();
-const gunret = $('#gunret'), drop = $('#drop'), lead = $('#lead');
+const gunret = $('#gunret'), drop = $('#drop'), lead = $('#lead'), rkt = $('#rkt');
+// Onde a bomba (ou o foguete) cai se for largada AGORA: mesma integração dos projéteis (arrasto k·v, gravidade; o
+// foguete sai a 0,45·v e o motor empurra por 1,1 s). É o retículo de impacto do avião (CCIP): ponha o losango no alvo.
+const _ip = new V3(), _iv = new V3();
+export function ordImpact(p, rocket, out) {
+  const am = rocket ? p.def.rockets : p.bombs[p.bombs.length - 1]; if (!am) return null;
+  _ip.copy(p.pos); _iv.copy(p.vel);
+  if (rocket) _iv.add(_b.set(0, 0, 1).applyQuaternion(p.q).multiplyScalar(am.v * 0.45));
+  for (let i = 0, t = 0, h = 0.05; i < 500; i++, t += h) {
+    const sp = _iv.length(), k = am.k * sp;
+    _iv.x -= k * _iv.x * h; _iv.y += (-G - k * _iv.y) * h; _iv.z -= k * _iv.z * h;
+    if (rocket && t < 1.1) _iv.addScaledVector(_b.copy(_iv).normalize(), 0.5 * am.v * h);
+    _ip.addScaledVector(_iv, h);
+    if (_ip.y < H(_ip.x, _ip.z)) return out.copy(_ip);
+  }
+  return null;
+}
+const _ccB = new V3(), _ccR = new V3(); let ccT = 0, ccHasB = false, ccHasR = false;
+// marcadores fixos na tela: pontos de captura (sempre) e a própria base aérea (só para quem voa)
+const ptMarks = POINTS.map(pt => { const el = document.createElement('div'); el.className = 'lbl pt'; el.innerHTML = `<b>${pt.id}</b><span></span>`; $('#labels').appendChild(el); return el; });
+const baseMark = (() => { const el = document.createElement('div'); el.className = 'lbl pt base'; el.innerHTML = '<b>BASE</b><span></span>'; $('#labels').appendChild(el); return el; })();
+const km = d => d < 1000 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(1).replace('.', ',') + ' km';
+function mark(el, x, y, z, text) {
+  const d = _a.set(x, y, z).distanceTo(camera.position); _a.project(camera);
+  if (_a.z > 1 || Math.abs(_a.x) > 1.05 || Math.abs(_a.y) > 1.05) { el.style.display = 'none'; return; }
+  el.style.display = ''; el.style.transform = `translate(${(_a.x + 1) / 2 * innerWidth}px, ${(1 - _a.y) / 2 * innerHeight}px) translate(-50%,-100%)`; el.lastChild.textContent = text || km(d);
+}
 function toScreen(p, el) {
   _sp.copy(p).project(camera);
   if (_sp.z > 1 || Math.abs(_sp.x) > 1.2 || Math.abs(_sp.y) > 1.2) { el.hidden = true; return false; }
@@ -147,9 +173,12 @@ function reticles(t) {
   const inPlane = t && t.type === 'plane' && t.alive;
   $('#aimcircle').hidden = !inPlane; $('#nose').hidden = !inPlane;
   $('#cross').hidden = inPlane || cam.sniper || !t || !t.alive;
-  lead.hidden = true; drop.hidden = true;
+  lead.hidden = true; drop.hidden = true; if (!inPlane) rkt.hidden = true;
   if (inPlane) {
     toScreen(_a.set(0, 0, 350).applyMatrix4(t.root.matrixWorld), $('#nose'));
+    // retículos de impacto: losango = bomba, círculo com ponto = foguete (recalculados a ~20 Hz)
+    if ((ccT -= 1) <= 0) { ccT = 3; ccHasB = t.bombs.length > 0 && !!ordImpact(t, false, _ccB); ccHasR = t.rockets > 0 && !!ordImpact(t, true, _ccR); }
+    if (ccHasB) toScreen(_ccB, drop); if (ccHasR) toScreen(_ccR, rkt); else rkt.hidden = true;
     if (settings.gameplay.leadMarker) {
       let best = null, bd = 1300;
       for (const e of planes) { if (!e.alive || e.team === t.team) continue; const d = e.pos.distanceTo(t.pos); if (d < bd) { bd = d; best = e; } }
@@ -243,15 +272,19 @@ export function updateHUD(dt) {
   $('#oob').hidden = !oob; if (oob) $('#oob').textContent = `Retorne à área de combate · ${Math.max(0, Math.ceil((t.type === 'plane' ? 15 : 12) - t.oobT))} s`;
   if (!live || t.type !== 'plane') $('#gdark').style.opacity = 0;
   if ((hudT -= dt) > 0) return; hudT = .08;
+  const flying = live && t.type === 'plane';
   for (const k of [...tanks, ...planes]) {
     const el = k.label;
     if (k === t || !k.alive || (k.team === -1 && k.spottedUntil < S.now)) { el.style.display = 'none'; continue; }
     const p = k.type === 'plane' ? _a.copy(k.pos).add(_b.set(0, 3, 0)) : k.eyePos(_a).add(_b.set(0, 1.4, 0));
     const d = p.distanceTo(camera.position); p.project(camera);
-    if (p.z > 1 || d > (k.type === 'plane' ? 3000 : 900)) { el.style.display = 'none'; continue; }
+    // quem voa enxerga os marcadores de solo de longe (com a distância); no chão valem os 900 m de sempre
+    if (p.z > 1 || d > (k.type === 'plane' ? 3000 : flying ? 4000 : 900)) { el.style.display = 'none'; continue; }
     el.style.display = ''; el.style.transform = `translate(${(p.x + 1) / 2 * innerWidth}px, ${(1 - p.y) / 2 * innerHeight}px) translate(-50%,-100%)`;
-    el.style.opacity = d > 500 ? .6 : 1;
+    el.style.opacity = d > 500 && !flying ? .6 : 1; el.dataset.d = flying && k.type !== 'plane' ? km(d) : '';
   }
+  POINTS.forEach((pt, i) => { ptMarks[i].className = 'lbl pt o' + pt.owner; if (live) mark(ptMarks[i], pt.x, H(pt.x, pt.z) + 14, pt.z); else ptMarks[i].style.display = 'none'; });
+  if (flying) { const s = AIRSPAWN[t.team]; mark(baseMark, s.x, s.y, s.z, t.rearmT > 0 ? 'rearmando…' : ''); } else baseMark.style.display = 'none';
   [...$('#caps').children].forEach((c, i) => { const p = POINTS[i]; c.className = 'cap o' + p.owner; const bar = c.querySelector('i'); bar.style.width = Math.abs(p.prog) * 100 + '%'; bar.style.background = p.prog > 0 ? 'var(--ally)' : 'var(--enemy)'; });
   const v = live ? t : S.spectate;
   drawMini(v, v && v.type === 'plane', cam);

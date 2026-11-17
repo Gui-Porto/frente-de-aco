@@ -93,8 +93,17 @@ function deathText(k, cause) {
   const why = { ammo: 'Detonação da munição.', crew: 'Tripulação fora de combate.', fire: 'O incêndio tomou o veículo.', pilot: 'Piloto morto.', wing: 'Asa arrancada.', tail: 'Cauda destruída.', structure: 'Estrutura destruída.', crash: 'Colisão com o solo.', overg: 'A asa quebrou por excesso de G.', vne: 'Excesso de velocidade: a estrutura cedeu.', oob: 'Fora da área de combate.', flip: 'Veículo capotado.', bail: 'Veículo abandonado.' }[cause] || 'Veículo perdido.';
   return why + (k ? ` Abatido por ${k.who ? k.who.name : ''} (${k.def.short || k.def.name}).` : '');
 }
+// Rearme do avião do jogador: sem bombas/foguetes (ou com pouca munição), passar a até 900 m da própria base por 4 s
+// repara e rearma em voo — arcade, mas dá um ciclo ao avião (antes, gastou a carga, acabou o que fazer)
+function rearmStep(dt) {
+  const p = S.player; if (!p || p.type !== 'plane' || !p.alive) return;
+  const spent = p.bombs.length < p.ord0.bombs || p.rockets < p.ord0.rockets || p.guns.some(g => g.ammo < g.max * 0.5);
+  const s = AIRSPAWN[p.team], near = Math.hypot(p.pos.x - s.x, p.pos.z - s.z) < 900;
+  if (!spent || !near) { p.rearmT = 0; if (spent && !p.bombs.length && !p.rockets && !p.rearmHint) { p.rearmHint = true; showDmg('Carga esgotada · voe até a BASE para rearmar', true); } return; }
+  if ((p.rearmT = (p.rearmT || 0) + dt) > 4) { p.refit(); p.rearmT = 0; p.rearmHint = false; showDmg('Rearmado e reparado', true); }
+}
 export function updateMatch(dt) {
-  S.matchT += dt;
+  S.matchT += dt; rearmStep(dt);
   for (const p of POINTS) {
     let a = 0, e = 0, meIn = false;
     for (const t of tanks) if (t.alive && Math.hypot(t.pos.x - p.x, t.pos.z - p.z) < p.r) { t.team === 1 ? a++ : e++; if (t === S.player) meIn = true; }

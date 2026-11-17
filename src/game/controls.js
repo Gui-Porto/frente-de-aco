@@ -5,7 +5,9 @@ import { clamp } from '../core/util.js';
 import { cam } from './camera.js';
 import { airMouse, acam } from '../air/camera.js';
 import { readInput, pilot } from '../air/input.js';
-import { los } from '../combat/ballistics.js';
+import { los, losPts } from '../combat/ballistics.js';
+import { camera } from '../core/render.js';
+import { V3 } from '../core/util.js';
 import { setPause } from '../ui/menus.js';
 import { drawScore } from '../ui/hud.js';
 import { $ } from '../core/util.js';
@@ -88,6 +90,7 @@ export function controlPlayer(dt) {
   if (pressed('t_ext')) p.extinguish();
   if ((p.spotT = (p.spotT || 0) - dt) < 0) { p.spotT = .5; for (const e of tanks) if (e.team !== 1 && e.alive && p.pos.distanceTo(e.pos) < 650 && los(p, e)) e.spottedUntil = S.now + 4; }
 }
+const _sf = new V3(), _sd = new V3(), _sc = new V3();
 // Avião na batalha de tanques: MESMO comando da Batalha Aérea (air/input.js pilot): instrutor com mira em quaternion,
 // tecla = eixo direto com limite de G/estol, manete rápida. Antes havia um caminho próprio, mais antigo e pior de voar.
 function controlPlane(p, dt) {
@@ -97,4 +100,14 @@ function controlPlane(p, dt) {
   p.firing = isDown('a_guns');
   if (pressed('a_bomb')) p.dropBomb();
   if (pressed('a_rocket')) { p.fireRocket(); p.fireRocket(); }
+  // avistamento pelo ar: blindado inimigo a até 2,2 km, dentro de ~35° do que a câmera olha e com linha de visada,
+  // fica marcado para o time (antes o piloto não tinha marcador nenhum e não achava os alvos)
+  if ((p.spotT = (p.spotT || 0) - dt) < 0) {
+    p.spotT = .5; const f = camera.getWorldDirection(_sf);
+    for (const e of tanks) {
+      if (e.team === p.team || !e.alive) continue;
+      const d = _sd.copy(e.pos).sub(p.pos), L = d.length();
+      if (L < 2200 && d.dot(f) / L > 0.82 && losPts(p.pos, e.centerPos(_sc), p, e)) e.spottedUntil = S.now + 8;
+    }
+  }
 }

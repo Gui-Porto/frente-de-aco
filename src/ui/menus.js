@@ -137,7 +137,7 @@ function onSpawnBtn() {
   buildPanels(v);
   const b = settings.binds, k = id => keyName(b[id][0]);
   hint(v.type === 'plane'
-    ? `Mouse aponta · ${k('a_thr_up')}/${k('a_thr_dn')} potência · ${k('a_roll_l')}/${k('a_roll_r')} rolagem · ${k('a_guns')} armas · ${k('a_bomb')} bombas · ${k('a_rocket')} foguetes · ${k('a_flaps')} flaps · ${k('freelook')} olhar livre`
+    ? `Mouse aponta · ${k('a_thr_up')}/${k('a_thr_dn')} potência · ${k('a_roll_l')}/${k('a_roll_r')} rolagem · ${k('a_guns')} armas · ${k('a_bomb')} bombas (losango) · ${k('a_rocket')} foguetes (círculo) · ${k('a_flaps')} flaps · ${k('freelook')} olhar livre · sem carga: volte à BASE`
     : `${k('t_fwd')}${k('t_left')}${k('t_back')}${k('t_right')} dirigir · ${k('t_fire')} canhão · ${k('t_sight')} mira · ${k('t_zoom')} zoom · ${k('t_mg')} metralhadora · ${k('t_repair')} reparar · ${k('t_cruise_up')}/${k('t_cruise_dn')} cruzeiro`);
   lockPointer();
 }
