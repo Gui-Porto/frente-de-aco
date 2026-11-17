@@ -34,16 +34,32 @@ function proj(p, out = { x: 0, y: 0, on: false }) {
 }
 const P1 = { x: 0, y: 0, on: false }, P2 = { x: 0, y: 0, on: false };
 
-export function updateAirHUD(dt) {
-  if (S.state === 'airmenu' || S.mode !== 'air') return;
+function begin(dt) {
   V.dpr = Math.min(2, devicePixelRatio || 1);
   if (cv.width !== innerWidth * V.dpr || cv.height !== innerHeight * V.dpr) { cv.width = innerWidth * V.dpr; cv.height = innerHeight * V.dpr; }
   V.W = innerWidth; V.H = innerHeight; V.blink += dt;
   g.setTransform(V.dpr, 0, 0, V.dpr, 0, 0); g.clearRect(0, 0, V.W, V.H);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+}
+// Avião do jogador na batalha de tanques: a MESMA HUD da Batalha Aérea (retículo, painel, radar/RWR, alertas) por cima
+// do que é da partida de solo (tickets, minimapa, marcadores de blindados/pontos/base e retículos de bomba/foguete)
+let flyOn = false;
+export function updateFlyHUD(dt) {
+  const p = S.player, on = !!(p && p.alive && p.type === 'plane' && S.state === 'play');
+  if (on !== flyOn) { flyOn = on; cv.hidden = !on; $('#hud').classList.toggle('fly', on); if (!on) gdark(0); }
+  if (!on) return;
+  begin(dt);
+  const T = themeOf(p.def);
+  targets(p, true); speedLines(p); reticle(p); flightPanel(p, T); leftPanels(p, T); warnings(p);
+  if (isDown('a_xray')) xrayPanel(p, T);
+  gdark(p.blackout);
+}
+export function updateAirHUD(dt) {
+  if (S.state === 'airmenu' || S.mode !== 'air') return;
+  begin(dt);
   $('#score').hidden = !isDown('score'); if (!$('#score').hidden) drawScore();
   const p = S.player, live = p && p.alive && S.state === 'play';
   const v = live ? p : S.spectate;
-  g.lineCap = 'round'; g.lineJoin = 'round';
   topBar(v);
   if (p && !live) deathCard(themeOf(p.def)); // você caiu: quem, com o quê e o que levou
   if (!v) return;

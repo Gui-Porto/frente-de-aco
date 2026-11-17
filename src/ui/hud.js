@@ -87,23 +87,6 @@ export function buildPanels(v) {
   }
 }
 function updatePanels(v) {
-  if (v.type === 'plane') {
-    if (sc.width !== 230) { sc.width = 230; sc.height = 190; } // o painel 3D do tanque redimensiona o canvas
-    drawPlaneStatus(v);
-    $('#iIas').textContent = Math.round(v.ias * 3.6);
-    $('#iAlt').textContent = Math.round(v.pos.y);
-    $('#iVsi').textContent = (v.vel.y >= 0 ? '+' : '') + v.vel.y.toFixed(0);
-    $('#iThr').textContent = v.wep ? 'WEP' : Math.round(v.throttle * 100) + '%'; $('#iThr').className = 'mono' + (v.wep ? ' warn' : '');
-    $('#iG').textContent = v.n.toFixed(1); $('#iG').className = 'mono' + (Math.abs(v.n) > v.def.glim * .8 ? ' bad' : Math.abs(v.n) > 6 ? ' warn' : '');
-    $('#iTemp').textContent = Math.round(v.temp) + '°'; $('#iTemp').className = 'mono' + (v.temp > 110 ? ' bad' : v.temp > 100 ? ' warn' : '');
-    $('#iAoa').textContent = (v.alpha * 57.3).toFixed(0) + '°';
-    $('#planeFlags').innerHTML = [v.flaps ? '<span class="chip warn">FLAPS</span>' : '', v.airbrake ? '<span class="chip warn">FREIO AR.</span>' : '', v.fire > 0 ? '<span class="chip dead">FOGO</span>' : '', v.oil > 0 ? '<span class="chip warn">ÓLEO</span>' : '', !v.engineOn ? '<span class="chip dead">MOTOR PARADO</span>' : ''].join('');
-    $('#weapons').querySelectorAll('[data-g]').forEach(el => (el.querySelector('b').textContent = v.guns[+el.dataset.g].ammo));
-    const b = $('#weapons').querySelector('[data-b] b'); if (b) b.textContent = v.bombs.length;
-    const r = $('#weapons').querySelector('[data-r] b'); if (r) r.textContent = v.rockets;
-    $('#gdark').style.opacity = (v.blackout || 0) * 0.97;
-    return;
-  }
   $('#tSpeed').textContent = Math.round(Math.abs(v.vFwd) * 3.6);
   $('#tGear').textContent = v.gear < 0 ? 'R' : Math.abs(v.vFwd) < 0.2 && Math.abs(v.throttle) < 0.05 ? 'N' : String(v.gear);
   $('#tRpm').textContent = Math.round(v.rpm / 10) * 10;
@@ -171,24 +154,12 @@ function predictImpact(t, out) {
 }
 function reticles(t) {
   const inPlane = t && t.type === 'plane' && t.alive;
-  $('#aimcircle').hidden = !inPlane; $('#nose').hidden = !inPlane;
   $('#cross').hidden = inPlane || cam.sniper || !t || !t.alive;
   lead.hidden = true; drop.hidden = true; if (!inPlane) rkt.hidden = true;
   if (inPlane) {
-    toScreen(_a.set(0, 0, 350).applyMatrix4(t.root.matrixWorld), $('#nose'));
     // retículos de impacto: losango = bomba, círculo com ponto = foguete (recalculados a ~20 Hz)
     if ((ccT -= 1) <= 0) { ccT = 3; ccHasB = t.bombs.length > 0 && !!ordImpact(t, false, _ccB); ccHasR = t.rockets > 0 && !!ordImpact(t, true, _ccR); }
     if (ccHasB) toScreen(_ccB, drop); if (ccHasR) toScreen(_ccR, rkt); else rkt.hidden = true;
-    if (settings.gameplay.leadMarker) {
-      let best = null, bd = 1300;
-      for (const e of planes) { if (!e.alive || e.team === t.team) continue; const d = e.pos.distanceTo(t.pos); if (d < bd) { bd = d; best = e; } }
-      if (best) {
-        const W = t.guns[0].W, tof = ballistic(W, bd).t || bd / W.v;
-        _c.copy(best.pos).addScaledVector(best.vel, tof).addScaledVector(t.vel, -tof); _c.y += 0.5 * 9.81 * tof * tof;
-        _c.addScaledVector(t.vel, tof); // as balas herdam a velocidade do avião
-        toScreen(_c, lead);
-      }
-    }
     return;
   }
   if (t && t.alive && t.turretOn) {
@@ -203,8 +174,8 @@ function reticles(t) {
     }
     gunret.className = cls + (t.canFire() ? '' : ' unready');
     const rl = t.loaded >= 0 ? 1 : 1 - t.reload / t.gun.reload; gunret.style.setProperty('--rl', rl.toFixed(3)); gunret.style.setProperty('--rlo', rl < 1 ? 1 : 0); cam.reloadK = rl;
-    // na luneta o canhão é o próprio centro: sem bolinha; a chance de perfurar pinta o chevron do retículo
-    cam.penCls = cls; if (cam.sniper) gunret.hidden = true;
+    // na luneta o centro é o mouse e a bolinha é o canhão chegando; a chance de perfurar pinta o chevron do retículo
+    cam.penCls = cls;
     if (settings.gameplay.tankAssist && !t.def.gun.auto) { const ip = predictImpact(t, new V3()); if (ip) toScreen(ip, drop); }
   } else gunret.hidden = true;
 }
@@ -270,12 +241,11 @@ export function updateHUD(dt) {
   $('#vehHud').hidden = !live;
   const oob = live && t.oobT > 0;
   $('#oob').hidden = !oob; if (oob) $('#oob').textContent = `Retorne à área de combate · ${Math.max(0, Math.ceil((t.type === 'plane' ? 15 : 12) - t.oobT))} s`;
-  if (!live || t.type !== 'plane') $('#gdark').style.opacity = 0;
   if ((hudT -= dt) > 0) return; hudT = .08;
   const flying = live && t.type === 'plane';
   for (const k of [...tanks, ...planes]) {
     const el = k.label;
-    if (k === t || !k.alive || (k.team === -1 && k.spottedUntil < S.now)) { el.style.display = 'none'; continue; }
+    if (k === t || !k.alive || (k.team === -1 && k.spottedUntil < S.now) || (flying && k.type === 'plane')) { /* quem voa vê os aviões pela HUD aérea */ el.style.display = 'none'; continue; }
     const p = k.type === 'plane' ? _a.copy(k.pos).add(_b.set(0, 3, 0)) : k.eyePos(_a).add(_b.set(0, 1.4, 0));
     const d = p.distanceTo(camera.position); p.project(camera);
     // quem voa enxerga os marcadores de solo de longe (com a distância); no chão valem os 900 m de sempre
@@ -288,6 +258,6 @@ export function updateHUD(dt) {
   [...$('#caps').children].forEach((c, i) => { const p = POINTS[i]; c.className = 'cap o' + p.owner; const bar = c.querySelector('i'); bar.style.width = Math.abs(p.prog) * 100 + '%'; bar.style.background = p.prog > 0 ? 'var(--ally)' : 'var(--enemy)'; });
   const v = live ? t : S.spectate;
   drawMini(v, v && v.type === 'plane', cam);
-  if (live) updatePanels(t);
+  if (live && !flying) updatePanels(t);
   if (!$('#score').hidden) drawScore();
 }

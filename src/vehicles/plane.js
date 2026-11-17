@@ -259,9 +259,12 @@ export class Plane {
     // fisiologia do piloto: G SUSTENTADO acima da tolerância acumula carga (gStress 0..1). A tela vai escurecendo das
     // bordas para o centro (visão de túnel, `blackout`) e em 1 o piloto DESMAIA: alguns segundos sem controle, o avião
     // segue solto, depois ele volta a si. Sem texto nenhum — só a tela. Jato tem traje anti-G (+1 G); ferido apaga antes.
-    // 9 G no jato: ~3,7 s até apagar; 11 G: ~1,7 s. Negativo: abaixo de −3 G.
-    const gT = (this.eng.jet ? 7.5 : 6.5) - (this.wounded ? 1.5 : 0);
-    const gx = this.n > gT ? (this.n - gT) * 0.16 + 0.03 : this.n < -3 ? (-3 - this.n) * 0.2 : this.n > gT - 1.5 ? -0.12 : -0.3;
+    // 9 G no jato: ~3 s até apagar; 11 G: ~1,6 s. Negativo: abaixo de −3 G.
+    const gT = (this.eng.jet ? 7 : 6.5) - (this.wounded ? 1.5 : 0); // jato: 7 (o instrutor segura ~7,5 G: curva no limite fecha a visão aos poucos e apaga em ~12 s)
+    // o corpo sente o G FILTRADO (~0,6 s) e a taxa é contínua no limiar: com o G instantâneo e o degrau em gT, o
+    // limitador do instrutor (que oscila em torno do limite) fazia a tela pulsar junto com o avião em vez de fechar
+    const nf = this.gF = (this.gF ?? 1) + (this.n - (this.gF ?? 1)) * (1 - Math.exp(-dt / 0.6));
+    const gx = nf > gT ? (nf - gT) * 0.16 : nf < -3 ? (-3 - nf) * 0.2 : -Math.min(0.3, (gT - nf) * 0.08);
     // combustível: consumo do motor + vazamentos; seco = motor apaga
     const leak = fuelLeak(this);
     fuelStep(this, this.engineOn ? this.eng.flow : 0, dt);

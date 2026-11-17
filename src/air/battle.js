@@ -33,7 +33,7 @@ export function career() { try { return Object.assign({ xp: 0, battles: 0, wins:
 export const levelOf = xp => Math.floor(Math.sqrt(xp / 150)) + 1;
 
 export const B = {
-  cfg: null, mode: null, obj: null, player: null, t: 0, phase: 'idle', stats: null, result: null,
+  cfg: null, mode: null, obj: null, player: null, t: 0, phase: 'idle', stats: {}, result: null,
   weapon: 1, seeker: null, marked: null, downT: 0, prevFire: false, nameI: { 1: 0, '-1': 0 },
   // ---------- spawn ----------
   spawnOne(key, team, i, n, o = {}) {
@@ -124,27 +124,35 @@ export const B = {
     const p = this.player;
     // jogador: comando → avião
     if (p && p.alive && S.state === 'play') {
-      const c = readInput();
-      if (c.cam) acam.mode = (acam.mode + 1) % 4;
-      if (!this.marked || !this.marked.alive) this.marked = this.bestTarget();
-      if (c.target) { if (this.cycleTarget()) { if (this.seeker) this.seeker.reset(); toast(`Alvo: ${this.marked.def.short}`, 1200); } else toast('Nenhum inimigo na mira', 1000); }
-      this.avionicsInput(p, c);
-      pilot(p, c, cam.aimDir, dt);
-      p.firing = c.fire;
-      const cmK = c.cm ? 'both' : c.flare ? 'flare' : c.chaff ? 'chaff' : null;
-      if (cmK) { if (dropCM(p, cmK)) this.stats.cm = (this.stats.cm || 0) + 1; else if (cmK === 'flare' ? !p.flares : cmK === 'chaff' ? !p.chaff : !p.flares && !p.chaff) toast(cmK === 'flare' ? 'Sem flares' : cmK === 'chaff' ? 'Sem chaff' : 'Sem contramedidas', 1200); }
-      if (c.ext && !p.extinguish()) toast(p.fire > 0 ? 'Extintor já usado' : 'Sem incêndio', 1200);
-      // buscador sempre ligado enquanto houver míssil (o tom avisa); prioriza o alvo marcado (T)
-      if (this.seeker && p.missiles > 0) this.seeker.update(dt, p, planes, this.marked, S.now); else if (this.seeker) { this.seeker.state = LOCK.OFF; this.seeker.target = null; }
-      if (c.missile && p.missiles > 0) this.fireMissile(p);
-      else if (c.missile) toast(p.racks.length ? 'Mísseis esgotados' : 'Esta aeronave não leva mísseis', 1600);
+      this.playerStep(p, dt);
       this.refitStep(p, dt); this.fadeK = this.fadeStep(p, dt);
     } else if (p) { p.firing = false; }
     updateAirfields(dt, this.player);
-    updateMissiles(dt);
-    this.updateAvionics(dt);
-    this.updateLaunches();
+    this.systemsStep(dt);
     this.collisions();
+    this.update2(dt);
+  },
+  // comando do jogador → avião: o MESMO na Batalha Aérea e no avião da batalha de tanques (game/controls.js)
+  playerStep(p, dt) {
+    const c = readInput();
+    if (c.cam) acam.mode = (acam.mode + 1) % 4;
+    if (!this.marked || !this.marked.alive) this.marked = this.bestTarget();
+    if (c.target) { if (this.cycleTarget()) { if (this.seeker) this.seeker.reset(); toast(`Alvo: ${this.marked.def.short}`, 1200); } else toast('Nenhum inimigo na mira', 1000); }
+    this.avionicsInput(p, c);
+    pilot(p, c, cam.aimDir, dt);
+    p.firing = c.fire;
+    const cmK = c.cm ? 'both' : c.flare ? 'flare' : c.chaff ? 'chaff' : null;
+    if (cmK) { if (dropCM(p, cmK)) this.stats.cm = (this.stats.cm || 0) + 1; else if (cmK === 'flare' ? !p.flares : cmK === 'chaff' ? !p.chaff : !p.flares && !p.chaff) toast(cmK === 'flare' ? 'Sem flares' : cmK === 'chaff' ? 'Sem chaff' : 'Sem contramedidas', 1200); }
+    if (c.ext && !p.extinguish()) toast(p.fire > 0 ? 'Extintor já usado' : 'Sem incêndio', 1200);
+    // buscador sempre ligado enquanto houver míssil (o tom avisa); prioriza o alvo marcado (T)
+    if (this.seeker && p.missiles > 0) this.seeker.update(dt, p, planes, this.marked, S.now); else if (this.seeker) { this.seeker.state = LOCK.OFF; this.seeker.target = null; }
+    if (c.missile && p.missiles > 0) this.fireMissile(p);
+    else if (c.missile) toast(p.racks.length ? 'Mísseis esgotados' : 'Esta aeronave não leva mísseis', 1600);
+  },
+  // mísseis no ar + radar/RWR/MAW de todos (também nos dois modos)
+  systemsStep(dt) { updateMissiles(dt); this.updateAvionics(dt); this.updateLaunches(); },
+  update2(dt) {
+    const p = this.player;
     updateEnv(dt);
     // destroços queimando caem e somem
     for (const q of [...planes]) {

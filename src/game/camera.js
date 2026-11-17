@@ -8,7 +8,7 @@ import { raycast } from '../combat/ballistics.js';
 
 export const cam = {
   yaw: 0, pitch: -0.05, dist: 11, sniper: false, binoc: false, fov: 9, orbit: 0, drag: false,
-  rangeT: 0, range: 0, aimDir: new V3(0, 0, 1), want: new V3(0, 0, 1), hangar: null, pos: new V3(), init: false,
+  rangeT: 0, range: 0, aimDir: new V3(0, 0, 1), hangar: null, pos: new V3(), init: false,
 };
 const _dir = new V3(), _cp = new V3(), _ca = new V3(), _cb = new V3(), _fwd = new V3();
 export function camDir(out) { return out.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch)); }
@@ -47,16 +47,15 @@ export function updateCamera(dt) {
   } else {
     const t = v, D = t.def;
     const sight = (cam.sniper || cam.binoc) && t.alive && t.turretOn && t === p;
-    let look = _dir;
+    const look = _dir;
     if (sight) {
-      // mira do atirador: a luneta é solidária ao canhão — a imagem só anda na velocidade da torre/elevação;
-      // o mouse move o ponto desejado (cam.want, o círculo na luneta) e o canhão corre atrás. Binóculo: olhar livre.
+      // mira do atirador (como no WT): a luneta segue o MOUSE na hora; o canhão corre atrás na velocidade da
+      // torre/elevação e aparece como a bolinha (#gunret). Presa ao canhão, a imagem se arrastava atrás do mouse.
       if (cam.binoc) t.turret.localToWorld(_cp.set(D.turret.w * .22, D.turret.h + .1, D.turret.l * .3));
-      else { t.gunPivot.localToWorld(_cp.set(0, .28, .7)); look = _fwd.set(0, 0, 1).transformDirection(t.gunPivot.matrixWorld); }
+      else t.gunPivot.localToWorld(_cp.set(0, .28, .7));
       camera.position.copy(_cp); t.root.visible = false; cam.init = false;
       setFov(cam.binoc ? Math.min(cam.fov, 8) : cam.fov);
       if (!cam.binoc) t.aimPoint.copy(_cp).addScaledVector(_dir, 1500);
-      cam.want.copy(_dir);
       if ((cam.rangeT -= dt) <= 0) { cam.rangeT = .25; const h = raycast(_cp, look, 2000, t); cam.range = h ? h.t * 2000 : 0; }
     } else {
       t.root.visible = true;

@@ -150,3 +150,6 @@
 #apArms .belt button{font-size:12px;padding:3px 8px;min-width:0}
 #apArms .bseq{font-family:var(--mono);font-size:11px;color:var(--sky)}
 #apArms .bseq span{cursor:help}
+/* avião do jogador na batalha de tanques: HUD aérea no lugar dos painéis de solo; o minimapa sobe para o canto */
+#hud.fly #vehHud,#hud.fly #weaponBar,#hud.fly #instr,#hud.fly #aimcircle,#hud.fly #nose,#hud.fly #lead,#hud.fly #oob{display:none!important}
+#hud.fly #mini{left:16px;right:auto;top:16px;bottom:auto;width:180px;height:180px}

@@ -17,7 +17,7 @@ import { updateHUD } from '../ui/hud.js';
 import { initMenus, openSpawn } from '../ui/menus.js';
 import { B } from '../air/battle.js';
 import { updateAirCamera, aimAt, acam } from '../air/camera.js';
-import { updateAirHUD } from '../air/hud.js';
+import { updateAirHUD, updateFlyHUD } from '../air/hud.js';
 import { updateHangar } from '../air/hangar.js';
 import { airAudio, airAudioOff } from '../air/sound.js';
 import { initAir } from '../air/screens.js';
@@ -26,7 +26,7 @@ import { missiles, launchMissile } from '../air/missiles.js';
 let acc = 0;
 export function simulate(dt) {
   S.now += dt;
-  if (S.mode === 'air') B.update(dt); else controlPlayer(dt);
+  if (S.mode === 'air') B.update(dt); else { controlPlayer(dt); B.systemsStep(dt); }
   for (const t of tanks) if (t.brain) t.brain.update(dt);
   for (const p of planes) if (p.brain) p.brain.update(dt);
   for (const t of tanks) { if (t.alive) t.drive(dt); t.updateTurret(dt); t.updateSystems(dt); }
@@ -58,7 +58,9 @@ function frame(ts) {
   grass.count = Q.grass; grass.update(dt);
   if ((flagT += dt) > 0.05) { waveFlags(S.now + ts / 1000); flagT = 0; }
   // motores
-  if (S.mode === 'air' || S.state === 'airmenu') { if (eng.tank) eng.tank.set(false); tankVoices([]); airAudio(dt || 0.016); }
+  // quem voa na batalha de tanques ouve o mesmo áudio da Batalha Aérea (motor por perfil, vento, RWR, voz)
+  const flying = S.mode !== 'air' && p && p.alive && p.type === 'plane' && S.state === 'play';
+  if (S.mode === 'air' || S.state === 'airmenu' || flying) { if (eng.tank) eng.tank.set(false); tankVoices([]); airAudio(dt || 0.016); }
   else if (eng.tank) {
     airAudioOff(); // gravações/vozes do modo aéreo não ficam tocando na batalha de tanques
     const on = p && p.alive && S.state === 'play' && !S.paused && p.type !== 'plane';
@@ -73,7 +75,7 @@ function frame(ts) {
     eng.air.g.gain.value = near && !S.paused && S.state !== 'menu' ? (pl ? 0.06 : 0.12 / (1 + nd / 120)) * (near.engineOn ? 1 : 0.1) : 0;
     if (near) { eng.air.o.frequency.value = 45 + near.throttle * 40 + (near.wep ? 8 : 0); eng.air.o2.frequency.value = eng.air.o.frequency.value / 2; if (eng.air.lfo) eng.air.lfo.frequency.value = eng.air.o.frequency.value / 6; }
   }
-  if (S.mode === 'air') updateAirHUD(dt || 0.016); else updateHUD(dt || 0.016);
+  if (S.mode === 'air') updateAirHUD(dt || 0.016); else { updateHUD(dt || 0.016); updateFlyHUD(dt || 0.016); }
   renderFrame();
   endFrame();
 }

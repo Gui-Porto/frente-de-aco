@@ -114,6 +114,9 @@ function engine(p, x, y) {
 function weapons(p, x, y) {
   g.fillStyle = T.faint; g.fillRect(x, y - 4, PW - x - 14, 1);
   lbl('ARMAMENTO', x, y + 10); if (p.racks.length > 1) lbl(`${kb('a_wsel')} troca míssil`, PW - 14, y + 10, T.dim, 'right');
+  // carga de ataque ao solo (só na batalha de tanques); as linhas se apertam para caber no painel
+  const ord = p.ord0 && (p.ord0.bombs || p.ord0.rockets), cm = p.flares > 0 || p.chaff > 0 || p.def.jet;
+  const dy = Math.min(19, (PH - 12 - y - 30) / Math.max(1, p.guns.length + p.racks.length + (cm ? 1 : 0) + (ord ? 1 : 0) - 1));
   let yy = y + 30;
   for (const gg of p.guns) {
     const col = gg.broken || gg.jam ? C.enemy : gg.ammo < gg.max * 0.15 ? C.amber : T.fg;
@@ -122,7 +125,7 @@ function weapons(p, x, y) {
     g.fillStyle = T.faint; g.fillRect(x + 150, yy - 5, 90, 3);
     if (gg.heat > 0.02) { g.fillStyle = gg.jam ? C.enemy : gg.heat > 0.7 ? C.amber : T.dim; g.fillRect(x + 150, yy - 5, 90 * gg.heat, 3); }
     num(gg.broken ? '—' : gg.jam ? 'QUENTE' : String(gg.ammo), PW - 14, yy, 14, col);
-    yy += 19;
+    yy += dy;
   }
   for (const r of p.racks) {
     const sel = r === p.rack;
@@ -130,9 +133,10 @@ function weapons(p, x, y) {
     ptxt(r.M.short, x, yy, 13.5, sel ? T.fg : T.dim, 'left', UI, sel ? 700 : 500);
     ptxt(r.M.seeker === 'sarh' ? 'RADAR' : 'IR', x + 62, yy, 10.5, sel ? T.accent : T.faint, 'left', UI, 700);
     for (let i = 0; i < r.max; i++) { const mx = PW - 14 - (r.max - i) * 13; g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(mx - 1, yy - 12, 10, 14); g.fillStyle = i < r.n ? (sel ? T.fg : T.dim) : T.faint; g.fillRect(mx, yy - 11, 8, 12); }
-    yy += 19;
+    yy += dy;
   }
-  if (p.flares > 0 || p.chaff > 0 || p.def.jet) { ptxt('Flares · chaff', x, yy, 13.5, T.dim, 'left', UI, 500); num(`${p.flares} · ${p.chaff}`, PW - 14, yy, 14, p.flares ? T.fg : C.amber); }
+  if (cm) { ptxt('Flares · chaff', x, yy, 13.5, T.dim, 'left', UI, 500); num(`${p.flares} · ${p.chaff}`, PW - 14, yy, 14, p.flares ? T.fg : C.amber); yy += dy; }
+  if (ord) { ptxt(`Bombas ${kb('a_bomb')} · foguetes ${kb('a_rocket')}`, x, yy, 13.5, T.fg, 'left', UI, 500); num(`${p.bombs.length} · ${p.rockets}`, PW - 14, yy, 14, p.bombs.length || p.rockets ? T.fg : C.amber); }
 }
 
 function fuel(p, x, y, w) {

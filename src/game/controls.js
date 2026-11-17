@@ -3,8 +3,8 @@ import { S, tanks } from '../core/state.js';
 import { settings, codeDown, codeUp, isDown, pressed, mouse, clearInput } from '../core/settings.js';
 import { clamp } from '../core/util.js';
 import { cam } from './camera.js';
-import { airMouse, acam } from '../air/camera.js';
-import { readInput, pilot } from '../air/input.js';
+import { airMouse } from '../air/camera.js';
+import { B } from '../air/battle.js';
 import { los, losPts } from '../combat/ballistics.js';
 import { camera } from '../core/render.js';
 import { V3 } from '../core/util.js';
@@ -94,10 +94,9 @@ const _sf = new V3(), _sd = new V3(), _sc = new V3();
 // Avião na batalha de tanques: MESMO comando da Batalha Aérea (air/input.js pilot): instrutor com mira em quaternion,
 // tecla = eixo direto com limite de G/estol, manete rápida. Antes havia um caminho próprio, mais antigo e pior de voar.
 function controlPlane(p, dt) {
-  const c = readInput();
-  if (c.cam) acam.mode = (acam.mode + 1) % 4;
-  pilot(p, c, cam.aimDir, dt);
-  p.firing = isDown('a_guns');
+  // B.playerStep é o comando inteiro da Batalha Aérea: instrutor, manete, trem, mísseis, radar, contramedidas, extintor
+  if (B.player !== p) { B.player = p; B.marked = null; B.seeker = null; B.launches = []; B.radarPending = null; B.syncSeeker(); }
+  B.playerStep(p, dt);
   if (pressed('a_bomb')) p.dropBomb();
   if (pressed('a_rocket')) { p.fireRocket(); p.fireRocket(); }
   // avistamento pelo ar: blindado inimigo a até 2,2 km, dentro de ~35° do que a câmera olha e com linha de visada,

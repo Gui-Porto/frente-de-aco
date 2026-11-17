@@ -12,6 +12,7 @@ import { fxBurn, clearParts } from '../fx/particles.js';
 import { addFeed, showDmg } from '../ui/hud.js';
 import { openSpawn, showEnd } from '../ui/menus.js';
 import { cam } from './camera.js';
+import { clearMissiles } from '../air/missiles.js';
 import { $ } from '../core/util.js';
 
 const NAMES = { 1: ['Sgt. Moura', 'Cb. Teixeira', 'Ten. Barros', 'Sd. Ribeiro'], '-1': ['Ofw. Brandt', 'Ltn. Krause', 'Uffz. Lenz', 'St. Sokolov', 'Sgt. Orlov'] };
@@ -26,7 +27,7 @@ export function spawnVehicle(who, key, slot) {
   const D = VEHICLES[key]; let v;
   if (D.type === 'plane') {
     const s = AIRSPAWN[who.team], off = (slot - 2) * 60;
-    v = new Plane(key, who.team, who, new V3(s.x + off, s.y + rand(-50, 50), s.z), s.yaw, D.vspawn || (D.jet ? 200 : 125), { msl: false }); // jato nasce mais rápido (125 m/s é perto do estol dele); mísseis ar-ar ficam na Batalha Aérea
+    v = new Plane(key, who.team, who, new V3(s.x + off, s.y + rand(-50, 50), s.z), s.yaw, D.vspawn || (D.jet ? 200 : 125)); // jato nasce mais rápido (125 m/s é perto do estol dele)
     if (!who.isPlayer) v.brain = new PlaneBrain(v);
     lastPlane[who.team] = S.now;
   } else {
@@ -51,7 +52,7 @@ function botPick(team) {
 export function clearWorld() {
   while (tanks.length) tanks[0].remove();
   while (planes.length) planes[0].remove();
-  clearProjs(); clearDebris(); clearParts(); clearFlakes(); respawns = [];
+  clearProjs(); clearMissiles(); clearDebris(); clearParts(); clearFlakes(); respawns = [];
   for (const p of POINTS) { p.owner = 0; p.prog = 0; }
   resetTrees(); hideCraters();
   S.tickets = { 1: TICKETS, '-1': TICKETS }; S.player = null; S.spectate = null; S.roster = []; S.xray = null;
