@@ -225,10 +225,19 @@ const runwayClear = (x, z) => AIRFIELDS.some(a => onAirfield(a, x, z, 40) || (Ma
 export let treeMesh;
 {
   const trunk = new THREE.CylinderGeometry(0.18, 0.3, 3.2, 7); trunk.translate(0, 1.6, 0);
-  const c1 = new THREE.ConeGeometry(2.4, 4.5, 8); c1.translate(0, 4.6, 0);
-  const c2 = new THREE.ConeGeometry(1.9, 3.8, 8); c2.translate(0, 6.6, 0);
-  const c3 = new THREE.ConeGeometry(1.2, 2.8, 8); c3.translate(0, 8.4, 0);
-  const pine = mergeColored([[trunk, [0.16, 0.11, 0.07]], [c1, [0.05, 0.09, 0.035]], [c2, [0.055, 0.1, 0.04]], [c3, [0.06, 0.11, 0.045]]]);
+  // abeto: 6 saias de galhos, cada uma com a borda em estrela (ponta sim, ponta não) e caída — a silhueta deixa de ser cone liso
+  const tiers = [[trunk, [0.16, 0.11, 0.07]]];
+  for (let k = 0; k < 6; k++) {
+    const f = k / 5, r = 2.6 - 1.9 * f, hgt = 2.6 - 0.9 * f, g = new THREE.ConeGeometry(r, hgt, 12), gp = g.attributes.position;
+    for (let i = 0; i < gp.count; i++) if (gp.getY(i) < 0) { const a = Math.round(Math.atan2(gp.getZ(i), gp.getX(i)) / (Math.PI / 6)), long = ((a % 2) + 2) % 2 === 0, m = long ? 1.12 : 0.66; gp.setXYZ(i, gp.getX(i) * m, gp.getY(i) - (long ? 0.45 : 0), gp.getZ(i) * m); }
+    g.rotateY(k * 0.9); g.translate(0, 3.3 + k * 1.15 + hgt / 2 - 0.4, 0); g.computeVertexNormals();
+    tiers.push([g, [0.045 + 0.02 * f, 0.085 + 0.03 * f, 0.035 + 0.012 * f]]);
+  }
+  const pine = mergeColored(tiers);
+  { // pontas dos galhos mais claras, miolo junto ao tronco mais escuro
+    const P = pine.attributes.position, C = pine.attributes.color;
+    for (let i = 0; i < P.count; i++) if (P.getY(i) > 3.25 || Math.hypot(P.getX(i), P.getZ(i)) > 0.4) { const k = 0.62 + 0.3 * Math.min(1.6, Math.hypot(P.getX(i), P.getZ(i))); C.setXYZ(i, C.getX(i) * k, C.getY(i) * k, C.getZ(i) * k); }
+  }
   const oakParts = [[trunk, [0.15, 0.1, 0.065]]];
   for (let k = 0; k < 5; k++) { const b = new THREE.IcosahedronGeometry(rand(1.6, 2.4), 0); b.translate(rand(-1.2, 1.2), rand(4.8, 7), rand(-1.2, 1.2)); oakParts.push([b, [0.07 + k * .006, 0.115, 0.04]]); }
   const oak = mergeColored(oakParts);
@@ -245,7 +254,7 @@ export let treeMesh;
   list.forEach(([x, z, sc], i) => {
     p.set(x, H(x, z) - 0.2, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc, sc, sc);
     m.compose(p, q, s); treeMesh.setMatrixAt(i, m); col.setScalar(rand(.8, 1.2)); treeMesh.setColorAt(i, col);
-    TREES.push({ x, z, sc, down: false, i, rot: q.clone() }); regTree(x, z, 1.6 * sc, H(x, z) + 9 * sc);
+    TREES.push({ x, z, sc, down: false, i, rot: q.clone() }); regTree(x, z, 1.6 * sc, H(x, z) + 10.3 * sc);
     maskGrass(x - 1, z - 1, x + 1, z + 1);
   });
   scene.add(treeMesh);
