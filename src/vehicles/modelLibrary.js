@@ -34,7 +34,13 @@ export function applySkin(D, r) {
     for (const c of o.children) hide(c);
   };
   hide(r.root);
+  // solo: a tripulação procedural senta na altura da capota procedural e furava a capota da pele (capacete do F-4E para fora)
+  if (D.model.solo) r.root.traverse(g => { if (g.userData.crew) g.traverse(o => { if (o.isMesh && o.visible) { o.visible = false; o.layers.set(1); hidden.push(o); } }); });
   // solo: o alojamento do trem é o da estrutura (invisível, noutra altura) — recolhido, o trem some em vez de ficar sobre a asa da pele
+  // model.nozzles: a chama da pós-combustão sai dos bocais da pele (os da estrutura ficam noutro lugar: no F-4E, 6 m atrás)
+  (D.model.nozzles || []).forEach(([x, y, z, rr], i) => { const f = r.fx.flames[i]; if (!f) return; f.out.position.set(x, y, z); f.inn.position.set(x, y, z); f.glow.position.set(x, y, z + 0.05); f.r = rr; });
+  // solo: as portas do trem são recortes da chapa procedural (cinza, noutra forma) — na pele real ficavam chapas soltas no ar
+  if (D.model.solo) r.gearMesh.traverse(o => { if (o.userData.door || o.userData.legDoor) o.visible = false; });
   if (D.model.solo && r.gearMesh.userData.anim) { const g = r.gearMesh, anim = g.userData.anim; g.userData.anim = (k, ...a) => { anim(k, ...a); g.visible = k > 0.03; }; }
   const body = src.clone(true); if (D.model.off) body.position.fromArray(D.model.off);
   r.root.add(body); r.root.updateMatrixWorld(true);

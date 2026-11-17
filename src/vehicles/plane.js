@@ -243,6 +243,7 @@ export class Plane {
       let Mp = S * c * (qe * D.kde * (this.elev * ctrl * A.elev + (st('elevL') + st('elevR')) / 2) * tE - qd * 0.9 * aE * (this.tailOn ? 1 : 0.1)) - qd * S * c * c / (2 * Vd) * dmp[0] * this.pr * (this.tailOn ? 1 : 0.15);
       let Mr = qd * S * b * D.kda * (this.ail * A.ail + A.ailBias * 0.15) * ctrl * (this.wingOn.L && this.wingOn.R ? 1 : 0.5) - qd * S * b * b / (2 * Vd) * dmp[1] * this.rr * Math.max(kW, 0.3);
       Mr += qd * S * CL * (hpL - hpR) / 2 * b * 0.22;           // assimetria de sustentação
+      this._aR = qd * S * b * D.kda * A.ail * ctrl / Ir;        // aceleração de rolagem por unidade de aileron (o instrutor usa)
       Mr += qd * S * b * (0.03 * (this.flapP.L - this.flapP.R) + D.kda * 0.5 * (st('ailL') + st('ailR'))); // flap assimétrico / aileron travado
       Mr += qd * S * c * D.kde * 0.25 * tE * (this.elev * ctrl * A.elevBias + (st('elevL') - st('elevR')) / 2) * (D.span * 0.18 / c); // profundor de um lado só também rola
       if (aa > as) Mr += qd * S * b * 0.02 * this.dropSign * Math.min(1, (aa - as) * 8); // queda de asa no estol
@@ -457,7 +458,7 @@ export class Plane {
     // opts.nose (Batalha Aérea, como no WT): quem vai ao círculo do mouse é o NARIZ/linha das armas;
     // o integral segura o nariz no alvo apesar do ângulo de ataque. opts.gain deixa a resposta mais viva.
     const nose = !!opts.nose, K = opts.gain || 1;
-    const eN = Math.atan2(du, Math.max(df, 0.05)), pe = eN + this.alpha * (nose ? 0.25 : 0.9);
+    const eN = Math.atan2(du, Math.max(df, 0.05)), pe = eN + (nose ? 0 : this.alpha * 0.9); // nariz: direto no círculo (com 0,25·α o nariz parava ~3° além dele ao sair de uma puxada e voltava em 1,5 s)
     // no modo nariz o integral soma só o erro do NARIZ: somando pe, parava com o nariz 0,25·α fora do círculo
     // anti-windup: só soma perto da mira (< ~5°) e sem o limitador de G/ângulo de ataque atuando; fora disso esvazia.
     // Antes somava até 17° e em curva puxada enchia (0,3): ao parar o mouse o nariz passava ~6° do círculo e voltava em 3 s
@@ -499,7 +500,11 @@ export class Plane {
     if (opts.recover) elev *= clamp((wu - 0.25) / 0.45, 0, 1);
     const elev0 = elev;
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
-    this.ail = clamp(K * (ka * rollErr - 2.0 * this.rr), -1, 1);
+    // o comando sai uma vez por quadro: se o aileron cheio muda a rolagem mais do que o amortecimento pede de volta
+    // (jato leve e veloz: MiG-21 acima de ~900 km/h), o laço diverge e o aileron bate ±1 a cada quadro — o avião
+    // "treme as asas" sozinho. kS reduz o ganho para o laço discreto ficar estável em qualquer velocidade.
+    const kS = Math.min(1, 0.8 / Math.max(1e-6, (this._aR || 0) * dt * 2.0 * K));
+    this.ail = clamp(kS * K * (ka * rollErr - 2.0 * this.rr), -1, 1);
     // leme: corrige pequenos desvios e anula a derrapagem
     const yawErr = Math.atan2(dl, Math.max(df, 0.05));
     // integral lateral (modo nariz): perto da mira a inclinação quase não age e o leme proporcional era fraco —
@@ -525,7 +530,12 @@ export class Plane {
     const D = this.def, as = D.clmax / D.cla, aLim = as * (opts.aoa ?? 0.86 + this.flaps * 0.08);
     // sem estol; o termo −pr amortece o limitador (sem ele o F-86 em curva fechada ia de 2,3 a 9,3 G a cada ~0,8 s)
     elev = Math.min(elev, 0.9 * aLim / D.kde + (aLim - this.alpha) * 7 - this.pr);
-    elev = Math.min(elev, ((opts.glim || 8.5) - this.n) * 0.6 + 0.25);                    // limite de G
+    // limite de G sobre o G PREVISTO (G atual + o que a arfagem além da taxa de curva ainda vai somar em ~0,12 s):
+    // com o G instantâneo, em alta velocidade o profundor batia +1/−1 e o G ia de 5 a 10 a cada 0,25 s (MiG-21 e
+    // F-4E acima de ~800 km/h "quicavam" na curva forte — e a tela de G pulsava junto)
+    const Vg = Math.max(this.vel.length(), 40), nA = clamp(Math.abs(this.n) / Math.max(Math.abs(this.alpha), 0.02), 0, 90);
+    const nP = this.n + nA * Math.max(-0.6, this.pr - 9.81 * this.n / Vg * 0.9) * 0.12;
+    elev = Math.min(elev, ((opts.glim || 8.5) - Math.max(this.n, nP)) * 0.6 + 0.25);
     elev = Math.max(elev, -0.9 * as * 0.6 / D.kde + (-as * 0.6 - this.alpha) * 7);
     return Math.max(elev, (-(opts.gneg || 2.5) - this.n) * 0.6 - 0.25);                 // limite de G negativo
   }

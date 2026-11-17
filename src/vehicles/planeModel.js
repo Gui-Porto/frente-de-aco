@@ -552,7 +552,7 @@ export function buildPlane(D) {
   const limb = (g, a, b, r, m) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), l = d.length(); const o = add(new THREE.CapsuleGeometry(r, Math.max(0.01, l - 2 * r), 4, 10), m, g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return o; };
   // C.seats: posição de cada tripulante (fração do comprimento da capota, da frente); o primeiro é o piloto
   const crew = (g, t) => {
-    const { y, z } = heads[seats.indexOf(t)]; g.position.set(0, y, z); root.add(g);
+    const { y, z } = heads[seats.indexOf(t)]; g.position.set(0, y, z); g.userData.crew = true; root.add(g);
     // capacete
     const hm = add(new THREE.SphereGeometry(0.128, 22, 16), helm, g, 0, 0.012, -0.012); hm.scale.set(1, 1.07, 1.13);
     if (jet) {
@@ -1043,7 +1043,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
         rod(p, [rad * 1.1 * side, -rad * 1.5, -rad * 0.6], [rad * 1.1 * side, -cyl, -rad * 0.6], 0.012, mat);
       }
     }
-    if (door) mk(new THREE.BoxGeometry(0.025, len * 0.62, Math.max(0.5, r * 1.9)), doorM, p, door * (rad + 0.12), -len * 0.36, 0); // porta presa à perna (cor da barriga)
+    if (door) mk(new THREE.BoxGeometry(0.025, len * 0.62, Math.max(0.5, r * 1.9)), doorM, p, door * (rad + 0.12), -len * 0.36, 0).userData.legDoor = true; // porta presa à perna (cor da barriga)
     return p;
   };
   const { mz, mx, mr, nz, nl, nr } = GP, legs = [], doors = [];
