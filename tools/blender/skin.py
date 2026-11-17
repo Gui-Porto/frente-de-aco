@@ -60,6 +60,24 @@ for bx in cfg.get('cutBoxes', []):
         dead = [f for f in bm.faces if (lambda c: bx[0] <= c.x <= bx[1] and bx[2] <= c.z <= bx[3] and bx[4] <= -c.y <= bx[5])(f.calc_center_median())]
         if dead: bmesh.ops.delete(bm, geom=dead, context='FACES'); bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS'); bm.to_mesh(o.data)
         bm.free()
+# cutIslands: mesmas caixas, mas sai a PEÇA inteira (ilha de faces ligadas por posição) e só se couber toda na caixa.
+# Com cutBoxes a caixa do trem pegava também faces do intradorso da asa e deixava buracos serrilhados (F-4E).
+for bx in cfg.get('cutIslands', []):
+    for o in objs:
+        bm = bmesh.new(); bm.from_mesh(o.data); par = {}
+        def find(a):
+            while par.setdefault(a, a) != a: par[a] = par[par[a]]; a = par[a]
+            return a
+        key = lambda v: (round(v.co.x, 3), round(v.co.y, 3), round(v.co.z, 3))
+        for f in bm.faces:
+            ks = [key(v) for v in f.verts]
+            for q in ks[1:]: par[find(q)] = find(ks[0])
+        isl = {}
+        for f in bm.faces: isl.setdefault(find(key(f.verts[0])), []).append(f)
+        inside = lambda c: bx[0] <= c.x <= bx[1] and bx[2] <= c.z <= bx[3] and bx[4] <= -c.y <= bx[5]
+        dead = [f for fs in isl.values() if all(inside(v.co) for f in fs for v in f.verts) for f in fs]
+        if dead: print('ilhas fora: %d faces' % len(dead)); bmesh.ops.delete(bm, geom=dead, context='FACES'); bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS'); bm.to_mesh(o.data)
+        bm.free()
 # papéis
 W = cfg.get('wings', {}); groups = {'fuse': [], 'wingL': [], 'wingR': [], 'tail': []}
 def split(o, pred):                   # separa as faces de o em que pred(face) é verdadeiro; devolve o objeto novo (ou None)

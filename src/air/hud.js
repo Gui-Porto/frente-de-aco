@@ -204,26 +204,19 @@ function reticle(p) {
   const mk = rr ? rr.target : B.marked, d = rr ? rr.range : mk ? mk.pos.distanceTo(p.pos) : 0;
   const fpx = V.H / 2 / Math.tan(camera.fov * Math.PI / 360);
   if (pr) {
-    const x = pr.x, y = pr.y, R = 11, inR = mk && d < 1200;
-    // anel partido: quatro arcos com folga nos pontos cardeais, traços para fora e ponto central
+    const x = pr.x, y = pr.y, inR = mk && d < 1200;
+    // eixo das armas: cruz pequena e fina com ponto no centro (o retículo antigo, anel partido + traços + anel de
+    // alcance sempre aceso, ficava grande e poluído — reprovado pelo dono)
     g.beginPath();
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; g.moveTo(x + Math.cos(a - 0.5) * R, y + Math.sin(a - 0.5) * R); g.arc(x, y, R, a - 0.5, a + 0.5); }
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * 4, y + s * 4); g.lineTo(x + c * 9, y + s * 9); }
     rstroke(1.1);
-    g.beginPath();
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * (R + 3), y + s * (R + 3)); g.lineTo(x + c * (R + 7), y + s * (R + 7)); }
-    rstroke(1.1);
-    g.beginPath(); g.arc(x, y, 1.1, 0, 7); g.fillStyle = RW; g.fill();
-    // régua de alcance (como a barra do K-14): arco de 1200 m que encolhe até a distância do alvo marcado;
-    // a marca branca é a convergência das armas (400 m) — o alvo está no alcance ideal quando o arco passa dela
-    const RR = 24, a0 = -Math.PI / 2;
-    g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2); g.lineWidth = 0.7; g.strokeStyle = 'rgba(255,255,255,.14)'; g.stroke();
+    g.beginPath(); g.arc(x, y, 1, 0, 7); g.fillStyle = RW; g.fill();
+    // alcance: só com alvo a menos de 1200 m — arco fino que encolhe até a distância (cheio = 1200 m)
     if (inR) {
-      const k = clamp(d / 1200, 0, 1), close = d < 450;
-      g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2 * k); rstroke(close ? 1.8 : 1.2, close ? RW : RWD);
-      const ac = a0 + Math.PI * 2 * k; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 3), y + Math.sin(ac) * (RR - 3)); g.lineTo(x + Math.cos(ac) * (RR + 3), y + Math.sin(ac) * (RR + 3)); rstroke(1.1);
-      otxt((rr ? 'RADAR ' : '') + fmtD(d), x + RR + 8, y + 4, 11, close ? RW : RWD, 'left', MONO, 500);
+      const RR = 15, a0 = -Math.PI / 2, k = clamp(d / 1200, 0, 1), close = d < 450;
+      g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2 * k); rstroke(close ? 1.5 : 1, close ? RW : RWD);
+      otxt((rr ? 'RADAR ' : '') + fmtD(d), x + RR + 7, y + 4, 11, close ? RW : RWD, 'left', MONO, 500);
     }
-    const ac = a0 + Math.PI * 2 / 3; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 3), y + Math.sin(ac) * (RR - 3)); g.lineTo(x + Math.cos(ac) * (RR + 3), y + Math.sin(ac) * (RR + 3)); rstroke(1, RWD);
     // marcador de acerto: X que abre e some (branco; âmbar se foi forte)
     const ha = S.now - B.hitT;
     if (ha < 0.2) {
@@ -250,7 +243,7 @@ function reticle(p) {
   if (ap && acam.mode !== 3) {
     const near = pr ? Math.hypot(ap.x - pr.x, ap.y - pr.y) : 99;
     g.globalAlpha = clamp((near - 6) / 20, 0.7, 1); // sempre visível, como no WT (antes quase sumia com o nariz no lugar)
-    g.beginPath(); g.arc(ap.x, ap.y, 11, 0, 7); gstroke(1.6, C.white);
+    g.beginPath(); g.arc(ap.x, ap.y, 6, 0, 7); rstroke(1.2);
     g.globalAlpha = 1;
   }
 }

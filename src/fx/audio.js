@@ -14,7 +14,7 @@ export let AC = null;
 let master = null, sfx = null, engBus = null, verb = null, noiseBuf = null, brownBuf = null;
 const lastShot = new Map();
 export const eng = { tank: null, air: null };
-function applyVol() { if (!AC) return; master.gain.value = settings.audio.master * 0.7; sfx.gain.value = settings.audio.sfx; engBus.gain.value = settings.audio.engine; }
+function applyVol() { if (!AC) return; master.gain.value = settings.audio.master * 0.7; sfx.gain.value = settings.audio.sfx; engBus.gain.value = settings.audio.engine * 0.4; /* motores estavam altos demais contra tiros e explosões (dono) */ }
 onSettings(applyVol);
 
 // resposta ao impulso "ao ar livre": pré-eco curto (chão), cauda difusa de ~2,4 s com agudos morrendo antes
