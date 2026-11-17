@@ -21,7 +21,7 @@ export const COL = {
 
 // Terreno da área de combate como heightfield (armazenamento em coluna: índice = linha + coluna·(nrows+1))
 {
-  const n = 300, size = INNER, heights = new Float32Array((n + 1) * (n + 1));
+  const n = 420, size = INNER, heights = new Float32Array((n + 1) * (n + 1));
   for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
     const x = -size / 2 + (j / n) * size, z = -size / 2 + (i / n) * size;
     heights[i + j * (n + 1)] = H(x, z);

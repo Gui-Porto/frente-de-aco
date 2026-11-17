@@ -226,7 +226,7 @@ export class Plane {
       _pF.addScaledVector(_pv, -qd * S * CD);
       _pF.addScaledVector(_pl, -qd * S * 0.9 * beta);
       this.eng.step(h, this.throttle, this.wep, engK, this.engineOn);
-      _pF.addScaledVector(_pf, this.eng.force(V, _atm, mach));
+      _pF.addScaledVector(_pf, this.eng.force(V, _atm, mach) * (ST.mode === 'air' ? 1 : Math.max(0.15, 1 - 0.85 * (V / (0.7 * D.vne)) ** 2))); /* batalha de tanques (CAS): o empuxo cai com a velocidade — voa 15-30% mais devagar (pedido do dono) sem perder força para subir e curvar em baixa */
       // rodas/patins no chão: força em _pF, momentos (eixos do corpo) em _gM
       _gM[0] = _gM[1] = _gM[2] = 0;
       if (this.gearMesh && this.groundStep(h, m, _pF, _gM)) return;

@@ -33,13 +33,13 @@ function tankIcon(x, z, yaw, turretYaw, col, alive, aa, k = 1) {
   mctx.restore();
 }
 export function drawMini(viewer, air, cam) {
-  const R = air ? 1500 : 390, W = 210, s = W / (R * 2), cx = air ? 0 : 0, cz = 0;
+  const R = air ? 1500 : LIMIT + 30, W = 210, s = W / (R * 2), cx = air ? 0 : 0, cz = 0;
   const bs = 640 / (MMBASE * 2);
   mctx.drawImage(mmBase, (cx - R + MMBASE) * bs, (cz - R + MMBASE) * bs, R * 2 * bs, R * 2 * bs, 0, 0, W, W);
   const X = x => (x - cx + R) * s, Z = z => (z - cz + R) * s;
   // grade estilo carta militar
   mctx.strokeStyle = 'rgba(0,0,0,.35)'; mctx.lineWidth = 1; mctx.font = '600 10px "Barlow Condensed", sans-serif'; mctx.fillStyle = 'rgba(230,225,200,.7)';
-  const cell = air ? 400 : 100; const n = Math.round(R * 2 / cell);
+  const cell = air ? 400 : 250; const n = Math.round(R * 2 / cell);
   for (let i = 0; i <= n; i++) {
     const p = i * W / n;
     mctx.beginPath(); mctx.moveTo(p, 0); mctx.lineTo(p, W); mctx.moveTo(0, p); mctx.lineTo(W, p); mctx.stroke();

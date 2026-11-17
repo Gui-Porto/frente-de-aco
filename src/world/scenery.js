@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { scene, camera } from '../core/render.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, QUAT, UP, rand, srand, hash2 } from '../core/util.js';
-import { H, LIMIT, INNER, POINTS, SPAWN, FW, FD, roadDist, maskGrass, HMAP, AIRFIELDS, onAirfield } from './terrain.js';
-import { addStaticBox } from './physics.js';
-import { sndCrack } from '../fx/audio.js';
+import { H, LIMIT, INNER, POINTS, SPAWN, FW, FD, roadDist, maskGrass, HMAP, AIRFIELDS, onAirfield, stampGround } from './terrain.js';
+import { addStaticBox, world } from './physics.js';
+import { sndCrack, sndBoom } from '../fx/audio.js';
+import { fxDust, spawnP } from '../fx/particles.js';
 // Instâncias em blocos espaciais (células de `cell` m): cada bloco tem a própria esfera envolvente, então o corte por
 // frustum funciona nos três passes (cor, sombra, normais do GTAO). Um InstancedMesh único com milhares de árvores
 // espalhadas por 9 km era desenhado INTEIRO em todos eles.
@@ -28,7 +29,7 @@ function regObst(b, collider = true) {
     for (let j = Math.floor(b.mn[2] / GCELL); j <= Math.floor(b.mx[2] / GCELL); j++) {
       const k = gk(i, j); if (!OGRID.has(k)) OGRID.set(k, []); OGRID.get(k).push(b);
     }
-  if (collider) addStaticBox((b.mn[0] + b.mx[0]) / 2, (b.mn[1] + b.mx[1]) / 2, (b.mn[2] + b.mx[2]) / 2, (b.mx[0] - b.mn[0]) / 2, (b.mx[1] - b.mn[1]) / 2, (b.mx[2] - b.mn[2]) / 2);
+  if (collider) b.col = addStaticBox((b.mn[0] + b.mx[0]) / 2, (b.mn[1] + b.mx[1]) / 2, (b.mn[2] + b.mx[2]) / 2, (b.mx[0] - b.mn[0]) / 2, (b.mx[1] - b.mn[1]) / 2, (b.mx[2] - b.mn[2]) / 2);
   if (Math.abs(b.mn[0]) < INNER / 2 && Math.abs(b.mn[2]) < INNER / 2) maskGrass(b.mn[0] - 1, b.mn[2] - 1, b.mx[0] + 1, b.mx[2] + 1);
 }
 const _cand = [];
@@ -86,7 +87,15 @@ const M = {
   ruin: mat(stoneTex, 0x9a9488), wood: new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: .85 }),
   glass: new THREE.MeshStandardMaterial({ color: 0x1a2328, roughness: .15, metalness: .4 }), frame: new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: .8 }),
 };
-const add = (geo, m, x, y, z, ry = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = ry; o.castShadow = o.receiveShadow = true; scene.add(o); return o; };
+// Construções demolíveis: enquanto `cur` aponta para uma, toda malha criada entra nela. Na fusão por material (abaixo)
+// cada construção guarda os trechos de vértices que são dela; demolir = baixar a parede a um toco e enterrar o resto.
+export const BUILDS = [];
+let cur = null;
+function building(x, z, W, D, y0, hh, hp, ram = false) {
+  const ob = { mn: [x - W / 2, y0, z - D / 2], mx: [x + W / 2, y0 + hh, z + D / 2] }; regObst(ob);
+  cur = ob.b = { x, z, W, D, y0, top: y0 + hh, hp, hp0: hp, ram, ob, parts: [], dead: false }; BUILDS.push(cur); return cur;
+}
+const add = (geo, m, x, y, z, ry = 0, wall = false) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = ry; o.castShadow = o.receiveShadow = true; o.userData.b = cur; o.userData.wall = wall; scene.add(o); return o; };
 function boxUV(w, h, d, scale = 4) {
   const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv, n = g.attributes.normal;
   for (let i = 0; i < uv.count; i++) { const ax = Math.abs(n.getX(i)) > .5 ? d : w; uv.setXY(i, uv.getX(i) * ax / scale, uv.getY(i) * (Math.abs(n.getY(i)) > .5 ? d : h) / scale); }
@@ -112,9 +121,9 @@ function house(x, z, ruined) {
   const W = alongX ? d : w, D = alongX ? w : d;
   if (!clearSpot(x, z, Math.max(W, D) / 2)) return;
   const y0 = groundMin(x, z, W, D) - 0.6, hh = h + 0.6, wr = srand(), wallM = wr < 0.45 ? M.stone : wr < 0.8 ? M.timber : M.plaster;
-  add(boxUV(W, hh, D), ruined ? M.ruin : wallM, x, y0 + hh / 2, z);
-  regObst({ mn: [x - W / 2, y0, z - D / 2], mx: [x + W / 2, y0 + hh, z + D / 2] });
-  if (ruined) { for (let i = 0; i < 6; i++) add(new THREE.DodecahedronGeometry(rand(.3, .8), 0), M.ruin, x + rand(-W, W) * .6, H(x, z) + .2, z + rand(-D, D) * .6); return; }
+  building(x, z, W, D, y0, hh, ruined ? 60 : 110);
+  add(boxUV(W, hh, D), ruined ? M.ruin : wallM, x, y0 + hh / 2, z, 0, true);
+  if (ruined) { for (let i = 0; i < 6; i++) add(new THREE.DodecahedronGeometry(rand(.3, .8), 0), M.ruin, x + rand(-W, W) * .6, H(x, z) + .2, z + rand(-D, D) * .6); cur = null; return; }
   const top = y0 + hh, long = Math.max(W, D), short = Math.min(W, D);
   if (wallM !== M.stone) add(boxUV(W + .16, 1.5, D + .16), M.stone, x, y0 + 0.75, z); // embasamento de pedra
   // portas e janelas nas fachadas longas
@@ -128,32 +137,37 @@ function house(x, z, ruined) {
     for (const e of [1, -1]) { const o = e * (ww / 2 + .3); add(new THREE.BoxGeometry(.46, wh + .1, .07), M.shutter, fx + (alongX ? o : 0), yy, fz + (alongX ? 0 : o), ry); } // venezianas abertas
   }
   const roof = gable(long, short, 2.4 + short * 0.12, srand() < 0.6 ? M.tile : M.slate);
-  roof.position.set(x, top, z); roof.rotation.y = alongX ? Math.PI / 2 : 0; roof.castShadow = roof.receiveShadow = true; scene.add(roof);
+  roof.position.set(x, top, z); roof.rotation.y = alongX ? Math.PI / 2 : 0; roof.castShadow = roof.receiveShadow = true; roof.userData.b = cur; scene.add(roof);
   if (srand() < 0.7) add(boxUV(.7, 2.2, .7, 2), M.stone, x + (alongX ? long * .3 : short * .2), top + 1.4, z + (alongX ? short * .2 : long * .3));
+  cur = null;
 }
 // Igreja de pedra no vilarejo B
 {
   const x = 34, z = -38, y0 = groundMin(x, z, 12, 24) - 0.6;
-  add(boxUV(11, 11, 22), M.stone, x, y0 + 5.5, z); regObst({ mn: [x - 5.5, y0, z - 11], mx: [x + 5.5, y0 + 11, z + 11] });
-  const r = gable(22, 11, 5.5, M.slate); r.position.set(x, y0 + 11, z); r.castShadow = true; scene.add(r);
-  add(boxUV(5.5, 24, 5.5), M.stone, x, y0 + 12, z + 13); regObst({ mn: [x - 2.75, y0, z + 10.25], mx: [x + 2.75, y0 + 24, z + 15.75] });
-  const sp = add(new THREE.ConeGeometry(3.9, 12, 4), M.slate, x, y0 + 30, z + 13); sp.rotation.y = Math.PI / 4;
+  building(x, z, 11, 22, y0, 11, 500); add(boxUV(11, 11, 22), M.stone, x, y0 + 5.5, z, 0, true);
+  const r = gable(22, 11, 5.5, M.slate); r.position.set(x, y0 + 11, z); r.castShadow = true; r.userData.b = cur; scene.add(r);
   for (let i = -3; i <= 3; i += 2) add(new THREE.BoxGeometry(.06, 3, 1.1), M.glass, x + 5.53, y0 + 6, z + i * 2.6);
+  building(x, z + 13, 5.5, 5.5, y0, 24, 400); add(boxUV(5.5, 24, 5.5), M.stone, x, y0 + 12, z + 13, 0, true);
+  const sp = add(new THREE.ConeGeometry(3.9, 12, 4), M.slate, x, y0 + 30, z + 13); sp.rotation.y = Math.PI / 4;
+  cur = null;
 }
+// lugarejos entre os pontos (o campo dobrou de tamanho: sem eles sobrava pasto aberto entre A, B e C)
+for (const [hx, hz, n] of [[-210, 310, 7], [210, -310, 7], [-470, -330, 6], [470, 330, 6], [-190, -250, 5], [190, 250, 5], [20, 340, 6], [-20, -340, 6], [-610, 300, 4], [610, -300, 4]])
+  for (let i = 0; i < n; i++) { const a = srand() * Math.PI * 2, r = 10 + srand() * 34; house(hx + Math.cos(a) * r, hz + Math.sin(a) * r, srand() < 0.2); }
 for (const p of POINTS) for (let i = 0; i < (p.id === 'B' ? 16 : 7); i++) { const a = srand() * Math.PI * 2, r = 24 + srand() * (p.id === 'B' ? 42 : 30); house(p.x + Math.cos(a) * r, p.z + Math.sin(a) * r, srand() < 0.25); }
-for (let i = 0; i < 22; i++) house(srand() * 660 - 330, srand() * 540 - 270, srand() < 0.3);
+for (let i = 0; i < 46; i++) house((srand() * 2 - 1) * (LIMIT - 30), (srand() * 2 - 1) * (LIMIT - 90), srand() < 0.3);
 for (let i = 0; i < 50; i++) house(srand() * 6000 - 3000, srand() * 6000 - 3000, false);
-for (let i = 0; i < 22; i++) {
-  const x = srand() * 660 - 330, z = srand() * 560 - 280, along = srand() < 0.5, len = 14 + srand() * 22;
+for (let i = 0; i < 60; i++) {
+  const x = (srand() * 2 - 1) * (LIMIT - 30), z = (srand() * 2 - 1) * (LIMIT - 80), along = srand() < 0.5, len = 14 + srand() * 22;
   if (!clearSpot(x, z, len / 2)) continue;
   const w = along ? len : 0.9, d = along ? 0.9 : len, y0 = groundMin(x, z, w, d) - 0.6;
-  add(boxUV(w, 2.5, d, 2), M.ruin, x, y0 + 1.25, z); regObst({ mn: [x - w / 2, y0, z - d / 2], mx: [x + w / 2, y0 + 2.5, z + d / 2] });
+  building(x, z, w, d, y0, 2.5, 40, true); add(boxUV(w, 2.5, d, 2), M.ruin, x, y0 + 1.25, z, 0, true); cur = null; // muro: tanque derruba passando por cima
 }
-for (let i = 0; i < 30; i++) {
-  const x = srand() * 680 - 340, z = srand() * 600 - 300, s = 1.6 + srand() * 2.4;
+for (let i = 0; i < 80; i++) {
+  const x = (srand() * 2 - 1) * (LIMIT - 20), z = (srand() * 2 - 1) * (LIMIT - 60), s = 1.6 + srand() * 2.4;
   if (!clearSpot(x, z, s)) continue;
   const g = new THREE.DodecahedronGeometry(s, 1), p = g.attributes.position;
-  for (let k = 0; k < p.count; k++) p.setXYZ(k, p.getX(k) * rand(.85, 1.1), p.getY(k) * rand(.6, .8), p.getZ(k) * rand(.85, 1.1));
+  for (let k = 0; k < p.count; k++) { const f = 0.8 + 0.35 * hash2(Math.round(p.getX(k) * 23 + p.getZ(k) * 11), Math.round(p.getY(k) * 19 + i)); p.setXYZ(k, p.getX(k) * f, p.getY(k) * f * 0.7, p.getZ(k) * f); } // deformação pela posição: sorteio por vértice rasgava a malha em lascas
   g.computeVertexNormals();
   const y = H(x, z); const o = add(g, M.ruin, x, y + s * 0.25, z); o.rotation.set(0, srand() * 6, 0);
   regObst({ mn: [x - s * 0.8, y - 2, z - s * 0.8], mx: [x + s * 0.8, y + s * 0.8, z + s * 0.8] });
@@ -161,12 +175,59 @@ for (let i = 0; i < 30; i++) {
 
 // prédios/ruínas: centenas de malhas estáticas viram uma por material (cada malha era 1 draw call × cor/sombra/AO)
 {
-  const mats = new Set(Object.values(M)), by = new Map();
+  const mats = new Set(Object.values(M)), by = new Map(), off = new Map();
   for (const o of [...scene.children]) if (o.isMesh && !o.isInstancedMesh && mats.has(o.material)) {
     o.updateMatrix(); const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrix);
+    const s = off.get(o.material) || 0, n = g.attributes.position.count; off.set(o.material, s + n);
+    if (o.userData.b) o.userData.b.parts.push({ m: o.material, s, n, wall: o.userData.wall });
     if (!by.has(o.material)) by.set(o.material, []); by.get(o.material).push(g); scene.remove(o); o.geometry.dispose();
   }
-  for (const [m, gs] of by) { const o = new THREE.Mesh(mergeGeometries(gs), m); o.castShadow = o.receiveShadow = true; scene.add(o); }
+  for (const [m, gs] of by) { const o = new THREE.Mesh(mergeGeometries(gs), m); o.castShadow = o.receiveShadow = true; scene.add(o); m.userData.pos = o.geometry.attributes.position; m.userData.p0 = m.userData.pos.array.slice(); }
+}
+// entulho: um InstancedMesh só (já na cena desde o carregamento — nenhum shader novo na hora da demolição)
+const RUB = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), M.ruin, 2400); RUB.castShadow = RUB.receiveShadow = true; RUB.frustumCulled = false; scene.add(RUB);
+let rubI = 0;
+{ const z = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < 2400; i++) RUB.setMatrixAt(i, z); }
+const _rm = new THREE.Matrix4(), _rq = new QUAT(), _rs = new V3(), _rp = new V3(), _re = new THREE.Euler();
+export function demolish(B) {
+  if (B.dead) return; B.dead = true; B.ob.mx[1] = B.y0 + 0.3; // caixa abaixo do chão: tiro, IA e avião deixam de enxergar a construção
+  if (B.ob.col) { world.removeCollider(B.ob.col, false); B.ob.col = null; }
+  for (const pt of B.parts) {
+    const a = pt.m.userData.pos;
+    for (let i = pt.s; i < pt.s + pt.n; i++) a.setY(i, pt.wall ? Math.min(a.getY(i), B.y0 + 0.7 + 0.35 * hash2(Math.round(a.getX(i) * 7), Math.round(a.getZ(i) * 7))) : B.y0 - 4);
+    a.needsUpdate = true;
+  }
+  const n = Math.min(44, 5 + Math.round(B.W * B.D / 2.2)), g = H(B.x, B.z);
+  for (let i = 0; i < n; i++) {
+    const s = rand(.3, 1.15), u = rand(-.62, .62), v = rand(-.62, .62); _rp.set(B.x + u * B.W, 0, B.z + v * B.D); _rp.y = H(_rp.x, _rp.z) + s * 0.2 + (Math.abs(u) < .5 && Math.abs(v) < .5 ? rand(.1, .9) : 0); // monte mais alto no meio
+    _rs.set(s * rand(.8, 1.5), s * rand(.45, .8), s * rand(.8, 1.5)); _rq.setFromEuler(_re.set(rand(-.3, .3), rand(0, 6), rand(-.3, .3)));
+    RUB.setMatrixAt(rubI, _rm.compose(_rp, _rq, _rs)); rubI = (rubI + 1) % 2400;
+  }
+  RUB.instanceMatrix.needsUpdate = true;
+  const R = Math.max(B.W, B.D) * 0.6 + 2, k = Math.min(3, R / 4);
+  stampGround(2, B.x, B.z, R, t => 0.9 * (1 - t * t));
+  for (let i = 0; i < 5; i++) fxDust(new V3(B.x + rand(-.4, .4) * B.W, g + rand(.5, 2.5), B.z + rand(-.4, .4) * B.D), 10, 1.2 + k * 0.5);
+  for (let i = 0; i < 6; i++) spawnP({ pos: new V3(B.x + rand(-.4, .4) * B.W, g + rand(1, Math.min(6, B.top - B.y0)), B.z + rand(-.4, .4) * B.D), vel: new V3(rand(-1.5, 1.5), rand(.5, 2), rand(-1.5, 1.5)), life: rand(3, 5.5), size: 2 + k, size1: 7 + k * 4, color: 0xb9ad98, op: .55, drag: 1.5 });
+  sndCrack(_rp.set(B.x, g, B.z)); if (B.hp0 > 50) sndBoom(_rp, B.hp0 > 300);
+}
+export function damageObst(ob, dmg) { const B = ob && ob.b; if (B && !B.dead && (B.hp -= dmg) <= 0) demolish(B); }
+// explosão: dano cai com a distância até a caixa da construção (granada HE de 85 mm ≈ 60, bomba de 250 kg derruba o quarteirão)
+export function blastBuildings(pos, tnt) {
+  if (tnt < 0.01) return;
+  const R = 2 + 3 * Math.cbrt(tnt), k = 70 * Math.pow(tnt, 2 / 3);
+  for (const b of [...obstNear(pos.x - R, pos.z - R, pos.x + R, pos.z + R)]) {
+    if (!b.b || b.b.dead) continue;
+    const d = Math.hypot(Math.max(b.mn[0] - pos.x, 0, pos.x - b.mx[0]), Math.max(b.mn[1] - pos.y, 0, pos.y - b.mx[1]), Math.max(b.mn[2] - pos.z, 0, pos.z - b.mx[2]));
+    if (d < R) damageObst(b, k * (1 - d / R) ** 2);
+  }
+}
+export function resetBuildings() {
+  for (const B of BUILDS) {
+    B.hp = B.hp0; if (!B.dead) continue; B.dead = false; B.ob.mx[1] = B.top;
+    const b = B.ob; b.col = addStaticBox((b.mn[0] + b.mx[0]) / 2, (b.mn[1] + b.mx[1]) / 2, (b.mn[2] + b.mx[2]) / 2, (b.mx[0] - b.mn[0]) / 2, (b.mx[1] - b.mn[1]) / 2, (b.mx[2] - b.mn[2]) / 2);
+    for (const pt of B.parts) { const a = pt.m.userData.pos; a.array.set(pt.m.userData.p0.subarray(pt.s * 3, (pt.s + pt.n) * 3), pt.s * 3); a.needsUpdate = true; }
+  }
+  const z = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < 2400; i++) RUB.setMatrixAt(i, z); RUB.instanceMatrix.needsUpdate = true;
 }
 
 // ---------- Vegetação instanciada ----------
@@ -183,19 +244,20 @@ function mergeColored(parts) {
   geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
   return geo;
 }
-const vegMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
 // Cercas vivas (bocage): bloqueiam a visão; tanques atravessam com perda de velocidade
 {
-  const bush = new THREE.IcosahedronGeometry(1, 1);
-  const bp = bush.attributes.position; for (let k = 0; k < bp.count; k++) { const f = rand(.85, 1.15); bp.setXYZ(k, bp.getX(k) * f, bp.getY(k) * f, bp.getZ(k) * f); } bush.computeVertexNormals();
+  // arbusto: esfera deformada com normais de esfera (macio); a deformação sai da POSIÇÃO do vértice — com sorteio por
+  // vértice a malha (não indexada) abria em triângulos soltos e espetados
+  const bush = new THREE.IcosahedronGeometry(1, 1), bp = bush.attributes.position, bn = bush.attributes.normal;
+  for (let k = 0; k < bp.count; k++) { const x = bp.getX(k), y = bp.getY(k), z = bp.getZ(k), f = 0.82 + 0.36 * hash2(Math.round(x * 31 + z * 17), Math.round(y * 29 - z * 13)); bn.setXYZ(k, x, y * 0.7 + 0.3, z); bp.setXYZ(k, x * f, y * f, z * f); }
   const list = [];
   const seg = (pts) => { const xs = pts.map(p => p[0]), zs = pts.map(p => p[1]), y0 = Math.min(...pts.map(p => H(p[0], p[1]))); return { mn: [Math.min(...xs) - 0.8, y0 - 1, Math.min(...zs) - 0.8], mx: [Math.max(...xs) + 0.8, y0 + 2.9, Math.max(...zs) + 0.8], stamp: 0 }; };
-  for (let i = -6; i <= 6; i++) for (let j = -7; j <= 7; j++) for (const horiz of [true, false]) {
+  for (let i = -Math.ceil(LIMIT / FW) - 2; i <= Math.ceil(LIMIT / FW) + 2; i++) for (let j = -Math.ceil(LIMIT / FD) - 2; j <= Math.ceil(LIMIT / FD) + 2; j++) for (const horiz of [true, false]) {
     if (hash2(i * 7 + (horiz ? 1 : 2), j * 13) > 0.42) continue;
     const x0 = i * FW - 13, z0 = j * FD - 7, len = horiz ? FW : FD, cx = horiz ? x0 + FW / 2 : x0, cz = horiz ? z0 : z0 + FD / 2;
     if (Math.abs(cx) > LIMIT + 120 || Math.abs(cz) > LIMIT + 120) continue;
     const pts = [];
-    for (let s = -len / 2; s <= len / 2; s += 2.0) {
+    for (let s = -len / 2; s <= len / 2; s += 2.3) {
       const x = horiz ? cx + s : cx + rand(-.3, .3), z = horiz ? cz + rand(-.3, .3) : cz + s;
       if (roadDist(x, z) < 7 || POINTS.some(p => Math.hypot(x - p.x, z - p.z) < 26) || [SPAWN[1], SPAWN[-1]].some(p => Math.hypot(x - p.x, z - p.z) < 50)) { if (pts.length > 2) HEDGES.push(seg(pts)); pts.length = 0; continue; }
       if (obstNear(x - 2, z - 2, x + 2, z + 2).some(b => x > b.mn[0] - 1 && x < b.mx[0] + 1 && z > b.mn[2] - 1 && z < b.mx[2] + 1)) continue;
@@ -204,9 +266,9 @@ const vegMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughn
     if (pts.length > 2) HEDGES.push(seg(pts));
   }
   const m = new THREE.Matrix4(), q = new QUAT(), s = new V3(), p = new V3(), c = new THREE.Color();
-  for (const mesh of chunked(bush, new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), list, 160, ([x, z], i, mesh) => {
-    const sc = rand(1.2, 1.8); p.set(x, H(x, z) + sc * 0.6, z); q.setFromEuler(new THREE.Euler(rand(0, 3), rand(0, 3), 0)); s.set(sc, sc * rand(0.9, 1.35), sc);
-    m.compose(p, q, s); mesh.setMatrixAt(i, m); c.setRGB(rand(.05, .08), rand(.09, .13), rand(.03, .045)); mesh.setColorAt(i, c);
+  for (const mesh of chunked(bush, new THREE.MeshStandardMaterial({ roughness: 1 }), list, 160, ([x, z], i, mesh) => {
+    const sc = rand(1.35, 1.95); p.set(x, H(x, z) + sc * 0.6, z); q.setFromEuler(new THREE.Euler(0, rand(0, 6), 0)); s.set(sc, sc * rand(0.9, 1.35), sc);
+    m.compose(p, q, s); mesh.setMatrixAt(i, m); c.setRGB(rand(.045, .075), rand(.085, .125), rand(.028, .042)); mesh.setColorAt(i, c);
     maskGrass(x - 1.5, z - 1.5, x + 1.5, z + 1.5);
   })) mesh.castShadow = mesh.receiveShadow = true;
 }
@@ -222,62 +284,79 @@ export function treeHit(x, y, z, rad) {
 }
 // pista e corredor de aproximação ficam livres de árvores
 const runwayClear = (x, z) => AIRFIELDS.some(a => onAirfield(a, x, z, 40) || (Math.abs(x - a.x) < 140 && Math.abs(z - a.z) < a.len / 2 + 1600));
-export let treeMesh;
+// copa: esfera deformada com normais "de esfera" (sombreado macio em vez de facetas) — o dono achou o mapa feio e as
+// árvores/cercas de triângulos chapados eram o que mais pesava
+function blob(r, det, cx, cy, cz, sy = 0.8) {
+  const g = new THREE.IcosahedronGeometry(r, det), P = g.attributes.position, N = g.attributes.normal;
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), f = 0.8 + 0.4 * hash2(Math.round(x * 31 + z * 17), Math.round(y * 29 - z * 13));
+    N.setXYZ(i, x / r, y / r * 0.8 + 0.2, z / r); P.setXYZ(i, x * f + cx, y * f * sy + cy, z * f + cz);
+  }
+  return g;
+}
+// folhagem (y > y0): mais escura por baixo e perto do tronco, clara nas pontas de cima (oclusão falsa, de graça)
+function shade(geo, y0, y1) {
+  const P = geo.attributes.position, C = geo.attributes.color;
+  for (let i = 0; i < P.count; i++) if (P.getY(i) > y0) { const k = 0.5 + 0.55 * Math.min(1, (P.getY(i) - y0) / (y1 - y0)) + 0.1 * Math.min(1.5, Math.hypot(P.getX(i), P.getZ(i))); C.setXYZ(i, C.getX(i) * k, C.getY(i) * k, C.getZ(i) * k); }
+  return geo;
+}
+function broadleaf(det, hue) {
+  const trunk = new THREE.CylinderGeometry(0.2, 0.42, 4.4, 7); trunk.translate(0, 2.2, 0);
+  const parts = [[trunk, [0.13, 0.095, 0.065]], [blob(2.7, det, 0, 6.6, 0), [0.075 + hue, 0.125, 0.04]]];
+  for (let k = 0; k < 4; k++) { const a = k * 1.57 + rand(-.4, .4), d = rand(1.5, 2.2); parts.push([blob(rand(1.5, 2.1), det, Math.cos(a) * d, rand(4.6, 6.2), Math.sin(a) * d), [0.065 + hue + k * .004, 0.11 + k * .004, 0.036]]); }
+  return shade(mergeColored(parts), 3.4, 9);
+}
+const leafMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
 {
   const trunk = new THREE.CylinderGeometry(0.18, 0.3, 3.2, 7); trunk.translate(0, 1.6, 0);
-  // abeto: 6 saias de galhos, cada uma com a borda em estrela (ponta sim, ponta não) e caída — a silhueta deixa de ser cone liso
+  // abeto: 6 saias de galhos, cada uma com a borda em estrela (ponta sim, ponta não) e caída
   const tiers = [[trunk, [0.16, 0.11, 0.07]]];
   for (let k = 0; k < 6; k++) {
-    const f = k / 5, r = 2.6 - 1.9 * f, hgt = 2.6 - 0.9 * f, g = new THREE.ConeGeometry(r, hgt, 12), gp = g.attributes.position;
-    for (let i = 0; i < gp.count; i++) if (gp.getY(i) < 0) { const a = Math.round(Math.atan2(gp.getZ(i), gp.getX(i)) / (Math.PI / 6)), long = ((a % 2) + 2) % 2 === 0, m = long ? 1.12 : 0.66; gp.setXYZ(i, gp.getX(i) * m, gp.getY(i) - (long ? 0.45 : 0), gp.getZ(i) * m); }
+    const f = k / 5, r = 2.6 - 1.9 * f, hgt = 2.6 - 0.9 * f, g = new THREE.ConeGeometry(r, hgt, 14), gp = g.attributes.position;
+    for (let i = 0; i < gp.count; i++) if (gp.getY(i) < 0) { const a = Math.round(Math.atan2(gp.getZ(i), gp.getX(i)) / (Math.PI / 7)), long = ((a % 2) + 2) % 2 === 0, m = long ? 1.1 : 0.78; gp.setXYZ(i, gp.getX(i) * m, gp.getY(i) - (long ? 0.4 : 0), gp.getZ(i) * m); }
     g.rotateY(k * 0.9); g.translate(0, 3.3 + k * 1.15 + hgt / 2 - 0.4, 0); g.computeVertexNormals();
-    tiers.push([g, [0.045 + 0.02 * f, 0.085 + 0.03 * f, 0.035 + 0.012 * f]]);
+    tiers.push([g, [0.04 + 0.02 * f, 0.08 + 0.03 * f, 0.035 + 0.012 * f]]);
   }
-  const pine = mergeColored(tiers);
-  { // pontas dos galhos mais claras, miolo junto ao tronco mais escuro
-    const P = pine.attributes.position, C = pine.attributes.color;
-    for (let i = 0; i < P.count; i++) if (P.getY(i) > 3.25 || Math.hypot(P.getX(i), P.getZ(i)) > 0.4) { const k = 0.62 + 0.3 * Math.min(1.6, Math.hypot(P.getX(i), P.getZ(i))); C.setXYZ(i, C.getX(i) * k, C.getY(i) * k, C.getZ(i) * k); }
-  }
-  const oakParts = [[trunk, [0.15, 0.1, 0.065]]];
-  for (let k = 0; k < 5; k++) { const b = new THREE.IcosahedronGeometry(rand(1.6, 2.4), 0); b.translate(rand(-1.2, 1.2), rand(4.8, 7), rand(-1.2, 1.2)); oakParts.push([b, [0.07 + k * .006, 0.115, 0.04]]); }
-  const oak = mergeColored(oakParts);
-  const list = [];
-  for (let i = 0; i < 3500 && list.length < 560; i++) {
-    const cx = srand() * 720 - 360, cz = srand() * 660 - 330;
+  const pine = shade(mergeColored(tiers), 3.25, 11);
+  const GEO = [pine, broadleaf(1, 0), broadleaf(1, 0.03)], TOP = [10.3, 9.2, 9.2], RAD = [1.6, 2.8, 2.8], lists = [[], [], []];
+  for (let i = 0, n = 0; i < 16000 && n < 2000; i++) {
+    const cx = (srand() * 2 - 1) * (LIMIT + 40), cz = (srand() * 2 - 1) * (LIMIT + 10);
     const k = Math.sin(cx * 0.02) * Math.cos(cz * 0.017) + Math.sin(cx * 0.051 + 2) * 0.4;
     if (k < 0.38) continue;
-    if (clearSpot(cx, cz, 1.2)) list.push([cx, cz, 0.8 + srand() * 0.6]);
+    // espécies em manchas: capões de abeto e bosques de folha larga, não tudo misturado
+    const kind = Math.sin(cx * 0.0061 + 1.3) + Math.cos(cz * 0.0074) > 0.5 ? 0 : srand() < 0.5 ? 1 : 2;
+    if (clearSpot(cx, cz, 1.2)) { lists[kind].push([cx, cz, 0.8 + srand() * 0.6]); n++; }
   }
-  treeMesh = new THREE.InstancedMesh(pine, vegMat(), list.length);
-  treeMesh.castShadow = treeMesh.receiveShadow = true;
   const m = new THREE.Matrix4(), q = new QUAT(), s = new V3(), p = new V3(), col = new THREE.Color();
-  list.forEach(([x, z, sc], i) => {
-    p.set(x, H(x, z) - 0.2, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc, sc, sc);
-    m.compose(p, q, s); treeMesh.setMatrixAt(i, m); col.setScalar(rand(.8, 1.2)); treeMesh.setColorAt(i, col);
-    TREES.push({ x, z, sc, down: false, i, rot: q.clone() }); regTree(x, z, 1.6 * sc, H(x, z) + 10.3 * sc);
-    maskGrass(x - 1, z - 1, x + 1, z + 1);
+  lists.forEach((list, kind) => {
+    const mesh = new THREE.InstancedMesh(GEO[kind], leafMat(), list.length); mesh.castShadow = mesh.receiveShadow = true;
+    list.forEach(([x, z, sc], i) => {
+      p.set(x, H(x, z) - 0.2, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc, sc * rand(.9, 1.15), sc);
+      m.compose(p, q, s); mesh.setMatrixAt(i, m); col.setRGB(rand(.8, 1.2), rand(.85, 1.15), rand(.8, 1.1)); mesh.setColorAt(i, col);
+      TREES.push({ x, z, sc, down: false, i, rot: q.clone(), m: mesh }); regTree(x, z, RAD[kind] * sc, H(x, z) + TOP[kind] * sc);
+      maskGrass(x - 1, z - 1, x + 1, z + 1);
+    });
+    mesh.computeBoundingSphere(); scene.add(mesh);
   });
-  scene.add(treeMesh);
-  const far = [];
+  const far = [], oak = broadleaf(0, 0.01);
   for (let i = 0; i < 40000 && far.length < 5200; i++) {
     const x = srand() * 9000 - 4500, z = srand() * 9000 - 4500;
     if (Math.max(Math.abs(x), Math.abs(z)) < INNER / 2 || runwayClear(x, z)) continue;
     if (Math.sin(x * 0.004) * Math.cos(z * 0.0035) + Math.sin(x * 0.011 + z * 0.007) * 0.5 < 0.55) continue;
     far.push([x, z, 0.9 + srand() * 0.7]);
   }
-  for (const fm of chunked(oak, vegMat(), far, 1125, ([x, z, sc], i, fm) => { p.set(x, H(x, z) - 1.6, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc * 1.4, sc * 1.4, sc * 1.4); m.compose(p, q, s); fm.setMatrixAt(i, m); col.setScalar(rand(.75, 1.2)); fm.setColorAt(i, col); regTree(x, z, 2.6 * sc, H(x, z) - 1.6 + 9 * sc * 1.4); })) fm.castShadow = true;
+  for (const fm of chunked(oak, leafMat(), far, 1125, ([x, z, sc], i, fm) => { p.set(x, H(x, z) - 1.6, z); q.setFromAxisAngle(UP, srand() * 6); s.set(sc * 1.4, sc * 1.4, sc * 1.4); m.compose(p, q, s); fm.setMatrixAt(i, m); col.setScalar(rand(.75, 1.2)); fm.setColorAt(i, col); regTree(x, z, 2.6 * sc, H(x, z) - 1.6 + 9 * sc * 1.4); })) fm.castShadow = true;
 }
 export function resetTrees() {
   const m = new THREE.Matrix4(), s = new V3(), p = new V3();
-  for (const t of TREES) if (t.down) { t.down = false; s.set(t.sc, t.sc, t.sc); p.set(t.x, H(t.x, t.z) - 0.2, t.z); m.compose(p, t.rot, s); treeMesh.setMatrixAt(t.i, m); }
-  treeMesh.instanceMatrix.needsUpdate = true;
+  for (const t of TREES) if (t.down) { t.down = false; s.set(t.sc, t.sc, t.sc); p.set(t.x, H(t.x, t.z) - 0.2, t.z); m.compose(p, t.rot, s); t.m.setMatrixAt(t.i, m); t.m.instanceMatrix.needsUpdate = true; }
 }
 export function fellTree(t, dirx, dirz) {
   t.down = true;
   const axis = new V3(dirz, 0, -dirx).normalize();
   const q = new QUAT().setFromAxisAngle(axis, Math.PI / 2 * 0.95).multiply(t.rot);
-  treeMesh.setMatrixAt(t.i, new THREE.Matrix4().compose(new V3(t.x, H(t.x, t.z) + 0.2, t.z), q, new V3(t.sc, t.sc, t.sc)));
-  treeMesh.instanceMatrix.needsUpdate = true;
+  t.m.setMatrixAt(t.i, new THREE.Matrix4().compose(new V3(t.x, H(t.x, t.z) + 0.2, t.z), q, new V3(t.sc, t.sc, t.sc)));
+  t.m.instanceMatrix.needsUpdate = true;
   sndCrack(new V3(t.x, H(t.x, t.z), t.z));
 }
 

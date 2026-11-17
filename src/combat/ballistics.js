@@ -3,7 +3,7 @@ import { scene, camera } from '../core/render.js';
 import { S, tanks, planes, projs, popped } from '../core/state.js';
 import { V3, QUAT, clamp, lerp, rand, rv } from '../core/util.js';
 import { H, terrainNormal } from '../world/terrain.js';
-import { obstNear, HEDGES, addCrater } from '../world/scenery.js';
+import { obstNear, HEDGES, addCrater, damageObst, blastBuildings } from '../world/scenery.js';
 import { RAPIER, world, COL } from '../world/physics.js';
 import { PLANES, prepAmmo, penAt, hePen, DEG, G } from '../data/vehicles.js';
 import { spawnP, TEX, fxDust, fxSparks, fxExplosion, fxBigBlast, fxTrail } from '../fx/particles.js';
@@ -52,7 +52,7 @@ export function segmentHit(p, q, ignore, opts) {
   const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z, len2 = dx * dx + dy * dy + dz * dz || 1e-9;
   let best = 1, hit = null;
   _o[0] = p.x; _o[1] = p.y; _o[2] = p.z; _d[0] = dx; _d[1] = dy; _d[2] = dz;
-  for (const b of obstNear(p.x, p.z, q.x, q.z)) { const r = segBox(_o, _d, b.mn, b.mx); if (r && r.t < best) { best = r.t; hit = { type: 'obst' }; } }
+  for (const b of obstNear(p.x, p.z, q.x, q.z)) { const r = segBox(_o, _d, b.mn, b.mx); if (r && r.t < best) { best = r.t; hit = { type: 'obst', obst: b }; } }
   if (opts && opts.hedges) for (const b of HEDGES) { const r = segBox(_o, _d, b.mn, b.mx); if (r && r.t < best) { best = r.t; hit = { type: 'hedge' }; } }
   for (const t of tanks) {
     if (t === ignore) continue;
@@ -231,7 +231,7 @@ function onImpact(pr, hit) {
   }
   if (hit.type === 'obst') {
     if (pr.kind === 'bullet') { if (Math.random() < .5) fxSparks(hit.point, 2); if (am.type === 'HEF') blast(hit.point, am.tnt, pr.owner, {}); return true; }
-    fxDust(hit.point, 8, .9); fxSparks(hit.point, 4); sndBoom(hit.point, false);
+    fxDust(hit.point, 8, .9); fxSparks(hit.point, 4); sndBoom(hit.point, false); damageObst(hit.obst, 25); /* perfurante: abre a casa em ~5 tiros */
     if (am.type === 'HE' || am.type === 'HEAT') blast(hit.point, am.tnt, pr.owner, {});
     return true;
   }
@@ -350,7 +350,7 @@ export function applyCompHits(t, hits, detChance) {
 const _bl = new V3();
 export function blast(pos, tnt, owner, opts = {}) {
   const R = 1.2 + 2.6 * Math.cbrt(tnt), pen0 = hePen(tnt) + (opts.kinetic || 0);
-  const sc = Math.cbrt(tnt);
+  const sc = Math.cbrt(tnt); blastBuildings(pos, tnt);
   if (tnt >= 20) { fxBigBlast(pos, Math.min(2.6, sc / 3)); sndBoom(pos, true); addCrater(pos, 2 + sc * 1.2); shakeAt(pos, 1.6, 140); }
   else if (tnt > 0.2) { fxExplosion(pos, clamp(sc * .9, .5, 1.6)); sndBoom(pos, tnt > 2); addCrater(pos, 1 + sc); shakeAt(pos, .5, 40); }
   else { spawnP({ pos, life: .12, size: .8 + sc * 4, size1: .3, tex: TEX.fire, add: true, color: 0xffc070 }); spawnP({ pos, life: rand(.8, 1.4), size: .6 + sc * 5, size1: 2 + sc * 10, color: 0x3a3631, op: .7, drag: 2 }); }

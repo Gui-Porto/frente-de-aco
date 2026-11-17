@@ -5,9 +5,9 @@ import { endFrame } from '../core/settings.js';
 import { V3, rv } from '../core/util.js';
 import { H } from '../world/terrain.js';
 import { world, STEP } from '../world/physics.js';
-import { grass, waveFlags } from '../world/scenery.js';
+import { grass, waveFlags, BUILDS, TREES, HEDGES } from '../world/scenery.js';
 import { Q } from '../core/render.js';
-import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, cookOff } from '../combat/ballistics.js';
+import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, cookOff, blast } from '../combat/ballistics.js';
 import { updateParts, fxBurn, spawnP, TEX } from '../fx/particles.js';
 import { eng, tankVoices } from '../fx/audio.js';
 import { updateMatch, startMatch, spawnPlayer, mkWho, spawnVehicle } from './match.js';
@@ -86,4 +86,4 @@ requestAnimationFrame(frame);
 // gancho para testes automatizados
 import * as R from '../core/render.js';
 window.__r = R;
-window.__game = { renderer, renderFrame, afterRender, updateHUD, airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };
+window.__game = { BUILDS, TREES, HEDGES, blast, renderer, renderFrame, afterRender, updateHUD, airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };

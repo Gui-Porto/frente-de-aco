@@ -2,7 +2,7 @@ import { clearFlakes } from '../vehicles/planeFx.js';
 import { S, tanks, planes, TICKETS } from '../core/state.js';
 import { V3, rand, rv, clamp } from '../core/util.js';
 import { POINTS, SPAWN, AIRSPAWN } from '../world/terrain.js';
-import { resetTrees, hideCraters } from '../world/scenery.js';
+import { resetTrees, hideCraters, resetBuildings } from '../world/scenery.js';
 import { VEHICLES, ERAS } from '../data/vehicles.js';
 import { Tank } from '../vehicles/tank.js';
 import { Plane } from '../vehicles/plane.js';
@@ -54,7 +54,7 @@ export function clearWorld() {
   while (planes.length) planes[0].remove();
   clearProjs(); clearMissiles(); clearDebris(); clearParts(); clearFlakes(); respawns = [];
   for (const p of POINTS) { p.owner = 0; p.prog = 0; }
-  resetTrees(); hideCraters();
+  resetTrees(); hideCraters(); resetBuildings();
   S.tickets = { 1: TICKETS, '-1': TICKETS }; S.player = null; S.spectate = null; S.roster = []; S.xray = null;
   lastPlane = { 1: -999, '-1': -999 };
   $('#feed').innerHTML = ''; $('#xray').hidden = true;

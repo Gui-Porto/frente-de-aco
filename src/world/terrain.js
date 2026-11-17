@@ -5,9 +5,9 @@ import { clamp, lerp, sstep, hash2, rand } from '../core/util.js';
 // =====================================================================
 // Terreno analítico: a física consulta H(x,z) diretamente
 // =====================================================================
-export const LIMIT = 360, INNER = 900, OUTER = 9000, AIRLIMIT = 3200;
-export const POINTS = [{ id: 'A', x: -190, z: 25 }, { id: 'B', x: 0, z: 0 }, { id: 'C', x: 190, z: -25 }];
-export const SPAWN = { 1: { x: 0, z: 300, yaw: Math.PI }, '-1': { x: 0, z: -300, yaw: 0 } };
+export const LIMIT = 720, INNER = 1800, OUTER = 9000, AIRLIMIT = 3600; // campo dos tanques: 1,44 km de lado (era 720 m: o dono achou pequeno)
+export const POINTS = [{ id: 'A', x: -400, z: 60 }, { id: 'B', x: 0, z: 0 }, { id: 'C', x: 400, z: -60 }];
+export const SPAWN = { 1: { x: 0, z: 620, yaw: Math.PI }, '-1': { x: 0, z: -620, yaw: 0 } };
 export const AIRSPAWN = { 1: { x: 0, z: 2400, y: 1300, yaw: Math.PI }, '-1': { x: 0, z: -2400, y: 1300, yaw: 0 } };
 
 // ruído de valor suave (hash nos cantos, interpolação quíntica) e somas fractais: relevo sem a cara periódica dos senos
@@ -24,9 +24,9 @@ function baseH(x, z) {
   let h = 9 * Math.sin(x * 0.009 + 0.5) * Math.cos(z * 0.011) + 4 * Math.sin(x * 0.023 + 1.3) * Math.sin(z * 0.027 + 0.7)
     + 1.3 * Math.sin(x * 0.061 + z * 0.047) + 0.6 * Math.sin(x * 0.13 - z * 0.11)
     + 22 * Math.sin(x * 0.0019 + 1.1) * Math.cos(z * 0.0023 + 0.4) + 10 * Math.sin(x * 0.0041 + z * 0.0033);
-  // o campo dos tanques (até 700 m) fica como era; fora dele, colinas e vales de verdade na arena aérea e, depois
+  // o campo dos tanques (até 1150 m) fica como era; fora dele, colinas e vales de verdade na arena aérea e, depois
   // de ~5 km, serras que fecham o horizonte (dão escala e profundidade vistas de cima)
-  const r = Math.max(Math.abs(x), Math.abs(z)) - 700;
+  const r = Math.max(Math.abs(x), Math.abs(z)) - 1150;
   if (r > 0) {
     const k = sstep(0, 900, r), R = Math.hypot(x, z);
     h += k * (85 * fbm(x / 1400, z / 1400, 5) + 40 * (fbm(x / 520 + 3.1, z / 520, 3) * 0.5 + 0.5) - 25 * Math.max(0, 1 - Math.abs(fbm(x / 2600 - 7, z / 2600, 3)) * 6));
@@ -34,7 +34,7 @@ function baseH(x, z) {
   }
   return h;
 }
-const FLATS = [...POINTS.map(p => ({ x: p.x, z: p.z, r: 48 })), { x: 0, z: 300, r: 55 }, { x: 0, z: -300, r: 55 }];
+const FLATS = [...POINTS.map(p => ({ x: p.x, z: p.z, r: 48 })), ...[1, -1].map(t => ({ x: SPAWN[t].x, z: SPAWN[t].z, r: 60 }))];
 for (const f of FLATS) f.h = baseH(f.x, f.z);
 // Pistas da Batalha Aérea (uma por equipe, atrás do spawn): platô retangular com rampa até o relevo.
 // `pad` = largura extra plana ao lado da pista (pátio e hangares). Rumo de decolagem: yaw (0 = +z).
@@ -219,10 +219,10 @@ function terrainMaterial() {
         if (mac < 1.0) {
           vec4 dm = texture2D(tMap, (vWP.xz + ${(INNER / 2).toFixed(1)}) / ${INNER.toFixed(1)});
           float px = max(fwidth(vWP.x), fwidth(vWP.z)), nz = fb(vWP.xz * 0.21), pv = fb(vWP.xz / 26.0 + 5.0), dry = smoothstep(0.5, 0.75, fb(vWP.xz / 61.0 + 11.0));
-          vec3 c = diffuseColor.rgb * (0.78 + 0.44 * pv);
+          vec3 c = diffuseColor.rgb * (0.78 + 0.44 * pv) * (0.86 + 0.28 * fb(vWP.xz * 1.9 + 3.0)) * mix(vec3(1.0), vec3(1.12, 1.04, 0.82), smoothstep(0.55, 0.8, fb(vWP.xz / 7.0 + 21.0)) * vSplat.x); // manchas miúdas e capim seco: o pasto era um verde chapado
           c = mix(c, c * vec3(1.5, 1.25, 0.8), dry * 0.55 * vSplat.x);
           float fa = dm.a * 2.0 - 1.0, fc = fa > 0.0 ? vWP.z : vWP.x;
-          c *= 1.0 + 0.32 * abs(fa) * sin(fc * 6.98) * clamp(0.3 / max(px, 0.001), 0.0, 1.0);
+          c *= 1.0 + 0.16 * abs(fa) * sin(fc * 6.98) * (1.0 - smoothstep(0.05, 0.16, px)); // sulcos somem antes de virar moiré (de longe eram faixas largas)
           float e = dm.r * 16.0 - 4.0 + (nz - 0.5) * 1.6;
           vec3 dirt = vec3(0.2, 0.16, 0.105) * (0.45 + dd * 1.15);
           c = mix(c, dirt * 0.8, max(dm.b, (1.0 - smoothstep(0.0, 3.2, e)) * (0.3 + 0.6 * nz)) * 0.85);
@@ -264,7 +264,7 @@ function terrainMesh(size, seg, drop, holeR, macro = false) {
   const m = new THREE.Mesh(g, terrainMaterial()); m.receiveShadow = true; scene.add(m);
   return m;
 }
-terrainMesh(INNER, 300, 0, 0);
+terrainMesh(INNER, 420, 0, 0);
 terrainMesh(OUTER, 260, 1.4, INNER / 2 - 24, true);
 // anel distante até o horizonte (56 km, 200 m por quadrado): as serras fecham a vista e não há mais borda nem vazio
 // no fim do mapa; afundado e por baixo da malha externa na emenda
@@ -272,7 +272,7 @@ terrainMesh(56000, 280, 6, OUTER / 2 - 250, true);
 
 // Mapa de altura + densidade de grama em textura (usado pela grama instanciada na GPU)
 export const HMAP = (() => {
-  const N = 450, step = INNER / N, data = new Float32Array(N * N * 4);
+  const N = 640, step = INNER / N, data = new Float32Array(N * N * 4);
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const x = -INNER / 2 + (i + 0.5) * step, z = -INNER / 2 + (j + 0.5) * step, o = (j * N + i) * 4;
     data[o] = H(x, z); data[o + 1] = groundSample(x, z, null, null);

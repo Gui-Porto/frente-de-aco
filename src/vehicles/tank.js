@@ -4,7 +4,7 @@ import { scene, camera, shadowOnly } from '../core/render.js';
 import { S, tanks } from '../core/state.js';
 import { V3, QUAT, UP, clamp, rand, rv, angDiff } from '../core/util.js';
 import { H, terrainNormal, LIMIT } from '../world/terrain.js';
-import { TREES, HEDGES, fellTree } from '../world/scenery.js';
+import { TREES, HEDGES, fellTree, obstNear, demolish } from '../world/scenery.js';
 import { RAPIER, world, COL } from '../world/physics.js';
 import { TANKS, DEG, G, ballistic } from '../data/vehicles.js';
 import { spawnP, fxMuzzle, fxSmallFlash, fxBurn } from '../fx/particles.js';
@@ -361,6 +361,10 @@ export class Tank {
         }
         break;
       }
+    }
+    if (gs * D.mass > 80000) { // muro no caminho: derruba e perde velocidade
+      const fx = this.pos.x + this.vel.x / gs * (D.L * 0.5 + 0.9), fz = this.pos.z + this.vel.z / gs * (D.L * 0.5 + 0.9);
+      for (const b of obstNear(fx - 1, fz - 1, fx + 1, fz + 1)) if (b.b && b.b.ram && !b.b.dead && fx > b.mn[0] - R && fx < b.mx[0] + R && fz > b.mn[2] - R && fz < b.mx[2] + R) { demolish(b.b); this.body.setLinvel({ x: this.vel.x * .75, y: this.vel.y, z: this.vel.z * .75 }, true); break; }
     }
     for (const hd of HEDGES) if (this.pos.x > hd.mn[0] && this.pos.x < hd.mx[0] && this.pos.z > hd.mn[2] && this.pos.z < hd.mx[2]) { this.body.setLinvel({ x: this.vel.x * 0.985, y: this.vel.y, z: this.vel.z * 0.985 }, true); break; }
     const out = Math.abs(this.pos.x) > LIMIT || Math.abs(this.pos.z) > LIMIT;
