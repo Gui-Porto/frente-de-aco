@@ -64,6 +64,16 @@ const plasterTex = canvasTex(256, 256, (g, w, h) => {
   for (let i = 0; i < 4000; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '60,50,30'},${rand(0, .08)})`; g.fillRect(Math.random() * w, Math.random() * h, rand(1, 4), rand(1, 4)); }
   const gr = g.createLinearGradient(0, h, 0, h * 0.7); gr.addColorStop(0, 'rgba(70,60,40,.45)'); gr.addColorStop(1, 'rgba(70,60,40,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
 });
+// enxaimel normando (colombage): reboco claro entre vigas escuras — 1 repetição = 4 m de parede (boxUV), postes a cada 1 m
+const timberTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#d8ccb0'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 3000; i++) { g.fillStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '70,55,30'},${rand(0, .07)})`; g.fillRect(Math.random() * w, Math.random() * h, rand(1, 4), rand(1, 4)); }
+  g.fillStyle = '#3d2c1e'; g.strokeStyle = '#3d2c1e'; g.lineWidth = 9;
+  for (let x = 0; x < w; x += 64) g.fillRect(x - 5, 0, 10, h);
+  for (const y of [0, 118, 246]) g.fillRect(0, y, w, 10);
+  for (const [c, r, s] of [[0, 0, 1], [3, 0, -1], [1, 1, 1], [2, 1, -1]]) { g.beginPath(); g.moveTo(c * 64 + (s > 0 ? 5 : 59), r * 128 + 123); g.lineTo(c * 64 + (s > 0 ? 59 : 5), r * 128 + 15); g.stroke(); }
+  for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(0,0,0,${rand(0, .1)})`; g.fillRect(Math.random() * w, Math.random() * h, 2, rand(4, 12)); }
+});
 const tileTex = canvasTex(256, 256, (g, w, h) => {
   for (let y = 0; y < h; y += 16) for (let x = (y / 16) % 2 * 10; x < w + 20; x += 20) { const v = rand(-20, 20); g.fillStyle = `rgb(${120 + v},${58 + v / 2},${42 + v / 2})`; g.fillRect(x, y, 19, 15); g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x, y + 13, 19, 3); }
 });
@@ -72,7 +82,7 @@ const slateTex = canvasTex(256, 256, (g, w, h) => {
 });
 const mat = (map, color = 0xffffff, rough = 0.92) => new THREE.MeshStandardMaterial({ map, color, roughness: rough, metalness: 0 });
 const M = {
-  stone: mat(stoneTex), plaster: mat(plasterTex), tile: mat(tileTex, 0xffffff, 0.8), slate: mat(slateTex, 0xffffff, 0.7),
+  stone: mat(stoneTex), plaster: mat(plasterTex), timber: mat(timberTex), shutter: new THREE.MeshStandardMaterial({ color: 0x4f6b66, roughness: .8 }), tile: mat(tileTex, 0xffffff, 0.8), slate: mat(slateTex, 0xffffff, 0.7),
   ruin: mat(stoneTex, 0x9a9488), wood: new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: .85 }),
   glass: new THREE.MeshStandardMaterial({ color: 0x1a2328, roughness: .15, metalness: .4 }), frame: new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: .8 }),
 };
@@ -101,17 +111,21 @@ function house(x, z, ruined) {
   const alongX = srand() < 0.5, w = 6 + srand() * 4, d = 8 + srand() * 4, h = ruined ? 2 + srand() * 2 : 4 + srand() * 2.4;
   const W = alongX ? d : w, D = alongX ? w : d;
   if (!clearSpot(x, z, Math.max(W, D) / 2)) return;
-  const y0 = groundMin(x, z, W, D) - 0.6, hh = h + 0.6, wallM = srand() < 0.55 ? M.stone : M.plaster;
+  const y0 = groundMin(x, z, W, D) - 0.6, hh = h + 0.6, wr = srand(), wallM = wr < 0.45 ? M.stone : wr < 0.8 ? M.timber : M.plaster;
   add(boxUV(W, hh, D), ruined ? M.ruin : wallM, x, y0 + hh / 2, z);
   regObst({ mn: [x - W / 2, y0, z - D / 2], mx: [x + W / 2, y0 + hh, z + D / 2] });
   if (ruined) { for (let i = 0; i < 6; i++) add(new THREE.DodecahedronGeometry(rand(.3, .8), 0), M.ruin, x + rand(-W, W) * .6, H(x, z) + .2, z + rand(-D, D) * .6); return; }
   const top = y0 + hh, long = Math.max(W, D), short = Math.min(W, D);
+  if (wallM !== M.stone) add(boxUV(W + .16, 1.5, D + .16), M.stone, x, y0 + 0.75, z); // embasamento de pedra
   // portas e janelas nas fachadas longas
   for (const s of [1, -1]) for (let k = -1; k <= 1; k++) {
     const isDoor = k === 0 && s === 1, ww = isDoor ? 1.1 : 0.95, wh = isDoor ? 2.1 : 1.15, yy = isDoor ? y0 + 0.6 + 1.05 : top - h * 0.42;
     const off = k * long * 0.28, fx = alongX ? x + off : x + s * (W / 2 + 0.04), fz = alongX ? z + s * (D / 2 + 0.04) : z + off, ry = alongX ? 0 : Math.PI / 2;
     add(new THREE.BoxGeometry(ww + .2, wh + .2, .06), M.frame, fx, yy, fz, ry);
     add(new THREE.BoxGeometry(ww, wh, .08), isDoor ? M.wood : M.glass, fx, yy, fz, ry);
+    if (isDoor) continue;
+    add(new THREE.BoxGeometry(ww + .5, .1, .22), M.stone, fx, yy - wh / 2 - .13, fz, ry); // peitoril
+    for (const e of [1, -1]) { const o = e * (ww / 2 + .3); add(new THREE.BoxGeometry(.46, wh + .1, .07), M.shutter, fx + (alongX ? o : 0), yy, fz + (alongX ? 0 : o), ry); } // venezianas abertas
   }
   const roof = gable(long, short, 2.4 + short * 0.12, srand() < 0.6 ? M.tile : M.slate);
   roof.position.set(x, top, z); roof.rotation.y = alongX ? Math.PI / 2 : 0; roof.castShadow = roof.receiveShadow = true; scene.add(roof);
