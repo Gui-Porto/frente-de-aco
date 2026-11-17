@@ -38,7 +38,7 @@ export const TANKS = {
     mg: { name: 'DT', cal: 7.62, rpm: 600, v: 840, m: 0.0096, pen: 9, he: 0, belt: 63, total: 1953, tracer: 5 }
   },
   t72: {
-    key: 't72', type: 'tank', name: 'T-72M1', nation: 'URSS', year: 1982, color: 0x4a5236, sp: 260,
+    key: 't72', type: 'tank', name: 'T-72M1', nation: 'URSS', year: 1982, color: 0x4a5236, sp: 260, crew: ['driver', 'gunner', 'commander'], // carregador automático
     mass: 41500, hp: 780, rpm: 2000, vmax: 60 * 1.15 / 3.6, vrev: 4 * 1.25 / 3.6, wheels: 6, rpmTraverse: false,
     L: 6.86, W: 3.58, Hh: 0.93, clr: 0.45, trackW: 0.58, transFront: false,
     turret: { w: 2.7, l: 2.9, h: 0.85, z: -0.05, shape: 'round' },
@@ -54,7 +54,7 @@ export const TANKS = {
     mg: { name: 'PKT', cal: 7.62, rpm: 700, v: 855, m: 0.0096, pen: 9, he: 0, belt: 250, total: 2000, tracer: 5 }
   },
   m1: {
-    key: 'm1', type: 'tank', name: 'M1A1 Abrams', nation: 'EUA', year: 1985, color: 0x6e6b4f, sp: 280,
+    key: 'm1', type: 'tank', name: 'M1A1 Abrams', nation: 'EUA', year: 1985, color: 0x6e6b4f, sp: 280, crew: ['driver', 'gunner', 'commander', 'loader'],
     mass: 57000, hp: 1500, rpm: 3000, vmax: 67 * 1.15 / 3.6, vrev: 40 * 1.25 / 3.6, wheels: 7, rpmTraverse: false,
     L: 7.9, W: 3.66, Hh: 1.05, clr: 0.48, trackW: 0.6, transFront: false,
     turret: { w: 3.2, l: 3.9, h: 0.85, z: 0.34, shape: 'hex' },
@@ -112,7 +112,7 @@ export const TANKS = {
     mg: null
   },
   gepard: {
-    key: 'gepard', type: 'spaa', name: 'Flakpanzer Gepard', short: 'Gepard', nation: 'Alemanha', year: 1976, color: 0x4f5a3a, sp: 160,
+    key: 'gepard', type: 'spaa', name: 'Flakpanzer Gepard', short: 'Gepard', nation: 'Alemanha', year: 1976, color: 0x4f5a3a, sp: 160, crew: ['driver', 'gunner', 'commander'],
     mass: 47500, hp: 830, rpm: 2200, vmax: 65 * 1.15 / 3.6, vrev: 24 * 1.25 / 3.6, wheels: 7, rpmTraverse: false,
     L: 7.0, W: 3.25, Hh: 1.1, clr: 0.44, trackW: 0.55, transFront: false,
     turret: { w: 2.6, l: 3.6, h: 1.1, z: 0.2, shape: 'hex' },

@@ -16,6 +16,7 @@ import { addTankDetail } from './tankDetail.js';
 // =====================================================================
 // Blindados: modelo, corpo rígido com suspensão por roda, lagartas, câmbio
 // =====================================================================
+const NOSEAT = { alive: true, absent: true };
 export const CREW = [['driver', 'Motorista', 'MOT'], ['radio', 'Op. de rádio', 'RÁD'], ['gunner', 'Atirador', 'ATI'], ['commander', 'Comandante', 'CMD'], ['loader', 'Municiador', 'MUN']];
 // Módulos funcionais (rótulo, tempo de reparo). Cada um é um volume dentro do tanque (components()) que pode ser atingido:
 // motor (potência a 22%), radiador (superaquece: potência a 60%), transmissão e esteira (imobilizam), culatra e cano
@@ -186,7 +187,7 @@ export class Tank {
     this.sel = 0; this.loaded = 0; this.reload = 0; this.clip = D.gun.clip || 0; this.fireAcc = 0; this.barrel = 0;
     this.mgAmmo = D.mg ? D.mg.total : 0; this.mgBelt = D.mg ? D.mg.belt : 0; this.mgReload = 0; this.mgAcc = 0; this.mgN = 0; this.mgFiring = false;
     this.throttle = 0; this.steer = 0; this.firing = false;
-    this.crew = CREW.map(([role, label, short]) => ({ role, label, short, alive: true }));
+    this.crew = CREW.filter(c => !D.crew || D.crew.includes(c[0])).map(([role, label, short]) => ({ role, label, short, alive: true })); // def.crew: postos que o veículo tem (padrão: os 5)
     this.mods = {}; for (const k in MODS) this.mods[k] = { broken: false, rep: 0, label: MODS[k][0] };
     this.fire = 0; this.fireTick = 0; this.ext = 0; this.extCd = 0; this.replace = {}; this.repairT = 0; this.repairMax = 0; this.cruise = 0;
     this.alive = true; this.turretOn = true; this.lastHitBy = null; this.deadT = 0; this.spottedUntil = 0; this.oobT = 0; this.flipT = 0;
@@ -201,7 +202,7 @@ export class Tank {
   }
   get gun() { return this.def.gun; }
   get ammo() { return this.def.gun.ammo[this.loaded >= 0 ? this.loaded : this.sel]; }
-  seat(role) { return this.crew.find(c => c.role === role); }
+  seat(role) { return this.crew.find(c => c.role === role) || NOSEAT; } // posto que não existe (carregador automático, sem rádio) nunca faz falta
   aliveCount() { return this.crew.filter(c => c.alive).length; }
   ammoFrac() { const tot = this.def.gun.ammo.reduce((s, a) => s + a.count, 0); return this.ammoLeft.reduce((s, a) => s + a, 0) / tot; }
   canFire() { return this.alive && this.turretOn && this.loaded >= 0 && !this.mods.breech.broken && !this.mods.barrel.broken && this.seat('gunner').alive; }
@@ -416,7 +417,7 @@ export class Tank {
       const seat = this.seat(role);
       if (seat.alive) { delete this.replace[role]; continue; }
       if (!this.replace[role]) {
-        const spare = ['radio', 'loader', 'commander'].map(r => this.seat(r)).find(c => c.alive && !Object.values(this.replace).some(x => x.spare === c));
+        const spare = ['radio', 'loader', 'commander'].map(r => this.seat(r)).find(c => c.alive && !c.absent && !Object.values(this.replace).some(x => x.spare === c));
         if (spare) this.replace[role] = { spare, t: 4 };
       } else if ((this.replace[role].t -= dt) <= 0) {
         const sp = this.replace[role].spare; delete this.replace[role];
@@ -426,7 +427,7 @@ export class Tank {
     // reparo: iniciado com F (jogador) ou pela IA; conserta todos os módulos ao final
     if (this.repairT > 0) {
       if (this.fire > 0) { this.repairT = 0; if (this.isPlayer) showDmg('Reparo interrompido pelo incêndio'); }
-      else if ((this.repairT -= dt * (this.aliveCount() >= 4 ? 1 : 0.7)) <= 0) {
+      else if ((this.repairT -= dt * (this.aliveCount() >= this.crew.length - 1 ? 1 : 0.7)) <= 0) {
         this.repairT = 0;
         for (const k in this.mods) this.mods[k].broken = false;
         if (this.isPlayer) showDmg('Reparo concluído', true);
@@ -526,7 +527,7 @@ export class Tank {
         // o cano fica FORA da blindagem: é atingido por fora (impactTank), aqui só aparece no raio-X
         { kind: 'mod', name: 'barrel', p: tp(0, T.h * .5, T.l / 2 + D.gun.len * .5), r: .16, len: D.gun.len, yaw: this.turretYaw });
     }
-    return out;
+    return out.filter(c => c.kind !== 'crew' || !c.ref.absent);
   }
   remove() { scene.remove(this.root); if (this.lod) shadowOnly.delete(this.lod.root); if (this.body) world.removeRigidBody(this.body); this.body = null; this.label.remove(); const i = tanks.indexOf(this); if (i >= 0) tanks.splice(i, 1); }
 }
