@@ -22,6 +22,16 @@ const MMBASE = 1600, mmBase = document.createElement('canvas'); mmBase.width = m
   g.fillStyle = 'rgba(20,35,15,.7)'; for (const t of TREES) g.fillRect((t.x + MMBASE) * s - 1, (t.z + MMBASE) * s - 1, 2, 2);
   g.strokeStyle = 'rgba(15,30,10,.8)'; g.lineWidth = 1.5; for (const h of HEDGES) { g.strokeRect((h.mn[0] + MMBASE) * s, (h.mn[2] + MMBASE) * s, (h.mx[0] - h.mn[0]) * s, (h.mx[2] - h.mn[2]) * s); }
 }
+// marcador de blindado como no WT: casco orientado + linha do canhão (para onde a torre aponta); destruído vira um X
+function tankIcon(x, z, yaw, turretYaw, col, alive, aa, k = 1) {
+  mctx.save(); mctx.translate(x, z);
+  if (!alive) { mctx.strokeStyle = col; mctx.lineWidth = 1.5; mctx.beginPath(); mctx.moveTo(-3, -3); mctx.lineTo(3, 3); mctx.moveTo(3, -3); mctx.lineTo(-3, 3); mctx.stroke(); mctx.restore(); return; }
+  mctx.rotate(-yaw + Math.PI); mctx.scale(k, k);
+  mctx.fillStyle = col; mctx.strokeStyle = 'rgba(0,0,0,.75)'; mctx.lineWidth = 1;
+  mctx.beginPath(); mctx.moveTo(-3, -4.5); mctx.lineTo(0, -6); mctx.lineTo(3, -4.5); mctx.lineTo(3, 5); mctx.lineTo(-3, 5); mctx.closePath(); mctx.fill(); mctx.stroke();
+  if (turretYaw != null) { mctx.rotate(-turretYaw); mctx.strokeStyle = col; mctx.lineWidth = aa ? 1 : 1.6; mctx.beginPath(); mctx.moveTo(0, 0); mctx.lineTo(0, -10); if (aa) { mctx.moveTo(-1.5, 0); mctx.lineTo(-1.5, -9); mctx.moveTo(1.5, 0); mctx.lineTo(1.5, -9); } mctx.stroke(); }
+  mctx.restore();
+}
 export function drawMini(viewer, air, cam) {
   const R = air ? 1500 : 390, W = 210, s = W / (R * 2), cx = air ? 0 : 0, cz = 0;
   const bs = 640 / (MMBASE * 2);
@@ -46,8 +56,7 @@ export function drawMini(viewer, air, cam) {
   for (const t of tanks) {
     if (t === viewer) continue;
     if (!(t.team === 1 || t.spottedUntil > S.now)) continue;
-    mctx.fillStyle = !t.alive ? '#555' : t.team === 1 ? '#6db4e3' : '#e65a42';
-    mctx.fillRect(X(t.pos.x) - 2.5, Z(t.pos.z) - 2.5, 5, 5);
+    tankIcon(X(t.pos.x), Z(t.pos.z), yawOf(t), t.turretOn ? t.turretYaw : null, !t.alive ? '#5a5a52' : t.team === 1 ? '#6db4e3' : '#e65a42', t.alive, t.type === 'spaa');
   }
   for (const p of planes) {
     if (p === viewer || p.gone) continue;
@@ -62,9 +71,10 @@ export function drawMini(viewer, air, cam) {
     mctx.fillStyle = 'rgba(221,214,183,.12)'; mctx.beginPath(); mctx.moveTo(x, z);
     const a = Math.atan2(Math.cos(cam.yaw), Math.sin(cam.yaw)), fov = cam.sniper ? cam.fov * DEG : .9;
     mctx.arc(x, z, 40, a - fov / 2, a + fov / 2); mctx.fill();
-    const yaw = viewer.type === 'plane' ? Math.atan2(viewer.vel.x, viewer.vel.z) : yawOf(viewer);
-    mctx.save(); mctx.translate(x, z); mctx.rotate(-yaw + Math.PI);
-    mctx.fillStyle = '#efa53c'; mctx.beginPath(); mctx.moveTo(0, -7); mctx.lineTo(4.5, 5); mctx.lineTo(-4.5, 5); mctx.closePath(); mctx.fill(); mctx.restore();
+    if (viewer.type === 'plane') {
+      mctx.save(); mctx.translate(x, z); mctx.rotate(-Math.atan2(viewer.vel.x, viewer.vel.z) + Math.PI);
+      mctx.fillStyle = '#efa53c'; mctx.beginPath(); mctx.moveTo(0, -7); mctx.lineTo(4.5, 5); mctx.lineTo(-4.5, 5); mctx.closePath(); mctx.fill(); mctx.restore();
+    } else tankIcon(x, z, yawOf(viewer), viewer.turretOn ? viewer.turretYaw : null, '#efa53c', true, false, 1.25);
   }
 }
 

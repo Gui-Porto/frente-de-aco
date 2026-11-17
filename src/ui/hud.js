@@ -166,6 +166,7 @@ function reticles(t) {
     const mp = t.muzzles[0].getWorldPosition(_a), gd = _b.set(0, 0, 1).transformDirection(t.gunPivot.matrixWorld);
     const h = raycast(mp, gd, 1600, t), pt = h ? h.point : _c.copy(mp).addScaledVector(gd, 1600);
     toScreen(pt, gunret);
+    gunret.dataset.r = h && t.seat('commander').alive ? (d => d < 1000 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(2) + ' km')(mp.distanceTo(pt)) : ''; // distância até onde o canhão aponta (telêmetro do comandante)
     let cls = '';
     if (h && h.type === 'tank' && h.tank.team !== t.team && h.tank.alive && t.ammo.type !== 'HE') {
       const d = mp.distanceTo(h.point), E = evalArmor(h.tank, h, t.ammo, ballistic(t.ammo, d).v);
