@@ -3,7 +3,7 @@ import { planeDecals, camoTexture } from './paint.js';
 import { MISSILES, GUNS } from '../data/vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { hasModel, gltfPlane } from './modelLibrary.js';
+import { hasModel, applySkin } from './modelLibrary.js';
 import { buildPlaneFx } from './planeFx.js';
 import * as DT from './planeDetail.js';
 import { buildCockpit } from './planeCockpit.js';
@@ -366,11 +366,10 @@ function panelBump() {
 }
 
 export function buildPlane(D) {
-  // modelo glTF carregado para esta aeronave? (modelLibrary.js) — senão, procedural
-  if (hasModel(D)) {
-    const r = gltfPlane(D, id => missileMesh(MISSILES[id]));
-    if (r) { r.gearMesh = buildGear(D, r.root, new THREE.MeshStandardMaterial({ color: 0x1b1b1a, roughness: .45, metalness: .5 })); return r; }
-  }
+  // pele glTF com a fuselagem em outra posição em relação à asa (model.fz, m para trás): a estrutura é montada com a asa
+  // adiantada e no fim tudo recua — asa, trem e armas ficam onde a física os tem, nariz/cabine/cauda casam com a pele
+  const fz = hasModel(D) && D.model.fz || 0;
+  if (fz) D = Object.assign({}, D, { wingZ: D.wingZ + fz }, D.model.def);
   const root = new THREE.Group(), L = D.L, fr = D.fuseR, jet = !!D.jet;
   // jato sem pintura (metal) a menos que a ficha peça camuflagem (def.finish = 'camo')
   const metal = jet && D.finish !== 'camo';
@@ -879,7 +878,7 @@ export function buildPlane(D) {
     prop.add(new THREE.Group());
   } else {
     // spinner em ogiva com prato traseiro (antes um cone pequeno sumia dentro do capô)
-    const sr = Math.min(D.noseR * 0.62, fr * 0.5), sl = sr * 2.3, sp = [];
+    const sr = Math.min(D.noseR * 0.62, fr * 0.5) * (D.spinner ?? 1), sl = sr * 2.3, sp = []; // def.spinner < 1: só o cubo da hélice (P-47)
     for (let i = 0; i <= 12; i++) { const t = i / 12; sp.push(V2(Math.max(sr * Math.cos(t * Math.PI / 2) ** 0.75, 0.001), t * sl)); }
     const spin = D.nation === 'Alemanha' ? black : accent;
     add(DT.latheZ(sp, 28), spin, prop, 0, 0, -0.05);
@@ -965,7 +964,10 @@ export function buildPlane(D) {
   for (const grp of [root, wingL, wingR, wingL.userData.tip, wingR.userData.tip, tail]) mergeStatic(grp, keep);
   root.traverse(o => { if (o.userData.loose) mergeStatic(o, keep); });
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
-  return { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, ordFit, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };
+  const built = { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, ordFit, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };
+  if (fz) for (const c of root.children) c.position.z -= fz;
+  if (hasModel(D)) applySkin(D, built); // pele glTF por cima da estrutura (modelLibrary.js)
+  return built;
 }
 // Trem de pouso: pernas principais na asa, bequilha (pistão) ou trem do nariz (jato). userData.lift = altura
 // do CG ao chão com o trem baixado; userData.pitch = atitude parado (cauda baixa no pistão).

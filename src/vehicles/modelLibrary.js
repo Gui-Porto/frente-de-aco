@@ -1,19 +1,12 @@
-import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // =====================================================================
-// Biblioteca de modelos glTF das aeronaves (opcional). Uma aeronave passa a
-// usar um modelo comprado/importado só com dados:
-//   def.model = { url: '/models/f4e.glb', scale: 1, rot: [0, Math.PI, 0] }
-// Contrato de nós (nomes no arquivo .glb):
-//   wingL, wingR — asas inteiras (soltam ao quebrar)   tail — empenagem
-//   prop         — hélice/fan que gira (o último filho some com o motor parado)
-//   hp_1..hp_N   — pontos duros, na ordem das estantes de def.missiles
-//   paint        — material(is) que escurecem quando o avião queima (opcional)
-//   ailL, ailR, flapL, flapR, elevL, elevR, rud — superfícies de comando (opcionais), giram no próprio
-//                  eixo X local (rud: Y); a origem do nó deve estar na dobradiça
-// O que faltar no arquivo vira um grupo vazio; sem arquivo (ou falha ao carregar)
-// o jogo segue com o modelo procedural (planeModel.js), que também serve de LOD.
-// Eixos esperados após rot/scale: +z nariz, +y cima, +x asa esquerda; origem no CG.
+// "Pele" glTF das aeronaves (opcional), só por dados:
+//   def.model = { url: '/models/p47.glb', off?: [x, y, z], fz?: recuo da fuselagem procedural (m), def?: { ...ajustes da ficha } }
+// O arquivo (preparado por tools/blender/skin.py) traz 4 nós — fuse, wingL, wingR, tail — em metros, +z nariz,
+// +y cima, +x asa esquerda, origem no CG. Ele NÃO substitui o avião: a estrutura continua sendo a procedural
+// (planeModel.js: trem, hélice, armas, cabine, bombas, peças de dano, efeitos); a pele só toma o lugar da chapa
+// pintada, que fica invisível. Cada nó vai para o grupo correspondente, então asa/cauda arrancada leva a pele junto.
+// Sem arquivo (ou falha ao carregar) o avião aparece com a chapa procedural.
 // =====================================================================
 const loader = new GLTFLoader(), cache = new Map(), failed = new Set();
 
@@ -26,37 +19,19 @@ export async function preloadModels(defs) {
 }
 export const hasModel = D => !!(D.model && cache.has(D.model.url));
 
-// Monta o mesmo objeto que buildPlane() devolve, a partir do glTF carregado.
-// missileMesh(M) cria a malha do míssil (a mesma do procedural) para pendurar nos pontos duros.
-export function gltfPlane(D, missileMesh) {
-  const src = cache.get(D.model.url); if (!src) return null;
-  const root = new THREE.Group(), body = src.clone(true);
-  body.scale.setScalar(D.model.scale || 1);
-  if (D.model.rot) body.rotation.set(...D.model.rot);
-  root.add(body);
-  const find = n => body.getObjectByName(n);
-  const part = n => find(n) || (() => { const gq = new THREE.Group(); gq.name = n; body.add(gq); return gq; })();
-  const wingL = part('wingL'), wingR = part('wingR'), tail = part('tail'), prop = part('prop');
-  if (!prop.children.length) prop.add(new THREE.Group());
-  const mats = new Set();
+// r = o que buildPlane() montou. Esconde a chapa pintada e as insígnias projetadas nela e pendura a pele.
+export function applySkin(D, r) {
+  const src = cache.get(D.model.url); if (!src) return;
+  const paint = new Set(r.mats);
+  r.root.traverse(o => {
+    if (!o.isMesh || ![o.material].flat().some(m => paint.has(m) || m.polygonOffset)) return; // chapa (às vezes [pintura, ventre]) e decalques
+    o.visible = false; o.layers.set(1); // camada 1: o raio das marcas de bala passa direto e pega a pele
+  });
+  const body = src.clone(true); if (D.model.off) body.position.fromArray(D.model.off);
+  r.root.add(body); r.root.updateMatrixWorld(true);
   body.traverse(o => {
     if (!o.isMesh) return;
-    o.castShadow = o.receiveShadow = true;
-    // material próprio por avião (o dano escurece a pintura sem afetar os outros)
-    o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone();
-    if (o.name.startsWith('paint') || (o.material.name || '').startsWith('paint')) mats.add(o.material);
-    o.userData.normalMat = o.material;
+    o.castShadow = o.receiveShadow = true; o.material = o.material.clone(); o.userData.normalMat = o.material; r.mats.push(o.material); // material por avião: o fogo escurece só o dele
   });
-  const missileMeshes = []; let i = 0;
-  for (const rk of D.missiles || []) for (let k = 0; k < rk.n; k++) {
-    const hp = find(`hp_${++i}`), m = missileMesh(rk.w);
-    if (hp) hp.add(m); else { m.visible = false; root.add(m); }
-    missileMeshes.push(m);
-  }
-  if (!mats.size) body.traverse(o => { if (o.isMesh && !mats.size) mats.add(o.material); });
-  const surf = {};
-  for (const [n, max] of [['ailL', 20], ['ailR', 20], ['flapL', 40], ['flapR', 40], ['elevL', 25], ['elevR', 25], ['rud', 25]]) {
-    const o = find(n); if (o) surf[n] = { pivot: o, axis: new THREE.Vector3(n === 'rud' ? 0 : 1, n === 'rud' ? 1 : 0, 0), max: max * Math.PI / 180, base: o.quaternion.clone() };
-  }
-  return { root, wingL, wingR, tail, prop, bombMeshes: [], rocketMeshes: [], missileMeshes, mats: [...mats], surf };
+  for (const [n, g] of [['wingL', r.wingL], ['wingR', r.wingR], ['tail', r.tail]]) { const o = body.getObjectByName(n); if (o) g.attach(o); }
 }

@@ -137,6 +137,9 @@ export const PLANES = {
     mass: 6600, S: 27.87, span: 12.4, L: 11.0, cla: 4.6, clmax: 1.45, cd0: 0.0175, e: 0.8, engine: 'r2800',
     vne: 810 / 3.6, glim: 12, kda: 0.04, kde: 0.32, kdr: 0.05, armor: { pilot: 9, engine: 0 },
     hpParts: { wingL: 38, wingR: 38, tail: 28, engine: 26, fuel: 20, fuse: 45 },
+    // pele: "P-47D22 Razorback Thunderbolt" de vachtar, CC BY 4.0 (ver CREDITOS.md); preparada por tools/blender/skin.py
+    spinner: 0.42,
+    model: { url: '/models/p47.glb', off: [0, 0.15, 0], fz: 1.27, def: { L: 10.45, canopy: { z: 0.055 } } }, // def: ajustes da estrutura só quando a pele está carregada
     fuseR: 0.78, noseR: 0.72, wingZ: 0.6, chord: 2.6, tipChord: 1.3, cowl: 'radial', radial: { cyl: 9 }, // R-2800: fileira da frente com 9 cilindros
     // peças reais: dois tanques na fuselagem sob a cabine (sem tanque na asa no D-28), turbocompressor no ventre traseiro, radiadores de óleo na carenagem, flaps hidráulicos
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque principal', z: 0.04, y: -0.4, s: [0.55, 0.35, 0.6] }, { id: 'fuelA', k: 'fuel', n: 'Tanque auxiliar', z: -0.1, y: -0.45, s: [0.5, 0.3, 0.4] },

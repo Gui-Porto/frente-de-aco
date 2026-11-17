@@ -15,8 +15,10 @@ const scene = new THREE.Scene(); scene.background = new THREE.Color(0x2b2f33);
 scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x4a4036, 1.6));
 const sun = new THREE.DirectionalLight(0xfff1dd, 2.6); sun.position.set(6, 10, 8); scene.add(sun);
 const back = new THREE.DirectionalLight(0x8899bb, 0.9); back.position.set(-8, 3, -6); scene.add(back);
-if (D.type !== 'plane') await (await import('/src/vehicles/tankModel.js')).preloadTankModels([D]);
-const m = D.type === 'plane' ? (await import('/src/vehicles/planeModel.js')).buildPlane(D) : (await import('/src/vehicles/tank.js')).buildTank(D);
+if (!q.get('glb') && D.type === 'plane') await (await import('/src/vehicles/modelLibrary.js')).preloadModels([D]);
+if (!q.get('glb') && D.type !== 'plane') await (await import('/src/vehicles/tankModel.js')).preloadTankModels([D]);
+// ?glb=/models/x.glb: mostra o arquivo cru (conferir o preparo do Blender), sem montar veículo
+const m = q.get('glb') ? { root: (await new (await import('three/addons/loaders/GLTFLoader.js')).GLTFLoader().loadAsync(q.get('glb'))).scene } : D.type === 'plane' ? (await import('/src/vehicles/planeModel.js')).buildPlane(D) : (await import('/src/vehicles/tank.js')).buildTank(D);
 if (m.gearMesh && m.gearMesh.userData.anim) m.gearMesh.userData.anim(gear);
 if (m.turret) { m.turret.rotation.y = (+q.get('tur') || 0) * Math.PI / 180; m.gunPivot.rotation.x = -(+q.get('el') || 0) * Math.PI / 180; } // ?tur=40&el=10: torre girada e canhão elevado
 if (m.trackAnim) { const o = +q.get('trk') || 0; m.trackAnim([o, o]); for (const w of m.wheels) w.m.rotation.x = o / w.r; } // ?trk=0.07: esteira andada (m)
