@@ -9,7 +9,8 @@
 #       wingObjs: prefixos de objetos que são da asa inteiros (ailerons, flaps): o lado sai do centro do objeto
 #       colors: { material: [r, g, b] } para materiais sem textura   dropMats: [materiais] cujas peças saem
 #       wings.obj = '*': arquivo sem peças nomeadas — junta tudo e separa só por geometria; wings.ymax: acima disso não é
-#       asa (motores em casulo); tailZ: tudo atrás desse z vira cauda
+#       asa (motores em casulo); tailZ: tudo atrás desse z vira cauda   pitch: graus de nariz para baixo (avião de bequilha
+#       modelado pousado); center/cg valem DEPOIS dessa rotação
 # Saída em metros, +z nariz, +y cima, +x asa esquerda, origem no CG na linha de centro.
 import bpy, bmesh, sys, json, math
 from mathutils import Matrix, Vector
@@ -47,6 +48,8 @@ ax = cfg['nose']; sgn = 1 if ax[0] == '+' else -1; a = 'XYZ'.index(ax[1])
 ang = {0: -90 * sgn, 1: 0 if sgn < 0 else 180}[a]
 R = Matrix.Rotation(math.radians(ang), 4, 'Z')
 for o in objs: o.data.transform(R)
+if cfg.get('pitch'):                  # arquivo de avião "sentado" na bequilha: graus para baixar o nariz até a linha de tração ficar nivelada
+    for o in objs: o.data.transform(Matrix.Rotation(math.radians(cfg['pitch']), 4, 'X'))
 lat0, up0 = cfg['center']; c = R @ Vector((cfg['cg'] if a == 0 else lat0, lat0 if a == 0 else cfg['cg'], up0))
 for o in objs: o.data.transform(Matrix.Translation(-c))
 span = max(abs(v.co.x) for o in objs for v in o.data.vertices) * 2; k = cfg['span'] / span

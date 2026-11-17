@@ -169,7 +169,7 @@ export const PLANES = {
     rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 340, n: 8 }
   },
   fw190: {
-    key: 'fw190', type: 'plane', gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
+    key: 'fw190', type: 'plane', model: { url: '/models/fw190.glb', solo: true, fz: 1.3, def: { L: 7.4 } }, gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
     mass: 4750, S: 18.3, span: 10.5, L: 9.0, cla: 4.8, clmax: 1.45, cd0: 0.0225, e: 0.8, engine: 'bmw801',
     vne: 850 / 3.6, glim: 12, kda: 0.06, kde: 0.32, kdr: 0.05, armor: { pilot: 8, engine: 6 },
     hpParts: { wingL: 30, wingR: 30, tail: 24, engine: 22, fuel: 18, fuse: 36 },
@@ -184,7 +184,7 @@ export const PLANES = {
   },
   // ---- Batalha aérea: caças sem carga externa e os primeiros jatos ----
   spit9: {
-    key: 'spit9', type: 'plane', gear: { track: 1.68, ret: 'out' }, name: 'Spitfire LF Mk IX', short: 'Spitfire IX', nation: 'Reino Unido', year: 1943, color: 0x59604a, sp: 300,
+    key: 'spit9', type: 'plane', model: { url: '/models/spit9.glb', solo: true, fz: 1.15, def: { L: 8.2 } }, gear: { track: 1.68, ret: 'out' }, name: 'Spitfire LF Mk IX', short: 'Spitfire IX', nation: 'Reino Unido', year: 1943, color: 0x59604a, sp: 300,
     mass: 3400, S: 22.48, span: 11.23, L: 9.5, cla: 4.9, clmax: 1.5, cd0: 0.0195, e: 0.85, engine: 'merlin66',
     vne: 760 / 3.6, glim: 12, kda: 0.055, kde: 0.36, kdr: 0.05, armor: { pilot: 7 },
     hpParts: { wingL: 28, wingR: 28, tail: 22, engine: 20, fuel: 16, fuse: 32 },
@@ -197,7 +197,7 @@ export const PLANES = {
     bombs: [], rockets: null
   },
   f86: {
-    key: 'f86', type: 'plane', marks: { serial: '24513', buzz: 'FU-513', decalZ: -0.22 }, gear: { track: 2.5, ret: 'in' }, name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
+    key: 'f86', type: 'plane', model: { url: '/models/f86.glb', solo: true, nozzles: [[0, -0.01, -5.55, 0.3]] }, marks: { serial: '24513', buzz: 'FU-513', decalZ: -0.22 }, gear: { track: 2.5, ret: 'in' }, name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
     mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.016, e: 0.78, engine: 'j47', mcrit: 0.9, vctrl: 290, flapV: [410, 305, 245],
     vne: 1150 / 3.6, glim: 12, kda: 0.05, kde: 0.3, kdr: 0.04, armor: { pilot: 8 },
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
@@ -222,7 +222,7 @@ export const PLANES = {
     bombs: [], rockets: null
   },
   mig15: {
-    key: 'mig15', type: 'plane', marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, fences: [{ ws: 0.4, h: 0.17, len: 0.95 }, { ws: 0.68, h: 0.12, len: 0.9 }], name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
+    key: 'mig15', type: 'plane', model: { url: '/models/mig15.glb', solo: true, nozzles: [[0, 0.05, -4.45, 0.33]] }, marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, fences: [{ ws: 0.4, h: 0.17, len: 0.95 }, { ws: 0.68, h: 0.12, len: 0.9 }], name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
     mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.023, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1', maw: 'pd',
