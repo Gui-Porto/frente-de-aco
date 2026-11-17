@@ -549,7 +549,7 @@ export class Plane {
         const am = g.belt[g.k % g.belt.length]; // próximo projétil da cinta
         fireProj(this, pos, dir.multiplyScalar(g.W.v).add(this.vel), am, 'bullet', { tracer: am.tracer });
         if (g.k % 3 === 0) fxSmallFlash(pos, _pf.set(0, 0, 1).applyQuaternion(this.q));
-        sndMG(pos, g.W.cal, this.isPlayer);
+        sndMG(pos, g.W.cal, this.isPlayer, g.W.rpm);
       }
     }
   }

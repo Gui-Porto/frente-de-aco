@@ -9,7 +9,7 @@ import { grass, waveFlags } from '../world/scenery.js';
 import { Q } from '../core/render.js';
 import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, cookOff } from '../combat/ballistics.js';
 import { updateParts, fxBurn, spawnP, TEX } from '../fx/particles.js';
-import { eng } from '../fx/audio.js';
+import { eng, tankVoices } from '../fx/audio.js';
 import { updateMatch, startMatch, spawnPlayer, mkWho, spawnVehicle } from './match.js';
 import { controlPlayer } from './controls.js';
 import { updateCamera, cam } from './camera.js';
@@ -58,12 +58,15 @@ function frame(ts) {
   grass.count = Q.grass; grass.update(dt);
   if ((flagT += dt) > 0.05) { waveFlags(S.now + ts / 1000); flagT = 0; }
   // motores
-  if (S.mode === 'air' || S.state === 'airmenu') { if (eng.tank) eng.tank.set(false); airAudio(dt || 0.016); }
+  if (S.mode === 'air' || S.state === 'airmenu') { if (eng.tank) eng.tank.set(false); tankVoices([]); airAudio(dt || 0.016); }
   else if (eng.tank) {
     airAudioOff(); // gravações/vozes do modo aéreo não ficam tocando na batalha de tanques
     const on = p && p.alive && S.state === 'play' && !S.paused && p.type !== 'plane';
     // motor pela rotação real e pela carga (acelerador ou giro); esteiras no ritmo da velocidade
     eng.tank.set(on, on ? p.rpm : 0, on ? Math.max(Math.abs(p.throttle), Math.abs(p.steer)) : 0, on ? Math.abs(p.vFwd || 0) : 0);
+    // os três blindados mais próximos da câmera também roncam (antes só o do jogador tinha som)
+    const nearT = S.paused || S.state === 'menu' ? [] : tanks.filter(t => t.alive && t !== p && t.pos.distanceToSquared(camera.position) < 48400).sort((a, b) => a.pos.distanceToSquared(camera.position) - b.pos.distanceToSquared(camera.position)).slice(0, 3);
+    tankVoices(nearT.map(t => ({ pos: t.pos, rpm: t.rpm || 700, load: Math.max(Math.abs(t.throttle || 0), Math.abs(t.steer || 0)) })));
     const pl = p && p.alive && p.type === 'plane' && !S.paused ? p : null;
     let near = pl, nd = 0;
     if (!near) { nd = 1e9; for (const q of planes) { if (!q.alive) continue; const d = q.pos.distanceTo(camera.position); if (d < nd) { nd = d; near = q; } } }

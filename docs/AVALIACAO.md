@@ -58,3 +58,5 @@ O jogo já tem o **esqueleto certo** — balística com blindagem inclinada, dan
 ## Atualização (mesmo dia, mais tarde)
 
 Entraram depois desta avaliação: Wirbelwind e Gepard com modelo real (esteiras ainda paradas), tripulação por veículo e HEAT com fator de composta. Os itens 2 e 4 da lista "o que falta" estão resolvidos; o mapa continua sendo o ponto mais fraco.
+
+Segunda rodada do mesmo dia: P-47 e A-10 com pele real, Wirbelwind com esteira em elos, IA de ataque aéreo corrigida (jato não se enterra mais no mergulho), som com motores dos outros blindados. O som segue 100% sintetizado: melhorou em densidade, mas a distância para gravações reais continua — é decisão do dono voltar a usá-las.

@@ -36,7 +36,9 @@ export function audioInit() {
     AC = new (window.AudioContext || window.webkitAudioContext)();
     const comp = AC.createDynamicsCompressor(); comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.25;
     master = AC.createGain(); master.connect(comp); comp.connect(AC.destination);
-    sfx = AC.createGain(); sfx.connect(master); engBus = AC.createGain(); engBus.connect(master);
+    // efeitos passam por uma saturação suave (tanh): tiro e explosão ganham corpo em vez de só chiado de ruído filtrado
+    const sat = AC.createWaveShaper(), sc = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; sc[i] = Math.tanh(x * 1.7) / Math.tanh(1.7); } sat.curve = sc; sat.oversample = '2x'; sat.connect(master);
+    sfx = AC.createGain(); sfx.connect(sat); engBus = AC.createGain(); engBus.connect(master);
     verb = AC.createConvolver(); verb.buffer = impulse(2.4); const vg = AC.createGain(); vg.gain.value = 0.55; verb.connect(vg); vg.connect(sfx);
     applyVol();
     noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
@@ -58,7 +60,7 @@ export function audioInit() {
         const amp = n % 12 === 0 ? 1 / Math.pow(n / 12, 0.75) : n % 6 === 0 ? 0.5 / Math.pow(n / 6, 0.9) : n % 3 === 0 ? 0.16 / Math.sqrt(n / 3) : 0.07 * rnd() / Math.sqrt(n);
         const ph = rnd() * Math.PI * 2; re[n] = amp * Math.cos(ph); im[n] = amp * Math.sin(ph);
       }
-      const o = AC.createOscillator(); o.setPeriodicWave(AC.createPeriodicWave(re, im)); o.frequency.value = 6;
+      const wave = AC.createPeriodicWave(re, im), o = AC.createOscillator(); o.setPeriodicWave(wave); o.frequency.value = 6;
       const fl = filt('lowpass', 320, 0.9), body = filt('peaking', 110, 1.2); body.gain.value = 7; const g = gain(0);
       o.connect(fl); fl.connect(body); body.connect(g); g.connect(engBus); o.start();
       // escape: ruído marrom que pulsa com o motor
@@ -85,6 +87,14 @@ export function audioInit() {
         sqg.gain.setTargetAtTime(sp > 0.5 ? 0.006 + Math.min(sp, 8) * 0.0015 : 0, t, 0.15); sq.frequency.setTargetAtTime(2100 + sp * 60 + Math.sin(t * 7) * 120, t, 0.05);
       };
       eng.tank = { g, set, track: { g: tg } };
+      // motores dos OUTROS blindados por perto (3 vozes): o mesmo timbre do V12 com escape, posição, distância e abafamento
+      eng.tvoices = [];
+      for (let i = 0; i < 3; i++) {
+        const vo = AC.createOscillator(); vo.setPeriodicWave(wave); vo.frequency.value = 6;
+        const vf = filt('lowpass', 300, 0.8), vnf = filt('bandpass', 160, 0.7), vng = gain(0.6), vg = gain(0), vp = AC.createStereoPanner();
+        vo.connect(vf); loop(brownBuf, 1.1 + i * 0.13).connect(vnf); vnf.connect(vng); vng.connect(vf); vf.connect(vg); vg.connect(vp); vp.connect(engBus); vo.start();
+        eng.tvoices.push({ o: vo, f: vf, g: vg, p: vp });
+      }
     }
     // ---- pistão: forma de onda com harmônicos de escapamento + "estalo" de ruído no ritmo das explosões + batida da hélice ----
     {
@@ -193,9 +203,11 @@ function out(a, wetK = 1) {
   p.connect(lp); lp.connect(dry); lp.connect(wet); dry.connect(sfx); wet.connect(verb);
   return p;
 }
-function noiseBurst(t, vol, freq, dur, q = 0.7, dest = sfx, type = 'lowpass', buf = noiseBuf, att = 0.006) {
+// f1: o filtro varre de freq até f1 durante o som (explosão real começa clara e escurece)
+function noiseBurst(t, vol, freq, dur, q = 0.7, dest = sfx, type = 'lowpass', buf = noiseBuf, att = 0.006, f1 = 0) {
   const s = AC.createBufferSource(); s.buffer = buf; s.playbackRate.value = rand(.8, 1.1);
   const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  if (f1) { f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.7); }
   const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(vol, 0.0002), t + att); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   s.connect(f); f.connect(g); g.connect(dest); s.start(t, rand(0, 1)); s.stop(t + dur + 0.05);
 }
@@ -206,6 +218,17 @@ function thump(t, vol, f0, dur, dest = sfx) {
 function ping(t, vol, f0, f1, dur, dest = sfx, type = 'triangle') {
   const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   g.gain.setValueAtTime(Math.max(vol, 0.0002), t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.02);
+}
+
+// motores dos outros blindados: list = até 3 de { pos, rpm, load } (os mais próximos da câmera); [] cala todos
+export function tankVoices(list) {
+  if (!AC || !eng.tvoices) return; const t = AC.currentTime;
+  eng.tvoices.forEach((v, i) => {
+    const q = list[i], a = q && at(q.pos, 1);
+    if (!a) { v.g.gain.setTargetAtTime(0, t, 0.15); return; }
+    v.o.frequency.setTargetAtTime(q.rpm / 120, t, 0.06); v.f.frequency.setTargetAtTime((240 + q.rpm * 0.1 + q.load * 600) / (1 + a.d / 150), t, 0.1);
+    v.g.gain.setTargetAtTime((0.09 + q.load * 0.08) / (1 + a.d / 18), t, 0.12); v.p.pan.setTargetAtTime(a.pan, t, 0.1);
+  });
 }
 
 // ---------- cockpit ----------
@@ -295,8 +318,8 @@ export function sndShot(pos, cal) {
   const a = at(pos, 1.6 * cal / 80); if (!a) return; const o = out(a, 1.5), v = Math.min(a.vol, 1.3), big = clamp((cal - 37) / 60, 0, 1.3);
   if (SMP.boom_small) { playRec(SMP.boom_small, a, v * 1.2, rand(0.62, 0.7), o); thump(a.t, Math.min(a.vol, 1), 60, 0.6, o); return; }
   noiseBurst(a.t, v, 5200, 0.045, 0.7, o, 'highpass', noiseBuf, 0.001);
-  noiseBurst(a.t, v * 1.1, 2400 / (1 + a.d / 400), 0.5 + big * 0.5, 0.8, o);
-  noiseBurst(a.t + 0.01, v, 500 - big * 180, 1.1 + big * 0.8, 0.7, o);
+  noiseBurst(a.t, v * 1.2, 3600 / (1 + a.d / 400), 0.55 + big * 0.5, 0.8, o, 'lowpass', noiseBuf, 0.003, 240);
+  noiseBurst(a.t + 0.01, v, 700 - big * 180, 1.1 + big * 0.8, 0.7, o, 'lowpass', noiseBuf, 0.006, 140);
   noiseBurst(a.t, v, 190 - big * 60, 1.8 + big * 1.2, 0.7, o, 'lowpass', brownBuf, 0.008);
   thump(a.t, Math.min(a.vol * 1.2, 1.2), 82 - big * 30, 0.5 + big * 0.5, o);
   thump(a.t, Math.min(a.vol, 1) * big, 38, 0.9, o);
@@ -309,8 +332,18 @@ export function sndShot(pos, cal) {
 }
 // metralhadoras e canhões de avião: estalo curto que muda com o calibre; a partir de 20 mm, o "tum" do canhão.
 // Limite de cadência POR CALIBRE (antes era um só para tudo: o canhão sumia no meio das .50)
-export function sndMG(pos, cal, own) {
+export function sndMG(pos, cal, own, rpm = 0) {
   if (!AC || (own && cal < 20 && eng.gunLoop)) return; // as suas metralhadoras tocam no laço gravado
+  if (rpm >= 2400) { // canhão rotativo (GAU-8, M61): os tiros fundem num zumbido — dente de serra na cadência + sopro, em grãos que se emendam
+    const t0 = AC.currentTime; if (t0 - (lastShot.get('b') || 0) < 0.07) return; lastShot.set('b', t0);
+    const a = at(pos, 0.3 * cal / 10); if (a.vol < 0.004) return; const o = out(a, 0.7), v = Math.min(a.vol, 0.8), dur = 0.15;
+    const os = AC.createOscillator(), f = AC.createBiquadFilter(), g = AC.createGain(); os.type = 'sawtooth'; os.frequency.value = rpm / 60 * rand(0.98, 1.02);
+    f.type = 'lowpass'; f.frequency.value = Math.max(300, 2600 / (1 + a.d / 250));
+    g.gain.setValueAtTime(0.0001, a.t); g.gain.exponentialRampToValueAtTime(v * 0.7, a.t + 0.015); g.gain.setValueAtTime(v * 0.7, a.t + dur - 0.04); g.gain.exponentialRampToValueAtTime(0.0001, a.t + dur);
+    os.connect(f); f.connect(g); g.connect(o); os.start(a.t); os.stop(a.t + dur + 0.02);
+    noiseBurst(a.t, v * 0.8, 1400 / (1 + a.d / 300), dur, 0.8, o, 'bandpass', noiseBuf, 0.015); thump(a.t, v * 0.5, cal >= 30 ? 75 : 100, dur, o);
+    return;
+  }
   const t = AC.currentTime, key = cal >= 20 ? 'c' : 'm', gap = cal >= 30 ? 0.09 : cal >= 20 ? 0.055 : 0.04;
   if (t - (lastShot.get(key) || 0) < gap) return; lastShot.set(key, t);
   const a = at(pos, 0.25 * cal / 10); if (a.vol < 0.004) return; const o = out(a, 0.5), v = Math.min(a.vol, cal >= 20 ? .7 : .5);
@@ -327,8 +360,9 @@ export function sndBoom(pos, big) {
   const rec = big ? SMP.boom : SMP.boom_small;
   if (rec) { playRec(rec, a, v * 1.3, rand(0.88, 1.08) * (big ? 0.9 : 1), o); thump(a.t, Math.min(a.vol, 1.2), big ? 45 : 60, big ? 1.4 : .5, o); return; }
   noiseBurst(a.t, v, 5000, 0.06, 0.7, o, 'highpass');
-  noiseBurst(a.t, v, big ? 700 : 1200, big ? 2.6 : 0.9, 0.7, o);
+  noiseBurst(a.t, v * 1.1, big ? 2200 : 2800, big ? 2.6 : 0.9, 0.7, o, 'lowpass', noiseBuf, 0.004, big ? 120 : 200);
   noiseBurst(a.t, v, big ? 160 : 260, big ? 3.2 : 1.4, 0.8, o, 'lowpass', brownBuf, 0.01);
+  if (a.d > 250) noiseBurst(a.t + 0.2 + a.d / 2500, v * 0.5, 120, big ? 3 : 1.6, 0.7, o, 'lowpass', brownBuf, 0.08); // de longe: o trovão que rola depois do estalo
   thump(a.t, Math.min(a.vol, 1.2), big ? 48 : 60, big ? 1.4 : .5, o);
   if (big && a.d < 400) for (let i = 0; i < 6; i++) noiseBurst(a.t + rand(0.5, 1.6), v * 0.15, rand(2000, 5000), 0.05, 4, o, 'bandpass');
 }

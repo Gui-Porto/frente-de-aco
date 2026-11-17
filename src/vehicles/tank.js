@@ -488,7 +488,7 @@ export class Tank {
     fireProj(this, pos, dir.clone().multiplyScalar(am.v), am, 'bullet', { tracer: (this.barrel % am.tracer) === 0 });
     this.ammoLeft[this.loaded]--; this.clip--;
     if (this.barrel % 2 === 0) fxSmallFlash(pos, dir);
-    sndMG(pos, 26);
+    sndMG(pos, g.cal, false, g.rpm / (g.barrels || 1));
     if (this.clip <= 0 || this.ammoLeft[this.loaded] <= 0) { this.loaded = -1; this.reload = g.reload; }
   }
   shootMG() {

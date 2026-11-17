@@ -10,7 +10,9 @@ Antiaéreas com modelo real feitas em 2026-11-17: Wirbelwind (Prak) e Gepard (xF
 
 Também feitos: tripulação por veículo (`def.crew`) e munição HEAT com fator de blindagem composta (`armor.ce`).
 
-Pendente: texturas/adereços do mapa,  IA usando HEAT/cobertura.
+Também feitos (2026-11-17, 2ª rodada): esteira do Wirbelwind em elos, IA de tanque (munição por perfuração, atira-e-recua) e de ataque aéreo (bombardeio nivelado dos jatos), abetos novos, peles glTF para aeronaves (P-47 de vachtar; A-10A de AIRMAN Magazine, novo na era Moderna), som (motores dos outros blindados, zumbido do GAU-8, tiro/explosão com filtro varrendo).
+
+Pendente: decidir com o dono se o som volta a usar gravações reais (a síntese tem teto); chão com textura PBR; IA procurando cobertura; peles para os outros aviões; ficha do A-10 na Batalha Aérea.
 
 ## Em andamento / próximos
 
