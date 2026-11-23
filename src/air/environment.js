@@ -63,7 +63,7 @@ export function applyEnv(wKey, tKey) {
   renderer.toneMappingExposure = T.exp;
   env.fogMul = W.fogMul;
   // o céu Preetham é HDR (bem acima de 1): nuvem com cor ≤ 1 saía cinza-escura contra ele
-  const tint = new THREE.Color(T.sun).lerp(new THREE.Color(0xffffff), 0.8).multiplyScalar(4.2 * (0.4 + 0.6 * W.dim) * Math.min(1, 0.45 + T.elev / 30));
+  const tint = new THREE.Color(T.sun).lerp(new THREE.Color(0xffffff), clamp(T.elev / 32, 0.3, 0.8)).multiplyScalar(4.2 * (0.4 + 0.6 * W.dim) * Math.min(1, 0.45 + T.elev / 30));
   CL.mesh.material.uniforms.sunTint.value.copy(tint);
   buildClouds(W.clouds, 0xf2f2f0);
   raining = W.rain;
