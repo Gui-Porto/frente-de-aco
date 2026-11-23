@@ -24,10 +24,10 @@ const num = (t, x, y, size, col = T.fg, align = 'right') => ptxt(t, x, y, size, 
 
 // HUD limpa, como no WT (pedido do dono): os números ficam em texto branco discreto no canto superior esquerdo; embaixo, à
 // esquerda, só a silhueta de dano (o RWR vai ao lado dela e o radar à direita — scopes.js). A placa grande com tudo dentro saiu.
-export const SIL = { w: 132, h: 188 };
+export const SIL = { w: 158, h: 224 };
 const WH = 'rgba(255,255,255,.92)', WD = 'rgba(255,255,255,.58)';
 // texto solto sobre o céu: sombra curta em vez de contorno (o contorno grosso embaçava o corpo pequeno)
-const wt = (t, x, y, size, col, align, font, weight) => { g.shadowColor = 'rgba(0,0,0,.9)'; g.shadowBlur = 3; g.shadowOffsetY = 1; ptxt(t, x, y, size, col, align, font, weight); g.shadowBlur = 0; g.shadowOffsetY = 0; };
+const wt = (t, x, y, size, col, align, font, weight) => { g.shadowColor = '#000'; g.shadowBlur = 4; g.shadowOffsetY = 1; ptxt(t, x, y, size, col, align, font, weight); ptxt(t, x, y, size, col, align, font, weight); g.shadowBlur = 0; g.shadowOffsetY = 0; }; // duas passadas: sobre nuvem branca uma sombra só não segurava a leitura
 export function flightPanel(p, theme) {
   T = theme;
   const k = clamp(Math.min(V.W / 1400, V.H / 820), 0.8, 1);
@@ -58,7 +58,7 @@ function readouts(p) {
   if (p.flares > 0 || p.chaff > 0 || D.jet) rows.push(['FLARE · CHAFF', `${p.flares} · ${p.chaff}`, p.flares ? WH : C.amber]);
   if (p.ord0 && (p.ord0.bombs || p.ord0.rockets)) rows.push(['BOMBA · FOG.', `${p.bombs.length} · ${p.rockets}`, p.bombs.length || p.rockets ? WH : C.amber]);
   let y = 0;
-  for (const r of rows) { if (!r) { y += 8; continue; } wt(r[0], 0, y, 11, WD, 'left', UI, 600); wt(r[1], 104, y, 14, r[2], 'left', MONO, 500); y += 18; }
+  for (const r of rows) { if (!r) { y += 10; continue; } wt(r[0], 0, y, 12.5, WD, 'left', UI, 600); wt(r[1], 118, y, 16, r[2], 'left', MONO, 600); y += 21; }
 }
 // fita de rumo: N = +z do mundo; girar para a direita aumenta o rumo
 function heading(p, x, y, w) {
@@ -164,7 +164,7 @@ function chips(p) {
   if (rd && !rd.ranging) list.push([`RADAR ${RADAR_MODE[rd.mode].toUpperCase()}`, rd.on ? T.accent : T.dim]);
   for (const [t, col] of damageList(p)) list.push([t, col]);
   let y = -12; g.letterSpacing = '1px';
-  for (const [t, col] of list.slice(0, 9)) { wt(t, 2, y, 11, col, 'left', UI, 600); y -= 16; }
+  for (const [t, col] of list.slice(0, 9)) { wt(t, 2, y, 12, col, 'left', UI, 600); y -= 17; }
   g.letterSpacing = '0px';
 }
 

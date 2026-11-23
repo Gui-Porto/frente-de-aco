@@ -138,17 +138,21 @@ function quadrants(rw, T, cx, cy, R) {
 
 // ---------- mapa tático (canto superior direito) ----------
 export function tacMap(v, T) {
-  const R = 74, x = V.W - R - 22, y = R + 70, rng = Math.max(5000, (S.airLimit || 4200) * 1.1);
-  g.shadowBlur = 0; g.fillStyle = 'rgba(8,11,9,.5)'; g.beginPath(); g.arc(x, y, R, 0, 7); g.fill();
-  g.strokeStyle = T.faint; g.lineWidth = 1; for (const k of [1, 0.5]) { g.beginPath(); g.arc(x, y, R * k, 0, 7); g.stroke(); }
+  // maior e mais legível: aro claro, anel de meia distância com o valor, cruz fraca e o N girando na borda
+  const R = 98, x = V.W - R - 26, y = R + 66, rng = Math.max(5000, (S.airLimit || 4200) * 1.1);
+  g.shadowBlur = 0; g.fillStyle = 'rgba(10,14,18,.5)'; g.beginPath(); g.arc(x, y, R, 0, 7); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.4)'; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, R, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.13)'; g.lineWidth = 1; g.beginPath(); g.arc(x, y, R * 0.5, 0, 7); g.moveTo(x - R, y); g.lineTo(x + R, y); g.moveTo(x, y - R); g.lineTo(x, y + R); g.stroke();
   const hd = Math.atan2(cam.aimDir.x, cam.aimDir.z), c = Math.cos(hd), s = Math.sin(hd);
+  txt('N', x + s * (R + 10), y - c * (R + 10) + 4, 12, T.accent, 'center', UI);
+  txt(`${(rng / 2000).toFixed(1).replace('.', ',')}`, x + 3, y - R * 0.5 - 3, 9.5, 'rgba(255,255,255,.4)', 'left');
   const to = (wx, wz) => { const dx = wx - v.pos.x, dz = wz - v.pos.z; return [x - (dx * c - dz * s) / rng * R, y - (dx * s + dz * c) / rng * R]; };
   const o = B.obj;
   if (o && o.zone) { const [zx, zy] = to(o.zone.x, o.zone.z); g.strokeStyle = C.sky; g.setLineDash([3, 4]); g.beginPath(); g.arc(zx, zy, o.zone.r / rng * R, 0, 7); g.stroke(); g.setLineDash([]); }
   if (o && o.base) { const [bx, by] = to(o.base.x, o.base.z); g.fillStyle = C.ally; g.fillRect(bx - 4, by - 4, 8, 8); }
   g.save(); g.beginPath(); g.arc(x, y, R, 0, 7); g.clip();
   // pistas: a sua em azul, a inimiga em vermelho
-  for (const a of activeFields()) { const [ax, ay] = to(a.x, a.z - a.len / 2), [bx, by] = to(a.x, a.z + a.len / 2); g.strokeStyle = a.team === v.team ? C.ally : C.enemy; g.lineWidth = 3; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
+  for (const a of activeFields()) { const [ax, ay] = to(a.x, a.z - a.len / 2), [bx, by] = to(a.x, a.z + a.len / 2); g.strokeStyle = a.team === v.team ? C.ally : C.enemy; g.lineWidth = 4; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
   g.lineWidth = 1;
   const rd = v.sys && v.sys.radar && !v.sys.radar.ranging ? v.sys.radar : null;
   for (const e of planes) {
@@ -161,10 +165,10 @@ export function tacMap(v, T) {
     else continue;
     const [qx, qy] = to(px, pz), eh = Math.atan2(e.vel.x, e.vel.z) - hd;
     g.save(); g.translate(qx, qy); g.rotate(-eh); g.globalAlpha = 0.35 + 0.65 * fresh; g.fillStyle = ally ? C.ally : C.enemy;
-    g.beginPath(); g.moveTo(0, -5); g.lineTo(3.5, 4); g.lineTo(-3.5, 4); g.closePath(); g.fill(); g.restore();
+    g.beginPath(); g.moveTo(0, -7); g.lineTo(4.5, 5); g.lineTo(0, 2.5); g.lineTo(-4.5, 5); g.closePath(); g.fill(); g.restore();
   }
   for (const m of missiles) if (m.pos.distanceTo(v.pos) < 2000) { const [px, py] = to(m.pos.x, m.pos.z); g.fillStyle = '#fff'; g.fillRect(px - 1, py - 1, 2, 2); }
   g.restore();
-  g.fillStyle = T.fg; g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 4, y + 4); g.lineTo(x - 4, y + 4); g.closePath(); g.fill();
-  txt(`${Math.round(rng / 1000)} km`, x + R - 4, y + R + 12, 10, T.dim, 'right');
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x, y - 8); g.lineTo(x + 5, y + 5); g.lineTo(x, y + 2.5); g.lineTo(x - 5, y + 5); g.closePath(); g.fill();
+  txt(`${Math.round(rng / 1000)} km`, x + R - 4, y + R + 14, 11, 'rgba(255,255,255,.6)', 'right');
 }
