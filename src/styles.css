@@ -54,6 +54,7 @@ h1 span{display:block;color:var(--amber)}
 /* ---------- HUD ---------- */
 #hud{position:fixed;inset:0;pointer-events:none;user-select:none}
 .tickets{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px}
+#compass{position:absolute;top:46px;left:50%;transform:translateX(-50%)}
 .tk{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:18px;text-shadow:0 1px 3px #000}
 .tk .bar{width:170px;height:8px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);overflow:hidden}
 .tk .bar i{display:block;height:100%}
@@ -115,7 +116,7 @@ h1 span{display:block;color:var(--amber)}
 .reload i{position:absolute;inset:0 auto 0 0;background:var(--khaki)}
 .reload.ready i{background:var(--ok)}
 .subrow{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--dim)}
-#compass{width:58px;height:58px}
+
 #pFire{color:var(--enemy);font-weight:700;letter-spacing:.06em;animation:blink 1s steps(2) infinite}
 @keyframes blink{50%{opacity:.4}}
 #hint{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);font-size:14px;color:var(--khaki);background:rgba(16,20,14,.7);padding:5px 12px;transition:opacity 1s;white-space:nowrap}

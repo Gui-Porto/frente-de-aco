@@ -166,15 +166,16 @@ function targets(v, live) {
     const lab = en ? `${e.def.short}  ${fmtD(d)}` : `${e.who ? e.who.name : ''}`;
     if (en || d < 1500) placeLabel(lab, pr.x, pr.y, r, col, rx, ry);
     // avanço (lead) do alvo marcado: onde mirar para as balas encontrarem o alvo
-    if (live && e === mk && d < 1600) {
+    // marcado: até 1,6 km com a linha; os outros inimigos ao alcance das armas ganham o círculo sozinhos (como no WT arcade)
+    if (live && en && d < (e === mk ? 1600 : 900)) {
       const Wg = v.guns.find(q => q.ammo > 0) || v.guns[0];
       leadPoint(v.pos, v.vel, e.pos, e.vel, Wg.W.v, _a);
       const lp = proj(_a, P2);
       if (lp && lp.on) {
         g.strokeStyle = C.enemy; g.lineWidth = 1.6; glow(C.enemy, 5);
-        g.beginPath(); g.arc(lp.x, lp.y, 7, 0, 7); g.stroke();
+        g.beginPath(); g.arc(lp.x, lp.y, e === mk ? 7 : 5, 0, 7); g.stroke();
         g.beginPath(); g.arc(lp.x, lp.y, 1.6, 0, 7); g.fillStyle = C.enemy; g.fill();
-        g.globalAlpha = 0.35; g.beginPath(); g.moveTo(pr.x, pr.y); g.lineTo(lp.x, lp.y); g.stroke(); g.globalAlpha = 1; g.shadowBlur = 0;
+        if (e === mk) { g.globalAlpha = 0.35; g.beginPath(); g.moveTo(pr.x, pr.y); g.lineTo(lp.x, lp.y); g.stroke(); g.globalAlpha = 1; } g.shadowBlur = 0;
       }
     }
   }

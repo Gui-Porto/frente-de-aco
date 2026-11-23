@@ -79,6 +79,11 @@ export class TankBrain {
       const ax = t.pos.x + Math.sin(yaw) * 11, az = t.pos.z + Math.cos(yaw) * 11;
       let blocked = false;
       for (const b of obstNear(ax - 3, az - 3, ax + 3, az + 3)) if (ax > b.mn[0] - 2.5 && ax < b.mx[0] + 2.5 && az > b.mn[2] - 2.5 && az < b.mx[2] + 2.5 && b.mx[1] > t.pos.y - 1) { blocked = true; break; }
+      // outro blindado (ou destroço) no caminho: contorna pelo lado livre — todos seguem a mesma estrada e ficavam empurrando uns aos outros
+      if (!blocked) for (const o of tanks) {
+        if (o === t) continue; const ox = o.pos.x - t.pos.x, oz = o.pos.z - t.pos.z, od = Math.hypot(ox, oz); if (od > 15 || od < 0.1) continue;
+        const rel = angDiff(yaw, Math.atan2(ox, oz)); if (Math.abs(rel) < 0.55 && (o.alive ? o.groundSpeed() < t.groundSpeed() + 1 : true)) { blocked = true; if (!this.avoid) this.avoid = rel > 0 ? -1 : 1; break; }
+      }
       if (blocked) { if (!this.avoid) this.avoid = diff > 0 ? 1 : -1; diff += this.avoid * 1.1; } else this.avoid = 0;
       st = clamp(diff * 2.5, -1, 1);
       thr = d < 6 ? 0 : Math.abs(diff) > 1.2 ? 0 : Math.abs(diff) > .5 ? .5 : 1;

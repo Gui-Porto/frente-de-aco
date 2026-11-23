@@ -122,8 +122,9 @@ export function updateMatch(dt) {
   if ((ticketT += dt) >= 1) {
     ticketT = 0;
     const own = POINTS.reduce((s, p) => s + p.owner, 0);
-    if (own > 0) S.tickets[-1] = Math.max(0, S.tickets[-1] - own * 1.5);
-    if (own < 0) S.tickets[1] = Math.max(0, S.tickets[1] + own * 1.5);
+    // medido em partida só de IA: com 1,5/s por ponto a partida acabava em 4,5 min (domínio dos 3 pontos = 3 min)
+    if (own > 0) S.tickets[-1] = Math.max(0, S.tickets[-1] - own * 0.7);
+    if (own < 0) S.tickets[1] = Math.max(0, S.tickets[1] + own * 0.7);
   }
   for (let i = respawns.length - 1; i >= 0; i--) {
     const r = respawns[i];

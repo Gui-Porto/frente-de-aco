@@ -227,6 +227,25 @@ export function drawScore() {
   $('#scoreA').innerHTML = head + rows(1); $('#scoreE').innerHTML = head + rows(-1);
 }
 
+// ---------- Bússola (fita de rumo no topo; N = +z, como na HUD aérea) com a direção dos pontos de captura ----------
+const cmp = $('#compass'), cg = cmp.getContext('2d');
+function drawCompass(on) {
+  if (cmp.hidden === on) cmp.hidden = !on; if (!on) return;
+  const W = cmp.width, d = camera.getWorldDirection(_a), hdg = ((Math.atan2(-d.x, d.z) * 180 / Math.PI) + 360) % 360, pxd = W / 110, cx = W / 2;
+  cg.clearRect(0, 0, W, cmp.height); cg.textAlign = 'center'; cg.shadowColor = 'rgba(0,0,0,.9)'; cg.shadowBlur = 3;
+  for (let a = Math.ceil((hdg - 55) / 5) * 5; a <= hdg + 55; a += 5) {
+    const x = Math.round(cx + (a - hdg) * pxd), dd = ((a % 360) + 360) % 360, big = dd % 30 === 0, n = { 0: 'N', 90: 'L', 180: 'S', 270: 'O' }[dd];
+    cg.globalAlpha = Math.min(1, 1.25 - Math.abs(a - hdg) / 50); cg.fillStyle = big ? '#e9e3c8' : 'rgba(233,227,200,.6)'; cg.fillRect(x, big ? 15 : 18, 1, big ? 8 : 5);
+    if (big) { cg.font = `${n ? 600 : 500} ${n ? 14 : 11}px "Barlow Condensed", sans-serif`; cg.fillStyle = n ? '#efa53c' : '#e9e3c8'; cg.fillText(n || String(dd), x, 12); }
+  }
+  cg.globalAlpha = 1; cg.font = '600 13px "Barlow Condensed", sans-serif';
+  for (const p of POINTS) {
+    const b = Math.atan2(-(p.x - camera.position.x), p.z - camera.position.z) * 180 / Math.PI, rel = clamp(((b - hdg + 540) % 360) - 180, -53, 53);
+    cg.fillStyle = p.owner === 1 ? '#6db4e3' : p.owner === -1 ? '#e65a42' : '#ddd6b7'; cg.fillText(p.id, cx + rel * pxd, 39);
+  }
+  cg.fillStyle = '#e9e3c8'; cg.beginPath(); cg.moveTo(cx, 24); cg.lineTo(cx - 4, 30); cg.lineTo(cx + 4, 30); cg.closePath(); cg.fill();
+}
+
 // ---------- Atualização por quadro ----------
 let hudT = 0;
 export function updateHUD(dt) {
@@ -239,6 +258,7 @@ export function updateHUD(dt) {
   drawScope(t);
   const live = t && t.alive;
   $('#vehHud').hidden = !live;
+  drawCompass(!!live && t.type !== 'plane' && S.state === 'play');
   const oob = live && t.oobT > 0;
   $('#oob').hidden = !oob; if (oob) $('#oob').textContent = `Retorne à área de combate · ${Math.max(0, Math.ceil((t.type === 'plane' ? 15 : 12) - t.oobT))} s`;
   if ((hudT -= dt) > 0) return; hudT = .08;
