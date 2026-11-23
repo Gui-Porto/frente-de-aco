@@ -236,9 +236,9 @@ function drawCompass(on) {
   for (let a = Math.ceil((hdg - 55) / 5) * 5; a <= hdg + 55; a += 5) {
     const x = Math.round(cx + (a - hdg) * pxd), dd = ((a % 360) + 360) % 360, big = dd % 30 === 0, n = { 0: 'N', 90: 'L', 180: 'S', 270: 'O' }[dd];
     cg.globalAlpha = Math.min(1, 1.25 - Math.abs(a - hdg) / 50); cg.fillStyle = big ? '#e9e3c8' : 'rgba(233,227,200,.6)'; cg.fillRect(x, big ? 15 : 18, 1, big ? 8 : 5);
-    if (big) { cg.font = `${n ? 600 : 500} ${n ? 14 : 11}px "Barlow Condensed", sans-serif`; cg.fillStyle = n ? '#efa53c' : '#e9e3c8'; cg.fillText(n || String(dd), x, 12); }
+    if (big) { cg.font = `600 ${n ? 15 : 13}px "Barlow Condensed", sans-serif`; cg.fillStyle = n ? '#efa53c' : '#f3eed8'; cg.fillText(n || String(dd), x, 12); }
   }
-  cg.globalAlpha = 1; cg.font = '600 13px "Barlow Condensed", sans-serif';
+  cg.globalAlpha = 1; cg.font = '700 14px "Barlow Condensed", sans-serif';
   for (const p of POINTS) {
     const b = Math.atan2(-(p.x - camera.position.x), p.z - camera.position.z) * 180 / Math.PI, rel = clamp(((b - hdg + 540) % 360) - 180, -53, 53);
     cg.fillStyle = p.owner === 1 ? '#6db4e3' : p.owner === -1 ? '#e65a42' : '#ddd6b7'; cg.fillText(p.id, cx + rel * pxd, 39);
