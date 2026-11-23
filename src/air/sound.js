@@ -1,6 +1,6 @@
 import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
-import { AC, eng, cockpitTone, cockpitVoice, cockpitThump, sndWhoosh, sndSonicBoom, sndMachCross, sndBoostIgnite, sndCrackle, sndGear, sndTouch, sndFlaps, soundAt } from '../fx/audio.js';
+import { AC, eng, cockpitTone, cockpitVoice, cockpitThump, sndWhoosh, sndSonicBoom, sndMachCross, sndBoostIgnite, sndCrackle, sndGear, sndTouch, sndFlaps, soundAt, sndOwnGuns } from '../fx/audio.js';
 import { shakeCam } from '../ui/hud.js';
 import { acam } from './camera.js';
 import { clamp } from '../core/util.js';
@@ -87,10 +87,10 @@ function engine(q, vol, dt) {
 }
 // gatilho: rajada gravada da Browning em laço (tom pelo calibre da metralhadora), solta rápido ao parar
 function gunLoop(p, on) {
-  const gl = eng.gunLoop; if (!gl) return;
-  const mg = p && on ? p.guns.find(g => g.W.cal < 20 && g.ammo > 0 && !g.jam && !g.broken) : null, fire = !!(mg && p.firing);
-  gl.g.gain.setTargetAtTime(fire ? (acam.mode === 2 ? 0.5 : 0.38) : 0, AC.currentTime, fire ? 0.01 : 0.04);
-  if (mg) gl.s.playbackRate.value = Math.min(1.3, Math.max(0.85, 12.7 / mg.W.cal));
+  if (eng.gunLoop) eng.gunLoop.g.gain.value = 0; // laço gravado aposentado: cada arma toca na própria cadência (sndOwnGuns)
+  if (!p || !on) return;
+  const gs = p.guns.filter(g => g.on && g.W.rpm < 2400).map(g => ({ cal: g.W.cal, rpm: g.W.rpm, n: g.pts.length }));
+  if (gs.length) sndOwnGuns(gs, acam.mode === 2 ? 0.3 : 0.25);
 }
 // Motores dos OUTROS aviões por perto: até 3 vozes, com Doppler (sobe chegando, cai indo embora) e lado estéreo.
 // `skip` é o avião cujo motor já toca na voz principal (o jogador ou o mais próximo assistindo).

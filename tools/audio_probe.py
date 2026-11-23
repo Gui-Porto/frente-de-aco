@@ -37,16 +37,16 @@ __mark('fim');
 """
 AIR = lambda plane: """
 document.querySelector('#airBtn').click(); await __w(1500); document.querySelector('#airGo').click(); await __w(800); document.querySelector('#cfgGo').click(); await __w(10000);
-const g = window.__game, p = g.S.player, V = p.pos.constructor;
+const g = window.__game, p = g.S.player, V = p.pos.constructor; g.B.finish = () => {}; // a missão não acaba no meio da medição
 for (const q of g.planes) if (q !== p) { q.brain = null; q.pos.set(9000, 3000, 9000); q.vel.set(0, 0, 200); q.gear = 0; q.gearCmd = 0; }
-const hold = () => { p.pos.set(0, 1800, 0); if (p.vel.length() < 120) p.vel.set(0, 0, -200); };
+const hold = () => { p.pos.set(0, 1800, 0); if (p.vel.length() < 120) p.vel.set(0, 0, -200); for (const q of g.planes) if (q !== p) { q.pos.set(9000, 3000, 9000); q.vel.set(0, 0, 200); } }; // o inimigo fica vivo e longe: se ele cai, a missão acaba e o jogador perde o comando
 __mark('marcha lenta na pista'); await __w(3000);
 p.pos.set(0, 1800, 0); p.vel.set(0, 0, -200); p.q.setFromAxisAngle(new V(0, 1, 0), Math.PI); p.gearCmd = 0; p.gear = 0; p.throttle = 1;
 const iv = setInterval(hold, 500); await __w(4000);
 __mark('potencia militar'); await __w(4000);
 __mark('PC ou WEP'); p.wep = true; for (let i = 0; i < 40; i++) { p.wep = true; await __w(100); }
-const am0 = p.guns.reduce((s, q) => s + q.ammo, 0); __mark('suas armas'); dispatchEvent(new KeyboardEvent('keydown', { code: 'Mouse0' })); document.querySelector('canvas.gl').dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true })); await __w(2000); dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true })); await __w(1500);
-__mark('fim'); clearInterval(iv); return 'tiros disparados: ' + (am0 - p.guns.reduce((s, q) => s + q.ammo, 0));
+const am0 = p.guns.reduce((s, q) => s + q.ammo, 0); __mark('suas armas'); await __key('Mouse0', 2500); await __w(1200); // gatilho pelo teclado virtual: clique de verdade pede captura do mouse e, sem ela, o jogo pausa
+__mark('fim'); clearInterval(iv); return 'tiros disparados: ' + (am0 - p.guns.reduce((s, q) => s + q.ammo, 0)) + ` (fase ${g.B.phase}, pausa ${g.S.paused}, estado ${g.S.state}, vivo ${p.alive}, piloto ${p.pilot}, jogador ${g.S.player === p})`;
 """
 BANDS = [('sub <60', 0, 60), ('grave 60-250', 60, 250), ('m.grave 250-800', 250, 800), ('medio 800-2.5k', 800, 2500), ('presenca 2.5-6k', 2500, 6000), ('ar >6k', 6000, 30000)]
 

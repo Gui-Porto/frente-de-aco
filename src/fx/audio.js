@@ -162,6 +162,8 @@ export function audioInit() {
     // tons do cockpit: buscador do míssil (rosnado/tom) e alarmes
     const tone = type => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; g.gain.value = 0; o.connect(g); g.connect(sfx); o.start(); return { o, g }; };
     eng.seek = tone('triangle'); eng.warn = tone('square');
+    for (let k = 0; k < 3; k++) GRAIN.push(shotGrain(k));
+    { const gb = gain(1), gw = gain(0.18); gb.connect(sfx); gb.connect(gw); gw.connect(verb); eng.gunBus = gb; }
     loadSamples();
   } catch (e) { AC = null; }
 }
@@ -361,10 +363,48 @@ export function sndShot(pos, cal) {
     ping(a.t + 0.9, 0.07, 3100, 2300, 0.25, sfx); ping(a.t + 1.02, 0.04, 3600, 2700, 0.2, sfx);
   }
 }
+// ---------- tiro automático: um "grão" por disparo, tocado na cadência REAL da arma ----------
+// O laço gravado (mgloop.wav) tinha ~1060 disp/min irregulares e repetia a cada 1,6 s: toda arma soava igual, fora de
+// ritmo com os traçantes, e o dono reprovou. Cada grão = estalo (ruído diferenciado), corpo (ressonador na faixa do
+// calibre), soco grave (seno descendo) e um resto de ar; 0 = metralhadora, 1 = canhão 20–23 mm, 2 = 30 mm ou mais.
+const GRAIN = [];
+function shotGrain(kind) {
+  const sr = AC.sampleRate, n = Math.floor(sr * 0.22), b = AC.createBuffer(1, n, sr), d = b.getChannelData(0);
+  const fB = [1500, 950, 620][kind], f0 = [230, 170, 120][kind], f1 = [95, 70, 50][kind], tB = [0.022, 0.03, 0.04][kind], tT = [0.03, 0.045, 0.06][kind];
+  const r = 0.955, c = 2 * r * Math.cos(2 * Math.PI * fB / sr); let y1 = 0, y2 = 0, tl = 0, prev = 0, ph = 0, pk = 0, hl = 0, z1 = 0, z2 = 0;
+  const rP = 0.9, cP = 2 * rP * Math.cos(2 * Math.PI * [3600, 2900, 2400][kind] / sr); // segundo ressonador: o "estalo de metal" entre 2,5 e 6 kHz
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, nz = Math.random() * 2 - 1, y = nz * (1 - r) * 4 + c * y1 - r * r * y2; y2 = y1; y1 = y;
+    const crack = (nz - prev) * 0.9 * Math.exp(-t / 0.0035); prev = nz; tl += (nz - tl) * 0.08;
+    const z = nz * (1 - rP) * 3 + cP * z1 - rP * rP * z2; z2 = z1; z1 = z;
+    hl += (nz - hl) * 0.35; const hiss = (nz - hl) * 0.9 * Math.exp(-t / 0.012); // chiado do gás (acima de ~3 kHz): sem ele o tiro era só médio
+    ph += 2 * Math.PI * (f1 + (f0 - f1) * Math.exp(-t / 0.02)) / sr;
+    d[i] = Math.tanh((crack * 1.2 + hiss * 0.6 + z * Math.exp(-t / 0.016) + y * 0.7 * Math.exp(-t / tB) + Math.sin(ph) * Math.exp(-t / tT) * 0.9 + tl * 0.5 * Math.exp(-t / 0.07)) * 1.6) * Math.min(1, (n - i) / (sr * 0.004));
+    pk = Math.max(pk, Math.abs(d[i]));
+  }
+  for (let i = 0; i < n; i++) d[i] *= 0.9 / pk;
+  return b;
+}
+const grainOf = cal => GRAIN[cal >= 30 ? 2 : cal >= 20 ? 1 : 0], grainRate = cal => (cal >= 20 ? 1 : (12.7 / Math.max(cal, 7.5)) ** 0.35) * rand(0.96, 1.04);
+function playGrain(buf, t, vol, rate, dest) { const s = AC.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; const g = AC.createGain(); g.gain.value = vol; s.connect(g); g.connect(dest); s.start(t); }
+// armas do SEU avião: groups = [{ cal, rpm, n }] atirando agora. Até 3 vozes por grupo, levemente fora de sincronia (as
+// armas de asa não disparam juntas); agenda só 70 ms à frente — soltou o gatilho, para.
+const gunV = [];
+export function sndOwnGuns(groups, vol = 0.5) {
+  if (!AC || !GRAIN.length) return; const now = AC.currentTime;
+  groups.forEach((G, gi) => {
+    const nv = Math.min(G.n, 3);
+    for (let k = 0; k < nv; k++) {
+      const v = gunV[gi * 3 + k] || (gunV[gi * 3 + k] = { next: 0, det: 1 });
+      if (v.next < now - 0.2) { v.next = now + k * 0.013 + Math.random() * 0.008; v.det = 1 + (k - (nv - 1) / 2) * 0.045; } // começo de rajada
+      while (v.next < now + 0.07) { playGrain(grainOf(G.cal), Math.max(v.next, now), vol / Math.sqrt(nv) * rand(0.85, 1), grainRate(G.cal), eng.gunBus); v.next += 60 / (G.rpm * v.det) * rand(0.97, 1.03); }
+    }
+  });
+}
 // metralhadoras e canhões de avião: estalo curto que muda com o calibre; a partir de 20 mm, o "tum" do canhão.
 // Limite de cadência POR CALIBRE (antes era um só para tudo: o canhão sumia no meio das .50)
 export function sndMG(pos, cal, own, rpm = 0) {
-  if (!AC || (own && cal < 20 && eng.gunLoop)) return; // as suas metralhadoras tocam no laço gravado
+  if (!AC || (own && rpm < 2400 && GRAIN.length)) return; // as suas armas tocam em sndOwnGuns, na cadência real
   if (rpm >= 2400) { // canhão rotativo (GAU-8, M61): os tiros fundem num zumbido — dente de serra na cadência + sopro, em grãos que se emendam
     const t0 = AC.currentTime; if (t0 - (lastShot.get('b') || 0) < 0.07) return; lastShot.set('b', t0);
     const a = at(pos, 0.3 * cal / 10); if (a.vol < 0.004) return; const o = out(a, 0.7), v = Math.min(a.vol, 0.8), dur = 0.15;
@@ -381,9 +421,9 @@ export function sndMG(pos, cal, own, rpm = 0) {
   // gravação: metralhadora (calibre menor = tom mais agudo) ou canhão automático (37 mm mais grave)
   const rec = cal >= 20 ? SMP.cannon : SMP.mg;
   if (rec) { playRec(rec, a, v * 1.8, (cal >= 20 ? 20 / cal * 1.05 : 12.7 / cal) * rand(0.95, 1.05), o); if (cal >= 20) thump(a.t, v * 0.6, cal >= 30 ? 65 : 90, 0.12, o); return; }
+  if (GRAIN.length) { playGrain(grainOf(cal), a.t, v * 1.5, grainRate(cal), o); return; } // o mesmo disparo das suas armas, com posição e distância
   noiseBurst(a.t, v, (cal >= 20 ? 2200 : 3400) / (1 + a.d / 300), cal >= 20 ? .16 : .1, 1.5, o, 'bandpass');
   noiseBurst(a.t, v * 0.8, 7000, 0.03, 0.7, o, 'highpass');
-  if (cal < 20) { noiseBurst(a.t, v * 0.8, 900, 0.09, 1, o, 'bandpass'); thump(a.t, v * 0.5, 150, 0.07, o); } // corpo do disparo
   if (cal >= 20) thump(a.t, v * 0.8, cal >= 30 ? 70 : 95, 0.12, o);
 }
 // explosão: estalo, estrondo grave, sub, estilhaços chovendo e a cauda longa (reverberação)

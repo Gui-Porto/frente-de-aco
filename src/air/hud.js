@@ -247,6 +247,14 @@ function reticle(p) {
     g.beginPath(); g.arc(ap.x, ap.y, 6, 0, 7); rstroke(1.2);
     g.globalAlpha = 1;
   }
+  // aquecimento das armas (como no WT): arco em volta do círculo da mira que se fecha conforme o cano esquenta —
+  // branco, âmbar acima de 45%, vermelho acima de 75%; arma travada = anel vermelho piscando até esfriar
+  const hc = ap && acam.mode !== 3 ? ap : pr, ht = p.guns.reduce((m, q) => Math.max(m, q.heat), 0), jam = p.guns.some(q => q.jam);
+  if (hc && (ht > 0.03 || jam)) {
+    const a0 = -Math.PI / 2, col = jam ? (Math.sin(V.blink * 14) > 0 ? C.enemy : 'rgba(230,90,66,.35)') : ht > 0.75 ? C.enemy : ht > 0.45 ? C.amber : RW;
+    g.beginPath(); g.arc(hc.x, hc.y, 11, 0, 7); g.lineWidth = 2.6; g.strokeStyle = 'rgba(0,0,0,.28)'; g.stroke();
+    g.beginPath(); g.arc(hc.x, hc.y, 11, a0, a0 + Math.PI * 2 * (jam ? 1 : ht)); g.lineWidth = 2.2; g.strokeStyle = col; g.stroke();
+  }
 }
 
 // ---------- dano recebido: borda vermelha + arco na direção de quem atirou ----------

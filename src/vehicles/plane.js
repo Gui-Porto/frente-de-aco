@@ -555,7 +555,7 @@ export class Plane {
     const gunsOK = powered(this, 'guns'); // disparo pneumático (Spitfire) ou elétrico (Fw 190)
     for (const g of this.guns) {
       // aquecimento do cano: trava depois de ~1/4 do pente em rajada contínua (4–8 s; antes 14 s para todas) até esfriar
-      const shooting = this.firing && g.ammo > 0 && !g.jam && !g.broken && gunsOK;
+      const shooting = this.firing && g.ammo > 0 && !g.jam && !g.broken && gunsOK; g.on = shooting; // g.on: o som e a HUD leem daqui
       g.heat = clamp(g.heat + (shooting ? dt / g.heatT : -dt / 9), 0, 1);
       if (g.heat >= 1) g.jam = true; else if (g.jam && g.heat < 0.35) g.jam = false;
       if (!shooting) { g.acc = Math.min(g.acc, 1); continue; }
