@@ -3,7 +3,7 @@ import { camera } from '../core/render.js';
 import { S } from '../core/state.js';
 import { settings, isDown } from '../core/settings.js';
 import { V3, UP, clamp, lerp, rand, REDUCED } from '../core/util.js';
-import { H } from '../world/terrain.js';
+import { HV } from '../world/terrain.js';
 import { cam } from '../game/camera.js';
 import { cmd } from './input.js';
 // =====================================================================
@@ -114,7 +114,7 @@ export function updateAirCamera(dt) {
   if (acam.aimK > 0.01) fov = lerp(fov, 32, acam.aimK);
   acam.fov += (fov - acam.fov) * (1 - Math.exp(-dt * 5));
   setFov(acam.fov);
-  acam.pos.y = Math.max(acam.pos.y, H(acam.pos.x, acam.pos.z) + 2);
+  acam.pos.y = Math.max(acam.pos.y, HV(acam.pos.x, acam.pos.z) + 2);
   camera.position.copy(acam.pos);
   camera.quaternion.copy(viewQ).multiply(FLIP); // a câmera olha para −z
   // tremores: impacto, armas, buffet perto do estol, velocidade-limite

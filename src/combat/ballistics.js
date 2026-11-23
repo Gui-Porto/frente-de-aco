@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { scene, camera } from '../core/render.js';
 import { S, tanks, planes, projs, popped } from '../core/state.js';
 import { V3, QUAT, clamp, lerp, rand, rv } from '../core/util.js';
-import { H, terrainNormal } from '../world/terrain.js';
+import { HV, terrainNormal } from '../world/terrain.js';
 import { obstNear, HEDGES, addCrater, damageObst, blastBuildings } from '../world/scenery.js';
 import { RAPIER, world, COL } from '../world/physics.js';
 import { PLANES, prepAmmo, penAt, hePen, DEG, G } from '../data/vehicles.js';
@@ -73,9 +73,9 @@ export function segmentHit(p, q, ignore, opts) {
   const segLen = Math.sqrt(len2) * best, steps = Math.max(1, Math.ceil(segLen / 2));
   if (!(p.y > 400 && q.y > 400)) for (let i = 1; i <= steps; i++) {
     const tt = best * i / steps;
-    if (p.y + dy * tt < H(p.x + dx * tt, p.z + dz * tt)) {
+    if (p.y + dy * tt < HV(p.x + dx * tt, p.z + dz * tt)) {
       let a = best * (i - 1) / steps, b = tt;
-      for (let k = 0; k < 10; k++) { const m = (a + b) / 2; if (p.y + dy * m < H(p.x + dx * m, p.z + dz * m)) b = m; else a = m; }
+      for (let k = 0; k < 10; k++) { const m = (a + b) / 2; if (p.y + dy * m < HV(p.x + dx * m, p.z + dz * m)) b = m; else a = m; }
       best = b; hit = { type: 'ground' }; break;
     }
   }
@@ -508,12 +508,12 @@ export function updatePopped() {
     if (!d.body) continue;
     const t = d.body.translation(), r = d.body.rotation();
     // fora do heightfield (arena aérea) o destroço atravessa o chão: some ao passar dele
-    if (t.y < H(t.x, t.z) - 15) { scene.remove(d.obj); world.removeRigidBody(d.body); popped.splice(i, 1); continue; }
+    if (t.y < HV(t.x, t.z) - 15) { scene.remove(d.obj); world.removeRigidBody(d.body); popped.splice(i, 1); continue; }
     _dq.set(r.x, r.y, r.z, r.w);
     d.obj.quaternion.copy(_dq);
     d.obj.position.set(t.x, t.y, t.z).sub(d.offset.clone().applyQuaternion(_dq));
     const v = d.body.linvel();
-    if (!d.hit && v.y > -1 && t.y < H(t.x, t.z) + 2) { d.hit = true; fxDust(new V3(t.x, t.y, t.z), 6, 1); sndClank(d.obj.position); }
+    if (!d.hit && v.y > -1 && t.y < HV(t.x, t.z) + 2) { d.hit = true; fxDust(new V3(t.x, t.y, t.z), 6, 1); sndClank(d.obj.position); }
   }
 }
 export function clearDebris() {

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { scene } from '../core/render.js';
 import { S, planes } from '../core/state.js';
 import { V3, clamp, rand, rv } from '../core/util.js';
-import { H } from '../world/terrain.js';
+import { HV } from '../world/terrain.js';
 import { MISSILES, G, RHO } from '../data/vehicles.js';
 import { spawnP, TEX, fxExplosion } from '../fx/particles.js';
 import { sndBoom, sndLaunch } from '../fx/audio.js';
@@ -46,7 +46,7 @@ export class Missile {
   // perde o alvo ou mergulha no chão. Pior quanto mais baixo o alvo (< 50 m) e quanto mais o míssil olha para baixo.
   // Infravermelho sofre pouco (só o fundo quente do solo, < 25 m): tremor lateral pequeno.
   clutter(tg, sarh, h) {
-    const agl = tg.pos.y - H(tg.pos.x, tg.pos.z), top = sarh ? 50 : 25;
+    const agl = tg.pos.y - HV(tg.pos.x, tg.pos.z), top = sarh ? 50 : 25;
     if (!tg.eng || agl >= top) return tg.pos;
     const c = 1 - Math.max(0, agl) / top, look = clamp((this.pos.y - tg.pos.y) / Math.max(1, this.pos.distanceTo(tg.pos)) * 3 + 0.5, 0.3, 1);
     this.wob = (this.wob || rand(0, 9)) + h * rand(2, 5);
@@ -127,7 +127,7 @@ export class Missile {
       // colisão com outro avião (passa raspando por quem não era o alvo)
       for (const p of planes) if (p !== tg && p !== this.owner && p.alive && p.pos.distanceTo(_q) < p.def.span * 0.4) { this.detonate(_q, 0, p); return; }
       this.pos.copy(_q);
-      if (this.pos.y < H(this.pos.x, this.pos.z)) { this.detonate(this.pos, 99); return; }
+      if (this.pos.y < HV(this.pos.x, this.pos.z)) { this.detonate(this.pos, 99); return; }
     }
     if (this.t > M.life) { this.detonate(this.pos, 99); return; }
     // visual: corpo alinhado à velocidade e girando devagar; chama tremendo; fita de fumaça só com motor aceso

@@ -274,8 +274,24 @@ function terrainMesh(size, seg, drop, holeR, macro = false) {
     g.setIndex(keep);
   }
   g.computeVertexNormals();
+  if (holeR) { const y = new Float32Array(pos.count); for (let i = 0; i < pos.count; i++) y[i] = pos.getY(i); VIS.push({ half: size / 2, seg, step: size / seg, y }); }
   const m = new THREE.Mesh(g, terrainMaterial(size, macro)); m.receiveShadow = true; scene.add(m);
   return m;
+}
+// Altura do chão QUE SE VÊ. Fora do campo central as malhas externas são grossas (35 m e 200 m por quadrado) e ficam
+// afundadas na emenda (1,4 m e 6 m), então a altura analítica H() não é a do triângulo desenhado: o avião pousava no
+// "chão" e a roda ficava no ar ou enterrada (dono: "tem que ser zero"). HV() devolve a altura exata do triângulo da malha
+// naquele ponto (mesma grade e mesma diagonal do PlaneGeometry); no campo central e no platô das bases (que têm chão
+// próprio na altura da física) é o próprio H(). Rodas, patins e batidas de avião usam HV; tanques ficam no campo central.
+const VIS = [];
+export function HV(x, z) {
+  const m = Math.max(Math.abs(x), Math.abs(z));
+  if (m <= INNER / 2) return H(x, z) - sstep(INNER / 2 - 50, INNER / 2, m) * 1.4;
+  for (const a of AIRFIELDS) if (a.set === fieldSet && onAirfield(a, x, z)) return H(x, z);
+  const G = m <= OUTER / 2 || VIS.length < 2 ? VIS[0] : VIS[1]; if (!G) return H(x, z);
+  const fx = clamp((x + G.half) / G.step, 0, G.seg - 1e-6), fz = clamp((z + G.half) / G.step, 0, G.seg - 1e-6), ix = Math.floor(fx), iz = Math.floor(fz), u = fx - ix, v = fz - iz, n = G.seg + 1;
+  const ha = G.y[iz * n + ix], hb = G.y[(iz + 1) * n + ix], hc = G.y[(iz + 1) * n + ix + 1], hd = G.y[iz * n + ix + 1];
+  return u + v <= 1 ? ha + u * (hd - ha) + v * (hb - ha) : hc + (1 - u) * (hb - hc) + (1 - v) * (hd - hc);
 }
 terrainMesh(INNER, 420, 0, 0);
 terrainMesh(OUTER, 260, 1.4, INNER / 2 - 24, true);

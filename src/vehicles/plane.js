@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { scene, camera } from '../core/render.js';
 import { S, S as ST, planes } from '../core/state.js'; // ST: em physics() `S` é a área da asa
 import { V3, QUAT, UP, clamp, lerp, rand, rv } from '../core/util.js';
-import { H, AIRLIMIT, activeFields } from '../world/terrain.js';
+import { HV, AIRLIMIT, activeFields } from '../world/terrain.js'; // HV = chão que se vê (a malha), não o analítico
 // o concreto da pista é desenhado 8 cm acima do terreno: com a roda apoiada no terreno ela ficava afundada na pista
-const GH = (x, z) => { let h = H(x, z); for (const a of activeFields()) if (Math.abs(x - a.x) < a.w / 2 && Math.abs(z - a.z) < a.len / 2 + 0.5) { h += 0.08; break; } return h; };
+const GH = (x, z) => { let h = HV(x, z); for (const a of activeFields()) if (Math.abs(x - a.x) < a.w / 2 && Math.abs(z - a.z) < a.len / 2 + 0.5) { h += 0.08; break; } return h; };
 import { obstNear, addCrater, treeHit } from '../world/scenery.js';
 import { PLANES, GUNS, MISSILES, RHO, G, beltRounds } from '../data/vehicles.js';
 import { EngineSet, ENGINES } from '../air/systems/engine.js';
@@ -97,7 +97,7 @@ export class Plane {
     this.sel = 0;
     // aviônicos: só existe o que a ficha da aeronave traz
     this.sys = {};
-    if (D.radar) this.sys.radar = new Radar(D.radar, H);
+    if (D.radar) this.sys.radar = new Radar(D.radar, HV);
     if (D.rwr) this.sys.rwr = new Rwr(D.rwr);
     if (D.maw) this.sys.maw = new Maw(D.maw);
     // componentes internos, combustível, contramedidas e extintor
@@ -170,7 +170,7 @@ export class Plane {
   physics(dt) {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
-    if (!this.alive && this.pos.y - H(this.pos.x, this.pos.z) > 20) this.shedStep(dt); // abatido, caindo: desmancha no ar
+    if (!this.alive && this.pos.y - HV(this.pos.x, this.pos.z) > 20) this.shedStep(dt); // abatido, caindo: desmancha no ar
     if (this.koT > 0) { this.elev = this.ail = this.rud = 0; this.firing = false; this._eCmd = null; }
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
     const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.racks.reduce((s, r) => s + r.n * r.M.mass, 0) - (this.fuelMax - this.fuel);
@@ -348,10 +348,10 @@ export class Plane {
       const [x, y, z] = pts[i];
       const wx = this.pos.x + _pl.x * x + _pu.x * y + _pf.x * z, wy = this.pos.y + _pl.y * x + _pu.y * y + _pf.y * z, wz = this.pos.z + _pl.z * x + _pu.z * y + _pf.z * z;
       // cauda/barriga encostando devagar não é batida: os patins do groundStep seguram e arrastam (com faísca)
-      if (wy < H(wx, wz) + 0.2) { if ((i === 3 || i === 4) && this.gearMesh && -this.vel.y < (i === 3 ? 9 : 7)) continue; this.impact(i); return; }
+      if (wy < HV(wx, wz) + 0.2) { if ((i === 3 || i === 4) && this.gearMesh && -this.vel.y < (i === 3 ? 9 : 7)) continue; this.impact(i); return; }
     }
     // árvores: voo rasante pode bater na copa (asa inclusa: raio ~ 1/3 da envergadura)
-    if (!this.onGround && this.pos.y - H(this.pos.x, this.pos.z) < 30 && treeHit(this.pos.x, this.pos.y, this.pos.z, this.def.span * 0.33)) { this.crash(); return; }
+    if (!this.onGround && this.pos.y - HV(this.pos.x, this.pos.z) < 30 && treeHit(this.pos.x, this.pos.y, this.pos.z, this.def.span * 0.33)) { this.crash(); return; }
     for (const b of obstNear(this.pos.x - 6, this.pos.z - 6, this.pos.x + 6, this.pos.z + 6)) if (this.pos.x > b.mn[0] && this.pos.x < b.mx[0] && this.pos.z > b.mn[2] && this.pos.z < b.mx[2] && this.pos.y < b.mx[1]) { this.crash(); return; }
     // fora da arena conta tempo, exceto no corredor de pouso/decolagem das bases (a cabeceira fica perto do limite)
     const nearBase = activeFields().some(a => Math.abs(this.pos.x - a.x) < 800 && Math.abs(this.pos.z - a.z) < a.len / 2 + 3500);
@@ -568,7 +568,7 @@ export class Plane {
     elev = this.limitElev(elev, opts);
     // proteção perto do solo (assistência arcade): não deixa mergulhar abaixo de ~60 m sem querer
     if (opts.groundAssist) {
-      const agl = this.pos.y - H(this.pos.x, this.pos.z), sink = -this.vel.y;
+      const agl = this.pos.y - HV(this.pos.x, this.pos.z), sink = -this.vel.y;
       if (agl < 40 + sink * 2.2 && _pf.y < 0.1) { elev = Math.max(elev, 0.6); this._eMin = 0.6; }
     }
     // no chão: mira no horizonte ou abaixo = fica rolando (sem puxar); mira acima = roda e decola
@@ -887,7 +887,7 @@ export class Plane {
     const D = this.def, rest = D.fuseR * 0.75;
     this.wreckT += dt;
     this.vel.y -= G0 * dt; this.pos.addScaledVector(this.vel, dt);
-    const hg = H(this.pos.x, this.pos.z), V = Math.hypot(this.vel.x, this.vel.z), down = this.pos.y <= hg + rest + 0.05;
+    const hg = HV(this.pos.x, this.pos.z), V = Math.hypot(this.vel.x, this.vel.z), down = this.pos.y <= hg + rest + 0.05;
     if (down) {
       this.pos.y = hg + rest; if (this.vel.y < 0) this.vel.y = this.vel.y < -6 ? -this.vel.y * 0.25 : 0;
       const k = Math.max(0, 1 - (0.9 * G0 + 0.0015 * V * V) * dt / Math.max(V, 1e-3)); this.vel.x *= k; this.vel.z *= k; // chapa arrastando e arando a terra
