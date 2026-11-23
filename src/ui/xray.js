@@ -86,6 +86,8 @@ for (const m of [path, path2, blast, frags]) { m.renderOrder = 5; m.frustumCulle
 // compila tudo já (um fantasma qualquer não é preciso: os programas são os mesmos para qualquer geometria)
 { const tmp = [ghost, ghostPre, solidProto].map(m => new THREE.Mesh(GEO.box, m)); scene.add(...tmp); renderer.compile(scene, cam); scene.remove(...tmp); }
 
+// o raio-X do avião (air/xray3d.js) usa os mesmos materiais e geometrias
+export const XR = { VS, ghost, ghostPre, solid: solidProto, GEO };
 const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 function stretch(m, p0, p1, k) { _a.fromArray(p0); _b.fromArray(p1); m.position.copy(_a); m.lookAt(_b); m.scale.set(1, 1, Math.max(0.001, _a.distanceTo(_b) * k)); }
 
