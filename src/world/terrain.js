@@ -51,6 +51,10 @@ export const setFieldSet = s => { fieldSet = s; };
 export const activeFields = () => AIRFIELDS.filter(a => a.set === fieldSet);
 export const homeField = team => AIRFIELDS.find(a => a.team === team && a.set === fieldSet);
 for (const a of AIRFIELDS) { let s = 0; for (let i = -4; i <= 4; i++) s += baseH(a.x, a.z + i * a.len / 8); a.h = s / 9; }
+// a pista de hélice fica dentro do vale achatado da base de jato do mesmo lado (o relevo ali é puxado para a altura da pista
+// de jato): com altura própria ela ficava soterrada — 28 m abaixo do chão no lado aliado, ~75 m no inimigo, e o avião
+// nascia num pasto sem pista. As duas bases do lado dividem o mesmo platô.
+for (const a of AIRFIELDS) if (a.set === 'prop') a.h = AIRFIELDS.find(b => b.team === a.team && b.set === 'jet').h;
 const RAMP = 320;
 export const onAirfield = (a, x, z, m = 0) => Math.abs(x - a.x) < a.w / 2 + a.pad + m && Math.abs(z - a.z) < a.len / 2 + 60 + m;
 export function H(x, z) {

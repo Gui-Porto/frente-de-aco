@@ -33,14 +33,14 @@ function buildClouds(n, tint) {
     const cx = rand(-8500, 8500), cz = rand(-8500, 8500), cy = rand(1750, 2300), k = Math.floor(rand(16, 30)), R = rand(320, 760), top = R * rand(0.45, 0.8);
     for (let i = 0; i < k && puffs.length < MAXC; i++) {
       const a = rand(0, 6.28), r = Math.sqrt(Math.random()), hf = Math.random() ** 1.7 * (1 - r * r), s = rand(230, 420) * (1 - 0.45 * hf) * (0.75 + 0.25 * R / 760);
-      puffs.push({ p: new V3(cx + Math.cos(a) * r * R, cy + s * 0.22 + hf * top, cz + Math.sin(a) * r * R * 0.7), s, rot: rand(-0.5, 0.5), sh: 0.66 + 0.4 * hf + rand(-0.03, 0.03), hf });
+      puffs.push({ p: new V3(cx + Math.cos(a) * r * R, cy + s * 0.22 + hf * top, cz + Math.sin(a) * r * R * 0.7), s, rot: rand(-0.5, 0.5), sh: 0.8 + 0.28 * hf + rand(-0.03, 0.03), hf });
     }
   }
   const P = CL.pos.array, D = CL.dat.array, C = CL.col.array, col = new THREE.Color(tint);
   puffs.forEach((q, i) => {
     P[i * 3] = q.p.x; P[i * 3 + 1] = q.p.y; P[i * 3 + 2] = q.p.z;
     D[i * 4] = q.s; D[i * 4 + 1] = q.rot; D[i * 4 + 3] = 2;
-    const bl = 0.16 * (1 - q.hf); C[i * 4] = col.r * (q.sh - bl); C[i * 4 + 1] = col.g * (q.sh - bl * 0.55); C[i * 4 + 2] = col.b * (q.sh + bl * 0.1); C[i * 4 + 3] = 0.92; // base azulada, na sombra
+    const bl = 0.1 * (1 - q.hf); C[i * 4] = col.r * (q.sh - bl); C[i * 4 + 1] = col.g * (q.sh - bl * 0.55); C[i * 4 + 2] = col.b * (q.sh + bl * 0.1); C[i * 4 + 3] = 0.92; // base azulada, na sombra
   });
   CL.g.instanceCount = puffs.length;
   CL.pos.needsUpdate = CL.dat.needsUpdate = CL.col.needsUpdate = true;
