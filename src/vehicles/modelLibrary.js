@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // =====================================================================
 // "Pele" glTF das aeronaves (opcional), só por dados:
@@ -9,6 +10,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // Sem arquivo (ou falha ao carregar) o avião aparece com a chapa procedural.
 // =====================================================================
 const loader = new GLTFLoader(), cache = new Map(), failed = new Set();
+const GLASS = /glass|transparent|canopy/i;
+// escuro e bem refletivo: de fora, capota de caça é um espelho do céu (e não deixa ver que a pele não tem piloto)
+const glassMat = () => new THREE.MeshPhysicalMaterial({ color: 0x1b2328, roughness: .04, metalness: 0, transparent: true, opacity: .62, clearcoat: 1, clearcoatRoughness: .05, envMapIntensity: 2.4, depthWrite: false });
 
 // carrega (uma vez) os modelos das aeronaves pedidas; nunca rejeita
 export async function preloadModels(defs) {
@@ -40,12 +44,14 @@ export function applySkin(D, r) {
   // model.nozzles: a chama da pós-combustão sai dos bocais da pele (os da estrutura ficam noutro lugar: no F-4E, 6 m atrás)
   (D.model.nozzles || []).forEach(([x, y, z, rr], i) => { const f = r.fx.flames[i]; if (!f) return; f.out.position.set(x, y, z); f.inn.position.set(x, y, z); f.glow.position.set(x, y, z + 0.05); f.r = rr; });
   // solo: as portas do trem são recortes da chapa procedural (cinza, noutra forma) — na pele real ficavam chapas soltas no ar
-  if (D.model.solo) r.gearMesh.traverse(o => { if (o.userData.door || o.userData.legDoor) o.visible = false; });
+  r.gearMesh.traverse(o => { if (o.userData.door || o.userData.legDoor) o.visible = false; });
   if (D.model.solo && r.gearMesh.userData.anim) { const g = r.gearMesh, anim = g.userData.anim; g.userData.anim = (k, ...a) => { anim(k, ...a); g.visible = k > 0.03; }; }
   const body = src.clone(true); if (D.model.off) body.position.fromArray(D.model.off);
   r.root.add(body); r.root.updateMatrixWorld(true);
   body.traverse(o => {
     if (!o.isMesh) return;
+    // vidro da capota: os arquivos chegam com tudo opaco (capota branca leitosa) — vira o mesmo vidro da capota procedural
+    if (GLASS.test(o.material.name) || (D.model.glass || []).includes(o.material.name)) { o.material = glassMat(); o.castShadow = false; o.renderOrder = 2; o.userData.normalMat = o.material; return; }
     o.castShadow = o.receiveShadow = true; o.material = o.material.clone(); o.userData.normalMat = o.material; r.mats.push(o.material); // material por avião: o fogo escurece só o dele
   });
   const nodes = [body];

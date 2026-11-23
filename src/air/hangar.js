@@ -70,7 +70,7 @@ function build() {
   const N = 700, pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) pos.set([rand(-14, 14), rand(0.3, 15), rand(-12, 16)], i * 3);
   const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  dust = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xffe6c4, size: 0.05, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+  dust = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xffe6c4, size: 0.035, transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending }));
   hs.add(dust);
   hv.built = true;
 }

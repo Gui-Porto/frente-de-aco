@@ -28,7 +28,20 @@ function smokeTex() {
   g.putImageData(img, 0, 0);
   return new THREE.CanvasTexture(c);
 }
+// Nuvem: miolo cheio e borda recortada (a textura de fumaça é rala demais: cúmulo ficava um fiapo)
+function cloudTex() {
+  const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+  const F = [3, 6, 12, 24, 48], G = F.map(f => Array.from({ length: (f + 1) * (f + 1) }, Math.random)), s = t => t * t * (3 - 2 * t);
+  const vn = (k, x, y) => { const f = F[k], X = x * f, Y = y * f, i = Math.min(f - 1, Math.floor(X)), j = Math.min(f - 1, Math.floor(Y)), u = s(X - i), v = s(Y - j), a = G[k][j * (f + 1) + i], b = G[k][j * (f + 1) + i + 1], cc = G[k][(j + 1) * (f + 1) + i], dd = G[k][(j + 1) * (f + 1) + i + 1]; return a + (b - a) * u + (cc - a) * v + (a - b - cc + dd) * u * v; };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N, v = y / N; let n = 0, amp = 0.5, tot = 0; for (let k = 0; k < 5; k++) { n += vn(k, u, v) * amp; tot += amp; amp *= 0.55; } n /= tot;
+    const r = Math.hypot(u - 0.5, (v - 0.5) * 1.15) * 2, a = Math.max(0, Math.min(1, (1 - r * r) * 1.5 + (n - 0.5) * 1.9 - 0.32) * 1.6), o = (y * N + x) * 4;
+    d[o] = d[o + 1] = d[o + 2] = 205 + n * 50; d[o + 3] = Math.min(1, a) ** 1.3 * 255;
+  }
+  g.putImageData(img, 0, 0); return new THREE.CanvasTexture(c);
+}
 export const TEX = {
+  cloud: cloudTex(),
   smoke: smokeTex(),
   fire: spriteTex([[0, 'rgba(255,250,220,1)'], [.35, 'rgba(255,170,60,.9)'], [1, 'rgba(255,80,0,0)']]),
 };
@@ -49,16 +62,17 @@ void main(){
   gl_Position = projectionMatrix * mv;
 }`;
 const FS = `
-uniform sampler2D tSmoke; uniform sampler2D tFire; uniform vec3 fogColor; uniform float fogDensity; uniform vec3 sunTint;
+uniform sampler2D tSmoke; uniform sampler2D tFire; uniform sampler2D tCloud; uniform vec3 fogColor; uniform float fogDensity; uniform vec3 sunTint;
 varying vec2 vUv; varying vec4 vCol; varying float vKind; varying float vFog; varying float vH;
 void main(){
-  vec4 t = vKind > 0.5 ? texture2D(tFire, vUv) : texture2D(tSmoke, vUv);
+  bool fire = vKind > 0.5 && vKind < 1.5; // 0 fumaça, 1 fogo, 2 nuvem
+  vec4 t = vKind > 1.5 ? texture2D(tCloud, vUv) : fire ? texture2D(tFire, vUv) : texture2D(tSmoke, vUv);
   float a = t.a * vCol.a;
   if (a < 0.004) discard;
   vec3 col = vCol.rgb;
-  if (vKind < 0.5) col *= sunTint * mix(0.78, 1.12, vH) * (0.85 + 0.15 * t.r);
+  if (!fire) col *= sunTint * mix(0.78, 1.12, vH) * (0.85 + 0.15 * t.r);
   float f = 1.0 - exp(-fogDensity * fogDensity * vFog * vFog);
-  col = mix(col, fogColor, f * (vKind > 0.5 ? 0.6 : 1.0));
+  col = mix(col, fogColor * (vKind > 1.5 ? 2.2 : 1.0), f * (fire ? 0.6 : 1.0));
   gl_FragColor = vec4(col, a);
 }`;
 export function makeLayer(additive) {
@@ -73,7 +87,7 @@ export function makeLayer(additive) {
   const m = new THREE.ShaderMaterial({
     vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    uniforms: { tSmoke: { value: TEX.smoke }, tFire: { value: TEX.fire }, fogColor: { value: scene.fog.color }, fogDensity: { value: 0 }, sunTint: { value: new THREE.Color(1.0, 0.97, 0.92) } },
+    uniforms: { tSmoke: { value: TEX.smoke }, tFire: { value: TEX.fire }, tCloud: { value: TEX.cloud }, fogColor: { value: scene.fog.color }, fogDensity: { value: 0 }, sunTint: { value: new THREE.Color(1.0, 0.97, 0.92) } },
   });
   const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = additive ? 3 : 2; scene.add(mesh);
   return { g, pos, dat, col, mesh, list: [] };

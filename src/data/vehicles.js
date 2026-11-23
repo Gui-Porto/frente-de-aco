@@ -139,7 +139,7 @@ export const PLANES = {
     hpParts: { wingL: 38, wingR: 38, tail: 28, engine: 26, fuel: 20, fuse: 45 },
     // pele: "P-47D22 Razorback Thunderbolt" de vachtar, CC BY 4.0 (ver CREDITOS.md); preparada por tools/blender/skin.py
     spinner: 0.42,
-    model: { url: '/models/p47.glb', off: [0, 0.15, 0], fz: 1.27, def: { L: 10.45, canopy: { z: 0.055 } } }, // def: ajustes da estrutura só quando a pele está carregada
+    model: { url: '/models/p47.glb', glass: ['Material.004', 'Material.001'], off: [0, 0.15, 0], fz: 1.27, def: { L: 10.45, canopy: { z: 0.055 } } }, // def: ajustes da estrutura só quando a pele está carregada
     fuseR: 0.78, noseR: 0.72, wingZ: 0.6, chord: 2.6, tipChord: 1.3, cowl: 'radial', radial: { cyl: 9 }, // R-2800: fileira da frente com 9 cilindros
     // peças reais: dois tanques na fuselagem sob a cabine (sem tanque na asa no D-28), turbocompressor no ventre traseiro, radiadores de óleo na carenagem, flaps hidráulicos
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque principal', z: 0.04, y: -0.4, s: [0.55, 0.35, 0.6] }, { id: 'fuelA', k: 'fuel', n: 'Tanque auxiliar', z: -0.1, y: -0.45, s: [0.5, 0.3, 0.4] },
@@ -169,7 +169,7 @@ export const PLANES = {
     rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 340, n: 8 }
   },
   fw190: {
-    key: 'fw190', type: 'plane', model: { url: '/models/fw190.glb', solo: true, fz: 1.3, def: { L: 7.4 } }, gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
+    key: 'fw190', type: 'plane', model: { url: '/models/fw190.glb', solo: true, glass: ['PaletteMaterial002'], fz: 1.3, def: { L: 7.4 } }, gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
     mass: 4750, S: 18.3, span: 10.5, L: 9.0, cla: 4.8, clmax: 1.45, cd0: 0.0225, e: 0.8, engine: 'bmw801',
     vne: 850 / 3.6, glim: 12, kda: 0.06, kde: 0.32, kdr: 0.05, armor: { pilot: 8, engine: 6 },
     hpParts: { wingL: 30, wingR: 30, tail: 24, engine: 22, fuel: 18, fuse: 36 },
@@ -184,7 +184,7 @@ export const PLANES = {
   },
   // ---- Batalha aérea: caças sem carga externa e os primeiros jatos ----
   spit9: {
-    key: 'spit9', type: 'plane', model: { url: '/models/spit9.glb', solo: true, fz: 1.15, def: { L: 8.2 } }, gear: { track: 1.68, ret: 'out' }, name: 'Spitfire LF Mk IX', short: 'Spitfire IX', nation: 'Reino Unido', year: 1943, color: 0x59604a, sp: 300,
+    key: 'spit9', type: 'plane', model: { url: '/models/spit9.glb', solo: true, glass: ['PaletteMaterial003'], fz: 1.15, def: { L: 8.2 } }, gear: { track: 1.68, ret: 'out' }, name: 'Spitfire LF Mk IX', short: 'Spitfire IX', nation: 'Reino Unido', year: 1943, color: 0x59604a, sp: 300,
     mass: 3400, S: 22.48, span: 11.23, L: 9.5, cla: 4.9, clmax: 1.5, cd0: 0.0195, e: 0.85, engine: 'merlin66',
     vne: 760 / 3.6, glim: 12, kda: 0.055, kde: 0.36, kdr: 0.05, armor: { pilot: 7 },
     hpParts: { wingL: 28, wingR: 28, tail: 22, engine: 20, fuel: 16, fuse: 32 },
@@ -197,7 +197,7 @@ export const PLANES = {
     bombs: [], rockets: null
   },
   f86: {
-    key: 'f86', type: 'plane', model: { url: '/models/f86.glb', solo: true, nozzles: [[0, -0.01, -5.55, 0.3]] }, marks: { serial: '24513', buzz: 'FU-513', decalZ: -0.22 }, gear: { track: 2.5, ret: 'in' }, name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
+    key: 'f86', type: 'plane', model: { url: '/models/f86.glb', solo: true, glass: ['PaletteMaterial003'], nozzles: [[0, -0.01, -5.55, 0.3]] }, marks: { serial: '24513', buzz: 'FU-513', decalZ: -0.22 }, gear: { track: 2.5, ret: 'in' }, name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
     mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.016, e: 0.78, engine: 'j47', mcrit: 0.9, vctrl: 290, flapV: [410, 305, 245],
     vne: 1150 / 3.6, glim: 12, kda: 0.05, kde: 0.3, kdr: 0.04, armor: { pilot: 8 },
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },

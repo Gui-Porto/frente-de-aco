@@ -21,7 +21,7 @@ $('#app').prepend(renderer.domElement);
 
 export const scene = new THREE.Scene();
 export const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.3, 30000);
-export const FOGC = new THREE.Color(0xb7c2c6);
+export const FOGC = new THREE.Color(0xb4c2cf);
 scene.fog = new THREE.FogExp2(FOGC, 0.00075);
 scene.background = FOGC.clone();
 
@@ -115,7 +115,7 @@ export function frameLighting(focus, camY, groundY, S, dt) {
   sun.position.copy(focus).addScaledVector(SUN_DIR, 400);
   sun.target.position.copy(focus);
   const agl = camY - groundY;
-  scene.fog.density = lerp(0.00075, 0.00012, clamp(agl / 900, 0, 1)) / Q.far * env.fogMul;
+  scene.fog.density = lerp(0.00042, 0.00006, clamp(agl / 700, 0, 1)) / Q.far * env.fogMul; // ~4 km de visibilidade no chão, serras à vista em altitude (era um paredão cinza a 2,5 km)
   sky.position.copy(camera.position);
   sky.material.uniforms.time.value += dt;
   if (S.flashT > 0) { S.flashT -= dt; if (S.flashT <= 0) flash.intensity = 0; }

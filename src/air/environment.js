@@ -9,37 +9,38 @@ import { makeLayer, spawnP } from '../fx/particles.js';
 // Tudo criado no carregamento: nenhum shader novo aparece na partida.
 // =====================================================================
 export const TIMES = {
-  manha: { label: 'Manhã', elev: 16, az: 105, sun: 0xffe0bc, sunI: 2.3, hemiI: 0.3, fog: 0xc3cbcf, turb: 5, ray: 1.9, exp: 0.88 },
-  meio: { label: 'Meio-dia', elev: 58, az: 165, sun: 0xfff4e2, sunI: 2.8, hemiI: 0.36, fog: 0xb9c6cd, turb: 3.6, ray: 1.4, exp: 0.82 },
-  tarde: { label: 'Tarde', elev: 30, az: 230, sun: 0xffe9cc, sunI: 2.5, hemiI: 0.32, fog: 0xbcc4c3, turb: 4.4, ray: 1.7, exp: 0.85 },
+  manha: { label: 'Manhã', elev: 16, az: 105, sun: 0xffe0bc, sunI: 2.3, hemiI: 0.3, fog: 0xc0cbd6, turb: 5, ray: 1.9, exp: 0.88 },
+  meio: { label: 'Meio-dia', elev: 58, az: 165, sun: 0xfff4e2, sunI: 2.8, hemiI: 0.36, fog: 0xb0c4d6, turb: 3.6, ray: 1.4, exp: 0.82 },
+  tarde: { label: 'Tarde', elev: 30, az: 230, sun: 0xffe9cc, sunI: 2.5, hemiI: 0.32, fog: 0xb3c3d1, turb: 4.4, ray: 1.7, exp: 0.85 },
   por: { label: 'Pôr do sol', elev: 3.5, az: 258, sun: 0xff9850, sunI: 1.7, hemiI: 0.2, fog: 0xc79a80, turb: 9, ray: 2.8, exp: 1.0 },
 };
 export const WEATHER = {
-  limpo: { label: 'Céu limpo', cover: 0.22, dens: 0.35, fogMul: 0.75, clouds: 9, rain: 0, dim: 1 },
-  nublado: { label: 'Nublado', cover: 0.78, dens: 0.75, fogMul: 1.25, clouds: 30, rain: 0, dim: 0.68 },
-  chuva: { label: 'Chuva', cover: 0.95, dens: 0.95, fogMul: 2.3, clouds: 36, rain: 1, dim: 0.5 },
-  neblina: { label: 'Neblina', cover: 0.5, dens: 0.5, fogMul: 4.2, clouds: 10, rain: 0, dim: 0.78 },
+  limpo: { label: 'Céu limpo', cover: 0.22, dens: 0.35, fogMul: 0.75, clouds: 20, rain: 0, dim: 1 },
+  nublado: { label: 'Nublado', cover: 0.78, dens: 0.75, fogMul: 1.25, clouds: 46, rain: 0, dim: 0.68 },
+  chuva: { label: 'Chuva', cover: 0.95, dens: 0.95, fogMul: 2.3, clouds: 52, rain: 1, dim: 0.5 },
+  neblina: { label: 'Neblina', cover: 0.5, dens: 0.5, fogMul: 4.2, clouds: 14, rain: 0, dim: 0.78 },
 };
 const U = sky.material.uniforms;
 const BASE = { dir: SUN_DIR.clone(), sunC: sun.color.clone(), sunI: sun.intensity, hemiI: hemi.intensity, fog: FOGC.clone(), turb: U.turbidity.value, ray: U.rayleigh.value, cover: U.cloudCoverage.value, dens: U.cloudDensity.value, exp: renderer.toneMappingExposure };
 
 // ---------- nuvens: camada de billboards instanciados (mesmo shader das partículas) ----------
-const MAXC = 420, CL = makeLayer(false); CL.mesh.renderOrder = 1;
+const MAXC = 1300, CL = makeLayer(false); CL.mesh.renderOrder = 1;
 const puffs = [];
 function buildClouds(n, tint) {
   puffs.length = 0;
   for (let c = 0; c < n; c++) {
-    const cx = rand(-5200, 5200), cz = rand(-5200, 5200), cy = rand(1900, 2700), k = Math.floor(rand(6, 13)), R = rand(220, 520);
+    // cúmulo: base chata na mesma altura, miolo alto e bordas baixas; os tufos de cima são menores e mais claros
+    const cx = rand(-8500, 8500), cz = rand(-8500, 8500), cy = rand(1750, 2300), k = Math.floor(rand(16, 30)), R = rand(320, 760), top = R * rand(0.45, 0.8);
     for (let i = 0; i < k && puffs.length < MAXC; i++) {
-      const s = rand(160, 380);
-      puffs.push({ p: new V3(cx + rand(-R, R), cy + rand(-60, 90) + (i % 3) * 40, cz + rand(-R * .6, R * .6)), s, rot: rand(0, 6.28), sh: rand(0.88, 1.04) });
+      const a = rand(0, 6.28), r = Math.sqrt(Math.random()), hf = Math.random() ** 1.7 * (1 - r * r), s = rand(230, 420) * (1 - 0.45 * hf) * (0.75 + 0.25 * R / 760);
+      puffs.push({ p: new V3(cx + Math.cos(a) * r * R, cy + s * 0.22 + hf * top, cz + Math.sin(a) * r * R * 0.7), s, rot: rand(-0.5, 0.5), sh: 0.66 + 0.4 * hf + rand(-0.03, 0.03), hf });
     }
   }
   const P = CL.pos.array, D = CL.dat.array, C = CL.col.array, col = new THREE.Color(tint);
   puffs.forEach((q, i) => {
     P[i * 3] = q.p.x; P[i * 3 + 1] = q.p.y; P[i * 3 + 2] = q.p.z;
-    D[i * 4] = q.s; D[i * 4 + 1] = q.rot; D[i * 4 + 3] = 0;
-    C[i * 4] = col.r * q.sh; C[i * 4 + 1] = col.g * q.sh; C[i * 4 + 2] = col.b * q.sh; C[i * 4 + 3] = 0.85;
+    D[i * 4] = q.s; D[i * 4 + 1] = q.rot; D[i * 4 + 3] = 2;
+    const bl = 0.16 * (1 - q.hf); C[i * 4] = col.r * (q.sh - bl); C[i * 4 + 1] = col.g * (q.sh - bl * 0.55); C[i * 4 + 2] = col.b * (q.sh + bl * 0.1); C[i * 4 + 3] = 0.92; // base azulada, na sombra
   });
   CL.g.instanceCount = puffs.length;
   CL.pos.needsUpdate = CL.dat.needsUpdate = CL.col.needsUpdate = true;
@@ -61,7 +62,8 @@ export function applyEnv(wKey, tKey) {
   FOGC.setHex(T.fog).multiplyScalar(0.75 + 0.25 * W.dim); scene.fog.color.copy(FOGC); scene.background.copy(FOGC);
   renderer.toneMappingExposure = T.exp;
   env.fogMul = W.fogMul;
-  const tint = new THREE.Color(T.sun).lerp(new THREE.Color(0xffffff), 0.55).multiplyScalar(0.92 * (0.75 + 0.25 * W.dim));
+  // o céu Preetham é HDR (bem acima de 1): nuvem com cor ≤ 1 saía cinza-escura contra ele
+  const tint = new THREE.Color(T.sun).lerp(new THREE.Color(0xffffff), 0.8).multiplyScalar(4.2 * (0.4 + 0.6 * W.dim) * Math.min(1, 0.45 + T.elev / 30));
   CL.mesh.material.uniforms.sunTint.value.copy(tint);
   buildClouds(W.clouds, 0xf2f2f0);
   raining = W.rain;
@@ -85,7 +87,7 @@ export function updateEnv(dt) {
   if ((fadeT -= dt) <= 0 && puffs.length) {
     fadeT = 0.08;
     const C = CL.col.array, cp = camera.position;
-    for (let i = 0; i < puffs.length; i++) { const q = puffs[i], d = q.p.distanceTo(cp); C[i * 4 + 3] = 0.85 * sstep(q.s * 0.35, q.s * 1.3, d); }
+    for (let i = 0; i < puffs.length; i++) { const q = puffs[i], d = q.p.distanceTo(cp); C[i * 4 + 3] = 0.92 * sstep(q.s * 0.35, q.s * 1.3, d); }
     CL.col.needsUpdate = true;
   }
   CL.mesh.material.uniforms.fogDensity.value = scene.fog.density * 0.55;
