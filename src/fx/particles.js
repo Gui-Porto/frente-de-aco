@@ -97,7 +97,7 @@ const _c = new THREE.Color();
 export function spawnP(o) {
   const L = LAY[o.add ? 1 : 0];
   if (L.list.length >= MAXP) L.list.shift();
-  _c.set(o.color ?? 0xffffff); if (o.add) _c.multiplyScalar(o.hdr ?? 1.3);
+  _c.set(o.color ?? 0xffffff); if (o.add) _c.multiplyScalar(o.hdr ?? 2.4); else if (o.hdr) _c.multiplyScalar(o.hdr); // fogo bem acima de 1: contra o céu HDR, 1,3 saía laranja apagado
   L.list.push({
     pos: o.pos.clone(), vel: o.vel ? o.vel.clone() : new V3(), life: o.life, max: o.life,
     s0: o.size, s1: o.size1 ?? o.size * 2.2, op: o.op ?? 1, drag: o.drag ?? 1.5, rise: o.rise ?? 0, grav: o.grav ?? 0,
@@ -136,10 +136,17 @@ export function fxDust(pos, n = 8, s = 1) {
   for (let i = 0; i < n; i++) spawnP({ pos: pos.clone().add(rv(0.6 * s)), vel: rv(2.5 * s).setY(rand(1, 4) * s), life: rand(1.2, 2.2), size: 1.0 * s, size1: 3.2 * s, color: 0xa89a7c, op: .3, rise: 0.1, drag: 2.2 });
 }
 export function fxSparks(pos, n = 7) {
-  for (let i = 0; i < n; i++) spawnP({ pos, vel: rv(9), life: rand(.15, .35), size: .35, size1: .1, tex: TEX.fire, add: true, color: 0xffd080, grav: 9, drag: .5 });
+  spawnP({ pos, life: .06, size: 1.1, size1: 1.8, tex: TEX.fire, add: true, color: 0xfff0c8, hdr: 4 }); // clarão do impacto
+  for (let i = 0; i < n; i++) spawnP({ pos, vel: rv(15), life: rand(.2, .5), size: .32, size1: .08, tex: TEX.fire, add: true, color: 0xffd080, hdr: 4, grav: 9, drag: .5 });
 }
 export function fxExplosion(pos, s = 1) {
-  for (let i = 0; i < 10 * s; i++) spawnP({ pos: pos.clone().add(rv(.4 * s)), vel: rv(7 * s), life: rand(.25, .55), size: 1.5 * s, size1: 4.5 * s, tex: TEX.fire, add: true, color: 0xffb060 });
+  // clarão único e curtíssimo, bola de fogo, estilhaços incandescentes que riscam para fora e caem, fumaça quente no miolo
+  spawnP({ pos, life: .09, size: 5 * s, size1: 9 * s, tex: TEX.fire, add: true, color: 0xfff2d0, hdr: 5 });
+  for (let i = 0; i < 10 * s; i++) spawnP({ pos: pos.clone().add(rv(.4 * s)), vel: rv(7 * s), life: rand(.25, .6), size: 1.5 * s, size1: 4.5 * s, tex: TEX.fire, add: true, color: 0xff9038, hdr: 1.8 });
+  // miolo OPACO (mistura normal): contra o céu claro o fogo aditivo some no branco — é este que dá a bola laranja
+  for (let i = 0; i < 7 * s; i++) spawnP({ pos: pos.clone().add(rv(.3 * s)), vel: rv(5 * s), life: rand(.3, .65), size: 1.2 * s, size1: 3.6 * s, tex: TEX.fire, color: 0xff6418, hdr: 2.8, drag: 2 });
+  for (let i = 0; i < 12 * s; i++) spawnP({ pos, vel: rv(26 * s), life: rand(.5, 1.1), size: .3 * s, size1: .08 * s, tex: TEX.fire, add: true, color: 0xffc070, hdr: 4, grav: 9, drag: .6 });
+  for (let i = 0; i < 6 * s; i++) spawnP({ pos: pos.clone().add(rv(.5 * s)), vel: rv(4 * s), life: rand(1.2, 2), size: 1.4 * s, size1: 4.5 * s, color: 0x6e665c, op: .5, rise: .3, drag: 1.6 });
   for (let i = 0; i < 9 * s; i++) spawnP({ pos: pos.clone().add(rv(.8 * s)), vel: rv(3.5 * s).setY(rand(1, 5) * s), life: rand(2, 3.5), size: 1.6 * s, size1: 5.5 * s, color: 0x8a847c, op: .32, rise: .45, drag: 1.4 });
   flash(pos, 6 * s);
 }

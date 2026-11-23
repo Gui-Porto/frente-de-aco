@@ -213,12 +213,14 @@ function reticle(p) {
     g.beginPath();
     // mira das armas no formato do WT: cruz aberta de quatro traços com o ponto no meio, de tamanho que se enxerga (a de
     // antes tinha 9 px de braço e sumia contra o chão)
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * 7, y + s * 7); g.lineTo(x + c * 17, y + s * 17); }
-    rstroke(1.5);
-    g.beginPath(); g.arc(x, y, 1.6, 0, 7); g.fillStyle = RW; g.fill();
+    // (dono, 3ª volta: como no WT a mira das armas é uma cruz pequena e bem marcada com a bolinha no meio, MENOR que a rodinha
+    // do mouse — a rodinha diz para onde você aponta, a cruz para onde o avião atira; o aquecimento fica na cruz)
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * 5, y + s * 5); g.lineTo(x + c * 12, y + s * 12); }
+    g.lineCap = 'butt'; g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.55)'; g.stroke(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
+    g.beginPath(); g.arc(x, y, 2.6, 0, 7); g.fillStyle = 'rgba(0,0,0,.55)'; g.fill(); g.beginPath(); g.arc(x, y, 1.8, 0, 7); g.fillStyle = '#fff'; g.fill();
     // alcance: só com alvo a menos de 1200 m — arco fino que encolhe até a distância (cheio = 1200 m)
     if (inR) {
-      const RR = 24, a0 = -Math.PI / 2, k = clamp(d / 1200, 0, 1), close = d < 450;
+      const RR = 30, a0 = -Math.PI / 2, k = clamp(d / 1200, 0, 1), close = d < 450;
       g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2 * k); rstroke(close ? 1.5 : 1, close ? RW : RWD);
       otxt((rr ? 'RADAR ' : '') + fmtD(d), x + RR + 7, y + 4, 11, close ? RW : RWD, 'left', MONO, 500);
     }
@@ -248,16 +250,16 @@ function reticle(p) {
   if (ap && acam.mode !== 3) {
     const near = pr ? Math.hypot(ap.x - pr.x, ap.y - pr.y) : 99;
     g.globalAlpha = clamp((near - 6) / 20, 0.75, 1); // sempre visível, como no WT (antes quase sumia com o nariz no lugar)
-    g.beginPath(); g.arc(ap.x, ap.y, 10, 0, 7); rstroke(1.6);
+    g.beginPath(); g.arc(ap.x, ap.y, 19, 0, 7); rstroke(1.5);
     g.globalAlpha = 1;
   }
-  // aquecimento das armas (como no WT): arco em volta do círculo da mira que se fecha conforme o cano esquenta —
+  // aquecimento das armas (como no WT): arco em volta da CRUZ das armas que se fecha conforme o cano esquenta —
   // branco, âmbar acima de 45%, vermelho acima de 75%; arma travada = anel vermelho piscando até esfriar
-  const hc = ap && acam.mode !== 3 ? ap : pr, ht = p.guns.reduce((m, q) => Math.max(m, q.heat), 0), jam = p.guns.some(q => q.jam);
+  const hc = pr, ht = p.guns.reduce((m, q) => Math.max(m, q.heat), 0), jam = p.guns.some(q => q.jam);
   if (hc && (ht > 0.03 || jam)) {
     const a0 = -Math.PI / 2, col = jam ? (Math.sin(V.blink * 14) > 0 ? C.enemy : 'rgba(230,90,66,.35)') : ht > 0.75 ? C.enemy : ht > 0.45 ? C.amber : RW;
-    g.beginPath(); g.arc(hc.x, hc.y, 14.5, 0, 7); g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.28)'; g.stroke();
-    g.beginPath(); g.arc(hc.x, hc.y, 14.5, a0, a0 + Math.PI * 2 * (jam ? 1 : ht)); g.lineWidth = 2.4; g.strokeStyle = col; g.stroke();
+    g.beginPath(); g.arc(hc.x, hc.y, 16, 0, 7); g.lineWidth = 3.4; g.strokeStyle = 'rgba(0,0,0,.3)'; g.stroke();
+    g.beginPath(); g.arc(hc.x, hc.y, 16, a0, a0 + Math.PI * 2 * (jam ? 1 : ht)); g.lineWidth = 2.4; g.strokeStyle = col; g.stroke();
   }
 }
 
