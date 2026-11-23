@@ -25,9 +25,15 @@ const num = (t, x, y, size, col = T.fg, align = 'right') => ptxt(t, x, y, size, 
 // HUD limpa, como no WT (pedido do dono): os números ficam em texto branco discreto no canto superior esquerdo; embaixo, à
 // esquerda, só a silhueta de dano (o RWR vai ao lado dela e o radar à direita — scopes.js). A placa grande com tudo dentro saiu.
 export const SIL = { w: 158, h: 224 };
-const WH = 'rgba(255,255,255,.92)', WD = 'rgba(255,255,255,.58)';
-// texto solto sobre o céu: sombra curta em vez de contorno (o contorno grosso embaçava o corpo pequeno)
-const wt = (t, x, y, size, col, align, font, weight) => { g.shadowColor = '#000'; g.shadowBlur = 4; g.shadowOffsetY = 1; ptxt(t, x, y, size, col, align, font, weight); ptxt(t, x, y, size, col, align, font, weight); g.shadowBlur = 0; g.shadowOffsetY = 0; }; // duas passadas: sobre nuvem branca uma sombra só não segurava a leitura
+const WH = '#fff', WD = 'rgba(255,255,255,.78)';
+// texto solto sobre o céu: contorno escuro FINO (1 px de cada lado) + halo curto. Só a sombra deslocada não segurava a
+// leitura sobre nuvem branca (o branco sumia e sobrava um fantasma cinza ao lado); o contorno de 3 px embaçava o corpo pequeno
+const wt = (t, x, y, size, col, align = 'left', font = UI, weight = 600) => {
+  g.font = `${weight} ${size}px ${font}`; g.textAlign = align; g.lineJoin = 'round';
+  g.shadowColor = 'rgba(0,0,0,.85)'; g.shadowBlur = 3; g.shadowOffsetY = 0;
+  g.lineWidth = Math.max(2, size * 0.15); g.strokeStyle = 'rgba(0,0,0,.7)'; g.strokeText(t, x, y);
+  g.shadowBlur = 0; g.fillStyle = col; g.fillText(t, x, y);
+};
 export function flightPanel(p, theme) {
   T = theme;
   const k = clamp(Math.min(V.W / 1400, V.H / 820), 0.8, 1);

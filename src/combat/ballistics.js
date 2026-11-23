@@ -6,7 +6,7 @@ import { H, terrainNormal } from '../world/terrain.js';
 import { obstNear, HEDGES, addCrater, damageObst, blastBuildings } from '../world/scenery.js';
 import { RAPIER, world, COL } from '../world/physics.js';
 import { PLANES, prepAmmo, penAt, hePen, DEG, G } from '../data/vehicles.js';
-import { spawnP, TEX, fxDust, fxSparks, fxExplosion, fxBigBlast, fxTrail } from '../fx/particles.js';
+import { spawnP, TEX, fxDust, fxSparks, fxExplosion, fxBigBlast, fxTrail, fxGroundHit } from '../fx/particles.js';
 import { sndBoom, sndPing, sndClank, sndSnap } from '../fx/audio.js';
 import { MODS } from '../vehicles/tank.js';
 import { hitPlaneModules, blastPlaneModules } from '../vehicles/planeDamage.js';
@@ -142,8 +142,13 @@ const shellMat = new THREE.MeshBasicMaterial({ color: 0xffd08a, fog: false });
 // do carregamento não serve: compila para o canvas, e o compositor desenha num render target linear)
 { const w = new THREE.Mesh(shellGeo, shellMat); w.scale.setScalar(1e-4); w.frustumCulled = false; scene.add(w); }
 const MAXTR = 900;
-export const tracerMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 4).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false }), MAXTR);
-tracerMesh.frustumCulled = false; tracerMesh.count = 0; scene.add(tracerMesh);
+// Traçantes: risco incandescente em HDR (com cor ≤ 1 saía laranja-marrom apagado contra o céu), cor por nação como
+// no WT (EUA/Reino Unido vermelho-alaranjado, URSS verde, Alemanha amarelo-claro) e engrossa com a distância para
+// nunca ficar mais fino que ~1 pixel. A cor por instância existe desde o carregamento (o programa já nasce com ela).
+export const tracerMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 5).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), MAXTR);
+tracerMesh.frustumCulled = false; tracerMesh.count = 1; tracerMesh.setMatrixAt(0, new THREE.Matrix4().makeScale(0, 0, 0)); scene.add(tracerMesh);
+const TRC = { URSS: new THREE.Color(0.35, 2.8, 0.4), Alemanha: new THREE.Color(3.2, 2.3, 0.45), _: new THREE.Color(3.6, 0.55, 0.2) }; // saturadas e não muito acima de 1: mais brilho e o AgX lava para branco
+tracerMesh.setColorAt(0, TRC._);
 const bombGeo = (() => { const b = new THREE.CylinderGeometry(0.5, 0.5, 2.6, 10); b.rotateX(Math.PI / 2); return b; })();
 const bombMat = new THREE.MeshStandardMaterial({ color: 0x3d4130, roughness: .7, metalness: .3 });
 for (const pd of Object.values(PLANES)) {
@@ -196,11 +201,13 @@ export function updateProjs(dt) {
       pr.mesh.lookAt(_tp.copy(pr.mesh.position).add(_n));
       if (pr.kind === 'rocket' && pr.age < 1.4) { spawnP({ pos: pr.p.clone(), life: .12, size: .7, size1: .3, tex: TEX.fire, add: true, color: 0xffa040 }); fxTrail(pr.p.clone(), 0xc8c4bb, .7, 1.6); }
     } else if (pr.tracer && tc < MAXTR) {
-      _tq.setFromUnitVectors(_zf, _n); _ts.set(1, 1, Math.min(9, pr.v.length() * 0.012)); _tp.copy(pr.p).addScaledVector(_n, -_ts.z * 0.5);
-      _tm.compose(_tp, _tq, _ts); tracerMesh.setMatrixAt(tc++, _tm);
+      const w = clamp(pr.p.distanceTo(camera.position) * 0.022, 1.2, 30) * (pr.am.cal >= 20 ? 1.3 : 1);
+      _tq.setFromUnitVectors(_zf, _n); _ts.set(w, w, Math.min(20, pr.v.length() * 0.022)); _tp.copy(pr.p).addScaledVector(_n, -_ts.z * 0.5);
+      _tm.compose(_tp, _tq, _ts); tracerMesh.setColorAt(tc, TRC[pr.owner && pr.owner.def && pr.owner.def.nation] || TRC._); tracerMesh.setMatrixAt(tc++, _tm);
     }
   }
-  tracerMesh.count = tc; tracerMesh.instanceMatrix.needsUpdate = true;
+  if (!tc) { _tm.makeScale(0, 0, 0); tracerMesh.setMatrixAt(tc++, _tm); } // sempre uma instância (invisível): o programa do traçante existe antes do 1º tiro
+  tracerMesh.count = tc; tracerMesh.instanceMatrix.needsUpdate = true; tracerMesh.instanceColor.needsUpdate = true;
 }
 export function clearProjs() { for (const p of projs) if (p.mesh) scene.remove(p.mesh); projs.length = 0; }
 
@@ -220,7 +227,8 @@ function onImpact(pr, hit) {
       fxDust(hit.point, 4, .7); return false;
     }
     if (pr.kind === 'bullet') {
-      if (Math.random() < 0.35) spawnP({ pos: hit.point, vel: new V3(rand(-1, 1), rand(2, 5), rand(-1, 1)), life: rand(.6, 1.2), size: .5, size1: 1.8, color: 0x9c8a68, op: .7 });
+      // jato de terra em cada bala (a rajada risca o chão); longe da câmera não gasta partícula (toda bala perdida no ar cai em algum lugar)
+      if (hit.point.distanceToSquared(camera.position) < 1800 * 1800) fxGroundHit(hit.point, am.cal, (am.he || 0) > 0.005);
       if (am.type === 'HEF') blast(hit.point, am.tnt, pr.owner, {});
       return true;
     }

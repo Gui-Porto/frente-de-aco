@@ -91,7 +91,11 @@ export function applyQuality() {
   const w = innerWidth * renderer.getPixelRatio(), h = innerHeight * renderer.getPixelRatio();
   if (Q.ao) {
     if (!gtao) { gtao = new GTAOPass(activeScene, camera, w, h); gtao.blendIntensity = 0.85;
-      const rnd = gtao.render.bind(gtao); gtao.render = (...x) => { for (const o of shadowOnly) o.visible = false; rnd(...x); for (const o of shadowOnly) o.visible = true; }; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 }); }
+      const rnd = gtao.render.bind(gtao); gtao.render = (...x) => { for (const o of shadowOnly) o.visible = false; rnd(...x); for (const o of shadowOnly) o.visible = true; }; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 });
+      // o passe de normais/profundidade do GTAO desenha TUDO com material opaco: fumaça, rastro de míssil, chama e marcas
+      // (transparentes, sem escrita de profundidade) entravam como chapa sólida e a oclusão pintava uma laje PRETA em cima
+      // delas (o rastro do míssil "ficou preto"). Ficam fora desse passe, como já ficavam pontos e linhas.
+      gtao._overrideVisibility = function () { const cache = this._visibilityCache; this.scene.traverse(o => { if (!o.visible) return; const m = o.material; if (o.isPoints || o.isLine || o.isLine2 || ((o.isMesh || o.isSprite) && m && !Array.isArray(m) && m.depthWrite === false)) { o.visible = false; cache.push(o); } }); }; }
     composer.addPass(gtao);
   }
   if (Q.bloom) { if (!bloom) bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.22, 0.35, 4.0); composer.addPass(bloom); }

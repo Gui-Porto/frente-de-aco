@@ -108,7 +108,7 @@ export function updatePlaneFx(p, dt) {
       const c = p.pos.clone().addScaledVector(f, p.def.wingZ);
       for (let i = 0; i < 28; i++) {
         const t = i / 28 * Math.PI * 2, dir = a.clone().multiplyScalar(Math.cos(t)).addScaledVector(b, Math.sin(t));
-        spawnP({ pos: c.clone().addScaledVector(dir, r), vel: p.vel.clone().multiplyScalar(0.25).addScaledVector(dir, 22), life: rand(0.9, 1.5), size: 2.2, size1: 7, color: 0xf4f6f8, op: 0.55, drag: 2.2 });
+        spawnP({ pos: c.clone().addScaledVector(dir, r), vel: p.vel.clone().multiplyScalar(0.25).addScaledVector(dir, 22), life: rand(0.9, 1.5), size: 2.2, size1: 7, color: 0xf4f6f8, op: 0.55, drag: 2.2, lit: true });
       }
     }
     p._m0 = M;

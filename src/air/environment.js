@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { scene, camera, sky, sun, hemi, SUN_DIR, FOGC, renderer, env, refreshEnvMap } from '../core/render.js';
 import { planes } from '../core/state.js';
 import { V3, clamp, rand, sstep } from '../core/util.js';
-import { makeLayer, spawnP } from '../fx/particles.js';
+import { makeLayer, spawnP, setSkyLit } from '../fx/particles.js';
 // =====================================================================
 // EnvironmentSystem: horário (sol, cor da luz, céu), clima (nuvens,
 // neblina, chuva) e rastros (contrails em altitude, vapor nas asas com G).
@@ -65,6 +65,7 @@ export function applyEnv(wKey, tKey) {
   // o céu Preetham é HDR (bem acima de 1): nuvem com cor ≤ 1 saía cinza-escura contra ele
   const tint = new THREE.Color(T.sun).lerp(new THREE.Color(0xffffff), clamp(T.elev / 32, 0.3, 0.8)).multiplyScalar(4.2 * (0.4 + 0.6 * W.dim) * Math.min(1, 0.45 + T.elev / 30));
   CL.mesh.material.uniforms.sunTint.value.copy(tint);
+  setSkyLit(tint.clone().multiplyScalar(0.62)); // fumaça branca um pouco abaixo da nuvem
   buildClouds(W.clouds, 0xf2f2f0);
   raining = W.rain;
   rainGeo.setDrawRange(0, raining ? NR * 2 : 0);
@@ -75,7 +76,7 @@ export function resetEnv() {
   U.turbidity.value = BASE.turb; U.rayleigh.value = BASE.ray; U.cloudCoverage.value = BASE.cover; U.cloudDensity.value = BASE.dens;
   sun.color.copy(BASE.sunC); sun.intensity = BASE.sunI; hemi.intensity = BASE.hemiI;
   FOGC.copy(BASE.fog); scene.fog.color.copy(FOGC); scene.background.copy(FOGC);
-  renderer.toneMappingExposure = BASE.exp; env.fogMul = 1;
+  renderer.toneMappingExposure = BASE.exp; env.fogMul = 1; setSkyLit(null);
   CL.g.instanceCount = 0; puffs.length = 0; raining = 0; rainGeo.setDrawRange(0, 0);
   refreshEnvMap();
 }
@@ -105,7 +106,7 @@ export function updateEnv(dt) {
     p.trailT = (p.trailT || 0) - dt; if (p.trailT > 0) continue; p.trailT = 0.045;
     for (const s of [1, -1]) {
       _w.set(s * p.def.span / 2 * 0.97, 0, p.def.wingZ - p.def.chord * 0.3).applyMatrix4(p.root.matrixWorld);
-      spawnP({ pos: _w, vel: _t.copy(p.vel).multiplyScalar(0.02), life: hi ? 5 : 0.9, size: hi ? 0.9 : 0.5, size1: hi ? 4 : 1.4, color: 0xf4f4f2, op: hi ? 0.5 : 0.35, drag: 2 });
+      spawnP({ pos: _w, vel: _t.copy(p.vel).multiplyScalar(0.02), life: hi ? 5 : 0.9, size: hi ? 0.9 : 0.5, size1: hi ? 4 : 1.4, color: 0xf4f4f2, op: hi ? 0.5 : 0.35, drag: 2, lit: true });
     }
   }
 }

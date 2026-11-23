@@ -11,7 +11,8 @@ import { EngineSet, ENGINES } from '../air/systems/engine.js';
 import { isa } from '../air/systems/atmosphere.js';
 import { Radar } from '../air/systems/radar.js';
 import { Rwr, Maw } from '../air/systems/rwr.js';
-import { fxBurn, fxTrail, fxSmallFlash, fxExplosion, fxBigBlast, fxDust, fxSparks } from '../fx/particles.js';
+import { fxBurn, fxTrail, fxSmallFlash, fxExplosion, fxBigBlast, fxDust, fxSparks, fxPlaneFire, spawnP } from '../fx/particles.js';
+import { Trail } from '../fx/trails.js';
 import { sndMG, sndShot, sndBoom, sndTear, sndHit } from '../fx/audio.js';
 import { fxFlakes, fxHole, fxBlast } from './planeFx.js';
 import { fireProj, destroyVehicle, spawnDebris, blast } from '../combat/ballistics.js';
@@ -169,7 +170,7 @@ export class Plane {
     if (this.gone) return;
     if (this.wreck) return this.wreckStep(dt);
     if (!this.alive && this.pos.y - H(this.pos.x, this.pos.z) > 20) this.shedStep(dt); // abatido, caindo: desmancha no ar
-    if (this.koT > 0) { this.elev = this.ail = this.rud = 0; this.firing = false; }
+    if (this.koT > 0) { this.elev = this.ail = this.rud = 0; this.firing = false; this._eCmd = null; }
     const D = this.def, n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
     const S = D.S, b = D.span, c = S / b, AR = b * b / S, m = D.mass + this.bombs.reduce((s, x) => s + x.m, 0) + this.rockets * (D.rockets ? D.rockets.m : 0) + this.racks.reduce((s, r) => s + r.n * r.M.mass, 0) - (this.fuelMax - this.fuel);
     const A = ctrlAuthority(this);
@@ -204,6 +205,10 @@ export class Plane {
     const as = D.clmax / D.cla;
     for (let s = 0; s < n; s++) {
       this.axes();
+      // limitadores do instrutor (G e ângulo de ataque) a cada PASSO da física, sobre o pedido do quadro (_eCmd): aplicados
+      // uma vez por quadro, a 20–30 quadros/s e acima de ~1100 km/h o laço discreto divergia e o profundor invertia a cada
+      // quadro no limite de G (MiG-21: ±1,5 de profundor, 16 inversões/s) — o jato "trepidava" em curva forte veloz
+      if (this._eCmd != null && !this.onGround) this.elev = clamp(Math.max(this.limitElev(this._eCmd, this._eOpt), this._eMin), -1, 1);
       const V = this.vel.length() + 1e-6;
       _pv.copy(this.vel).divideScalar(V);
       isa(this.pos.y, _atm); _atm.alt = Math.max(0, this.pos.y);
@@ -260,6 +265,7 @@ export class Plane {
       _pq.set(_pw.x * h * 0.5, _pw.y * h * 0.5, _pw.z * h * 0.5, 0).multiply(this.q);
       this.q.x += _pq.x; this.q.y += _pq.y; this.q.z += _pq.z; this.q.w += _pq.w; this.q.normalize();
     }
+    this._eCmd = null; // vale só para o quadro em que o instrutor mandou
     if (Math.random() < dt * 0.3) this.dropSign = Math.random() < .5 ? 1 : -1;
     // fisiologia do piloto: G SUSTENTADO acima da tolerância acumula carga (gStress 0..1). A tela vai escurecendo das
     // bordas para o centro (visão de túnel, `blackout`) e em 1 o piloto DESMAIA: alguns segundos sem controle, o avião
@@ -274,7 +280,7 @@ export class Plane {
     const leak = fuelLeak(this);
     fuelStep(this, this.engineOn ? this.eng.flow : 0, dt);
     if (this.fuel <= 0 && this.engineOn && this.alive) { this.engineStop(); if (this.isPlayer) showDmg('Sem combustível'); }
-    if (leak > 0 && this.fuel > 0 && Math.random() < dt * 35) for (const m of modsOf(this, 'fuel')) if (m.leak > 0 && m.left > 0) fxTrail(_pt.set(...m.c).applyMatrix4(this.root.matrixWorld).clone(), 0xf2f0ea, 0.45 + 0.1 * Math.min(m.leak, 4), 3); // névoa de combustível, mais grossa quanto maior o furo
+    if (leak > 0 && this.fuel > 0 && Math.random() < dt * 35) for (const m of modsOf(this, 'fuel')) if (m.leak > 0 && m.left > 0) fxTrail(_pt.set(...m.c).applyMatrix4(this.root.matrixWorld).clone(), 0xf2f0ea, 0.45 + 0.1 * Math.min(m.leak, 4), 3, true); // névoa de combustível, mais grossa quanto maior o furo
     if (this.koT > 0) {
       this.koT -= dt; this.koAge += dt;
       if (this.koT <= 0) this.gStress = 0.55; // acorda ainda meio apagado: a visão volta aos poucos
@@ -302,17 +308,29 @@ export class Plane {
     if (wear > 0 && this.engineOn) { this.engs.forEach((e, i) => { if (!e.on) return; e.hp -= wear * this.maxHp.engine; if (e.hp <= 0) { this.engineOut(i); } }); this.syncEng(); }
     if (this.fire > 0) {
       this.fire += dt;
-      if (Math.random() < dt * 30) fxBurn(_pt.set(...this.fireAt).applyMatrix4(this.root.matrixWorld).clone(), 1.2);
+      // em chamas (como no WT): língua de fogo presa ao avião e coluna CONTÍNUA de fumaça preta atrás (fita + tufos).
+      // Antes eram bolinhas de fogo e tufos cinza-claros largados a cada ~7 m: de longe nem se via que queimava
+      const fp = _pt.set(...this.fireAt).applyMatrix4(this.root.matrixWorld).clone(), near = fp.distanceToSquared(camera.position) < 3500 * 3500;
+      if (this.onGround || this.vel.lengthSq() < 400) { if (Math.random() < dt * 30) fxBurn(fp.clone(), 1.2); }
+      else if (near) {
+        const grow = Math.min(1, 0.45 + this.fire / 6);
+        for (let k = Math.max(1, Math.round(dt * 90)); k > 0; k--) fxPlaneFire(fp, this.vel, 1.5 * grow);
+        if (Math.random() < dt * 30) spawnP({ pos: fp.clone().add(rv(0.5)), vel: this.vel.clone().multiplyScalar(0.3).add(rv(1.5)), life: rand(3, 5), size: 1.8 * grow, size1: 7 * grow, color: 0x3a3632, op: 0.6, drag: 1.2, rise: 0.5, fadeIn: 30 });
+      }
+      this.smokeStep(2, fp);
       // o fogo consome a estrutura: longarina da asa que queima (ou o cone de cauda, se for na fuselagem)
       if (this.fire > 4 && Math.random() < dt * 0.3) { const sd = this.fireAt[0] > 1 ? 'L' : this.fireAt[0] < -1 ? 'R' : null, M = Object.values(this.mods).filter(m => !m.lost && (sd ? m.kind === 'spar' && m.seg === sd + '0' : m.kind === 'boom')); if (M.length) applyMod(this, M[Math.floor(Math.random() * M.length)], 2.5, this.lastHitBy, null); }
       if (this.fire > 22 && this.alive) destroyVehicle(this, this.lastHitBy, 'fire');
     } else if (this.hp.engine < this.maxHp.engine * 0.5 || (this.engineOn && this.heat.oil > 125)) {
-      if (Math.random() < dt * 14) fxTrail(this.pos.clone(), 0xb8b4ac, 1, 3); // motor danificado/fervendo: fumaça clara
-    }
+      // motor danificado/fervendo: fio contínuo de fumaça cinza saindo do motor
+      const ep = _pt.set(...(this.mods.eng0 || this.mods.engine || { c: this.fireAt }).c).applyMatrix4(this.root.matrixWorld).clone();
+      if (Math.random() < dt * 10) fxTrail(ep.clone(), 0xb8b4ac, 1, 3);
+      this.smokeStep(1, ep);
+    } else this.smokeStep(0);
     // vazamentos saindo de onde furou: óleo = rastro marrom fino (marrom médio, nunca quase-preto); água = névoa branca
     const at = m => (m ? _pt.set(...m.c).applyMatrix4(this.root.matrixWorld) : _pt.copy(this.pos)).clone(), hurt = k => modsOf(this, k).find(m => m.hp < m.max);
     if (this.oil > 0 && this.oilQ > 0 && Math.random() < dt * 30) fxTrail(at(hurt('oil') || hurt('cool') || this.mods.eng0 || this.mods.engine), 0x7a6650, 0.4, 3.5);
-    if (this.water > 0 && this.waterQ > 0 && Math.random() < dt * 30) fxTrail(at(hurt('cool')), 0xf4f4f2, 0.5, 2.2);
+    if (this.water > 0 && this.waterQ > 0 && Math.random() < dt * 30) fxTrail(at(hurt('cool')), 0xf4f4f2, 0.5, 2.2, true);
     this.prop.rotation.z += (this.engineOn ? 60 : Math.min(this.ias / 4, 20)) * dt;
     this.prop.children[this.prop.children.length - 1].visible = this.engineOn;
     // colisão com o solo
@@ -438,7 +456,7 @@ export class Plane {
   // Instrutor (estilo "mouse aim" do WT): leva o VETOR VELOCIDADE à direção pedida.
   // Limites de AoA (sem estol) e de G; proteção opcional perto do solo.
   steerTo(dir, dt, opts = {}) {
-    if (!this.pilot) { this.elev = this.ail = this.rud = 0; return; }
+    if (!this.pilot) { this.elev = this.ail = this.rud = 0; this._eCmd = null; return; }
     this.axes();
     const D = this.def;
     // antecipação (opts.lead s): mira onde o círculo ESTARÁ — sem isso o nariz andava sempre atrás de um
@@ -512,7 +530,7 @@ export class Plane {
     // recuperação perto do chão: desvira primeiro, puxa depois — de dorso, "alvo atrás e abaixo → puxa" era um
     // split-S para dentro do chão (medido: IA a 6 G com 100–160° de inclinação até bater)
     if (opts.recover) elev *= clamp((wu - 0.25) / 0.45, 0, 1);
-    const elev0 = elev;
+    const elev0 = elev; this._eCmd = elev; this._eOpt = opts; this._eMin = -Infinity; // a física refaz o limite a cada passo
     // amortecimento 2.0 (era 0.55): medido em curva contínua de 20°/s, a inclinação oscilava 35°↔120° com aileron batendo ±1
     // o comando sai uma vez por quadro: se o aileron cheio muda a rolagem mais do que o amortecimento pede de volta
     // (jato leve e veloz: MiG-21 acima de ~900 km/h), o laço diverge e o aileron bate ±1 a cada quadro — o avião
@@ -530,7 +548,7 @@ export class Plane {
     // proteção perto do solo (assistência arcade): não deixa mergulhar abaixo de ~60 m sem querer
     if (opts.groundAssist) {
       const agl = this.pos.y - H(this.pos.x, this.pos.z), sink = -this.vel.y;
-      if (agl < 40 + sink * 2.2 && _pf.y < 0.1) elev = Math.max(elev, 0.6);
+      if (agl < 40 + sink * 2.2 && _pf.y < 0.1) { elev = Math.max(elev, 0.6); this._eMin = 0.6; }
     }
     // no chão: mira no horizonte ou abaixo = fica rolando (sem puxar); mira acima = roda e decola
     // no chão: mira no horizonte ou abaixo = rola sem puxar; bequilha: empurra para levantar a cauda na corrida (decola
@@ -884,5 +902,16 @@ export class Plane {
     this.root.visible = false; this.burnAt = this.pos.clone(); this.burnT = 25;
     if (this.bombs.length) blast(this.pos.clone(), this.bombs.reduce((s, b) => s + b.tnt, 0) * 0.5, this.lastHitBy, { skipPlane: this });
   }
-  remove() { scene.remove(this.root); this.label.remove(); const i = planes.indexOf(this); if (i >= 0) planes.splice(i, 1); }
+  // fita de fumaça atrás do avião avariado: kind 0 nada, 1 motor (cinza, fina), 2 incêndio (preta, grossa). Uma fita por
+  // estado; trocar de estado fecha a antiga (ela some sozinha) e abre outra. Material único das fitas: nenhum shader novo.
+  smokeStep(kind, pos) {
+    if (this.onGround || this.gone) kind = 0;
+    if (kind !== (this._smK || 0)) {
+      if (this._smoke) this._smoke.close();
+      this._smoke = kind === 2 ? new Trail({ life: 9, w0: 1.1, w1: 8, alpha: 0.9, step: 6, color: 0x2e2b28, rise: 0.6, lit: false, turb: 0.8 }) : kind === 1 ? new Trail({ life: 5, w0: 0.3, w1: 3.5, alpha: 0.55, step: 6, color: 0xa9a59e, lit: false }) : null;
+      this._smK = kind;
+    }
+    if (this._smoke) this._smoke.push(pos, ST.now);
+  }
+  remove() { this.smokeStep(0); scene.remove(this.root); this.label.remove(); const i = planes.indexOf(this); if (i >= 0) planes.splice(i, 1); }
 }
