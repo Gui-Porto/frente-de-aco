@@ -8,10 +8,11 @@ describe('voz de alerta', () => {
     expect(pickVoice({ sys: {}, vel: { y: -100 }, onGround: false }, 50)).toBe(null);
   });
   it('prioridade: chão iminente > míssil > guiamento > altitude > trava > rastreio', () => {
-    expect(pickVoice(plane({ vy: -50, tti: 2, lvl: 'GUIDANCE' }), 200).k).toBe('pullup');
+    expect(pickVoice(plane({ vy: -50, tti: 2, lvl: 'GUIDANCE' }), 100).k).toBe('pullup');
     expect(pickVoice(plane({ tti: 2, lvl: 'GUIDANCE' }), 2000).k).toBe('missile');
     expect(pickVoice(plane({ vy: -50, lvl: 'GUIDANCE' }), 400).k).toBe('guidance');
-    expect(pickVoice(plane({ vy: -50, lvl: 'LOCK' }), 400).k).toBe('altitude');
+    expect(pickVoice(plane({ vy: -30, lvl: 'LOCK' }), 120).k).toBe('altitude');
+    expect(pickVoice(plane({ vy: -30, lvl: 'LOCK' }), 300).k).toBe('lock'); // a 300 m não fala altitude
     expect(pickVoice(plane({ lvl: 'LOCK' }), 2000).k).toBe('lock');
     expect(pickVoice(plane({ lvl: 'TRACK' }), 2000).k).toBe('track');
     expect(pickVoice(plane({ lvl: 'SEARCH' }), 2000)).toBe(null);

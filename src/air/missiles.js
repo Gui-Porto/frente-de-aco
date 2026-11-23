@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { scene } from '../core/render.js';
 import { S, planes } from '../core/state.js';
 import { V3, clamp, rand, rv } from '../core/util.js';
-import { H } from '../world/terrain.js';
+import { HV } from '../world/terrain.js';
 import { MISSILES, G, RHO } from '../data/vehicles.js';
-import { spawnP, TEX, fxExplosion, fxTrail } from '../fx/particles.js';
+import { spawnP, TEX, fxExplosion } from '../fx/particles.js';
 import { sndBoom, sndLaunch } from '../fx/audio.js';
 import { nearestPlanePart } from '../combat/ballistics.js';
 import { blastPlaneModules } from '../vehicles/planeDamage.js';
@@ -35,10 +35,10 @@ export class Missile {
     // chama no bocal e rastro do tamanho do motor (Sparrow deixa fumaça mais grossa que o Sidewinder)
     this.sm = smokeOf(M); this.tailZ = missileTail(M);
     this.flame = new THREE.Sprite(FLARE); this.flame.position.set(0, 0, -this.tailZ - this.sm.flame * 0.2); this.flame.scale.setScalar(1e-4); this.mesh.add(this.flame);
-    this.trail = new Trail({ life: this.sm.life, w0: this.sm.w0, w1: this.sm.w1, alpha: 0.92, step: 4, color: 0xd6d2ca });
+    this.trail = new Trail({ life: this.sm.life, w0: this.sm.w0, w1: this.sm.w1, alpha: 0.9, step: 4, color: 0xf0efec, turb: 0.35 }); this.puffD = 0;
     // semiativos (Sparrow/R-3R) são EJETADOS e acendem ~0,35 s depois; IR sai acesa do trilho
     this.ign = M.seeker === 'sarh' ? 0.35 : 0; this.burning = !this.ign; this.spin = Math.random() * 6;
-    if (!this.ign && owner) for (let i = 0; i < 6; i++) spawnP({ pos: this.pos.clone().add(rv(0.4)), vel: owner.vel.clone().multiplyScalar(0.6).add(rv(4)), life: rand(1.2, 2.2), size: 1.2, size1: 4, color: 0xdedbd4, op: 0.5, drag: 2 });
+    if (!this.ign && owner) for (let i = 0; i < 6; i++) spawnP({ pos: this.pos.clone().add(rv(0.4)), vel: owner.vel.clone().multiplyScalar(0.6).add(rv(4)), life: rand(1.2, 2.2), size: 1.2, size1: 4, color: 0xdedbd4, op: 0.5, drag: 2, lit: true });
     missiles.push(this);
   }
   // Alvo rente ao chão (como no WT): o buscador se embaralha. Semiativo: o eco do solo e o reflexo do alvo no chão
@@ -46,7 +46,7 @@ export class Missile {
   // perde o alvo ou mergulha no chão. Pior quanto mais baixo o alvo (< 50 m) e quanto mais o míssil olha para baixo.
   // Infravermelho sofre pouco (só o fundo quente do solo, < 25 m): tremor lateral pequeno.
   clutter(tg, sarh, h) {
-    const agl = tg.pos.y - H(tg.pos.x, tg.pos.z), top = sarh ? 50 : 25;
+    const agl = tg.pos.y - HV(tg.pos.x, tg.pos.z), top = sarh ? 50 : 25;
     if (!tg.eng || agl >= top) return tg.pos;
     const c = 1 - Math.max(0, agl) / top, look = clamp((this.pos.y - tg.pos.y) / Math.max(1, this.pos.distanceTo(tg.pos)) * 3 + 0.5, 0.3, 1);
     this.wob = (this.wob || rand(0, 9)) + h * rand(2, 5);
@@ -127,7 +127,7 @@ export class Missile {
       // colisão com outro avião (passa raspando por quem não era o alvo)
       for (const p of planes) if (p !== tg && p !== this.owner && p.alive && p.pos.distanceTo(_q) < p.def.span * 0.4) { this.detonate(_q, 0, p); return; }
       this.pos.copy(_q);
-      if (this.pos.y < H(this.pos.x, this.pos.z)) { this.detonate(this.pos, 99); return; }
+      if (this.pos.y < HV(this.pos.x, this.pos.z)) { this.detonate(this.pos, 99); return; }
     }
     if (this.t > M.life) { this.detonate(this.pos, 99); return; }
     // visual: corpo alinhado à velocidade e girando devagar; chama tremendo; fita de fumaça só com motor aceso
@@ -136,6 +136,9 @@ export class Missile {
     if (this.burning) {
       const k = 1 + (Math.random() - 0.5) * 0.35; this.flame.scale.setScalar(this.sm.flame * k);
       this.trail.push(_q.copy(this.pos).addScaledVector(_f, -this.tailZ - 0.3), S.now);
+      // tufos de fumaça ao longo do rastro (um a cada ~12 m): dão o volume e são o que se vê de PONTA, onde a fita some
+      this.puffD += this.vel.length() * dt;
+      while (this.puffD > 12) { this.puffD -= 12; const s = this.sm.puff; spawnP({ pos: _q.clone().addScaledVector(_f, -this.puffD).add(rv(s * 0.25)), vel: rv(0.6), life: this.sm.life * rand(0.45, 0.7), size: s * rand(0.9, 1.3), size1: s * rand(3, 4.4), color: 0xf0efec, op: 0.14, drag: 1, rise: 0.25, lit: true }); }
     } else this.flame.scale.setScalar(1e-4);
   }
   detonate(at, miss, hitPlane) {
@@ -143,7 +146,8 @@ export class Missile {
     const M = this.M, p = at.clone();
     // explosão: bola de fogo, nuvem escura que fica no céu e estilhaços incandescentes
     fxExplosion(p, 1.1 + M.warhead / 9); sndBoom(p, false); shakeAt(p, 0.6, 120);
-    for (let i = 0; i < 7; i++) spawnP({ pos: p.clone().add(rv(2)), vel: rv(5).add(this.vel.clone().multiplyScalar(0.05)), life: rand(5, 8), size: 3, size1: 9, color: 0x3c3a37, op: 0.55, drag: 1.2, rise: 0.2 });
+    // nuvem da ogiva: cinza médio-escuro
+    for (let i = 0; i < 7; i++) spawnP({ pos: p.clone().add(rv(2)), vel: rv(5).add(this.vel.clone().multiplyScalar(0.05)), life: rand(4, 6.5), size: 3, size1: 9, color: 0x5a5855, op: 0.5, drag: 1.2, rise: 0.2 });
     for (let i = 0; i < 10; i++) spawnP({ pos: p.clone(), vel: rv(40), life: rand(.3, .7), size: .25, size1: .1, tex: TEX.fire, add: true, color: 0xffd080, grav: 9, drag: .4 });
     // estilhaços: dano cai com a distância; quem estiver a < 2,4× espoleta sofre
     const R = M.fuse * 2.4;
@@ -212,7 +216,7 @@ export function dropCM(p, kind = 'both') {
     p.chaff--; p.chaffUntil = S.now + 3;
     // nuvem: sai com o avião e para em segundos (é isso que a deixa no notch do Doppler)
     chaffs.push({ pos: p.pos.clone(), vel: p.vel.clone().multiplyScalar(0.4), alive: true, t: 0, team: p.team, isChaff: true, grp: {} });
-    for (let i = 0; i < 14; i++) spawnP({ pos: p.pos.clone().add(rv(2)), vel: p.vel.clone().multiplyScalar(0.3).add(rv(10)), life: rand(1.5, 3), size: 1.2, size1: 5, color: 0xc9ccd0, op: 0.35, drag: 2.5 });
+    for (let i = 0; i < 14; i++) spawnP({ pos: p.pos.clone().add(rv(2)), vel: p.vel.clone().multiplyScalar(0.3).add(rv(10)), life: rand(1.5, 3), size: 1.2, size1: 5, color: 0xc9ccd0, op: 0.35, drag: 2.5, lit: true });
   }
   return true;
 }
@@ -222,7 +226,7 @@ export function updateFlares(dt) {
     const f = flares[i]; f.t += dt;
     f.vel.multiplyScalar(Math.exp(-dt * 1.4)); f.vel.y -= 9.81 * dt * 0.5; f.pos.addScaledVector(f.vel, dt);
     spawnP({ pos: f.pos.clone(), life: 0.08, size: 1.6, size1: 0.6, tex: TEX.fire, add: true, color: 0xfff0c0, hdr: 2 });
-    if (Math.random() < 0.6) fxTrail(f.pos.clone(), 0xe8e6e2, 0.7, 2.5);
+    if (Math.random() < 0.6) spawnP({ pos: f.pos.clone(), life: 2.5, size: 0.55, size1: 2.4, color: 0xe8e6e2, op: 0.4, drag: 1, lit: true });
     if (f.t > 4) { f.alive = false; flares.splice(i, 1); }
   }
 }

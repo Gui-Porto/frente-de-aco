@@ -70,7 +70,7 @@ function build() {
   const N = 700, pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) pos.set([rand(-14, 14), rand(0.3, 15), rand(-12, 16)], i * 3);
   const dg = new THREE.BufferGeometry(); dg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  dust = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xffe6c4, size: 0.05, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+  dust = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xffe6c4, size: 0.035, transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending }));
   hs.add(dust);
   hv.built = true;
 }
@@ -79,7 +79,7 @@ function build() {
 export function showcase(key) {
   if (!hv.built) build();
   if (show) hs.remove(show.root);
-  const D = PLANES[key]; show = buildPlane(D); cur = key;
+  const D = PLANES[key]; show = buildPlane(D); cur = key; if (show.ordFit && show.ordFit.length) for (const m of [...show.bombMeshes, ...show.rocketMeshes, ...show.ordFit]) m.visible = false; // jato: bombas/casulos só na batalha de tanques
   // trem de pouso do próprio modelo (o mesmo que desce em voo)
   const G = show.gearMesh; G.userData.anim(1); // baixado, portas abertas
   show.root.position.set(0, G.userData.lift - 0.02, 0);

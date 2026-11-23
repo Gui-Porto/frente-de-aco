@@ -4,18 +4,19 @@ import { S } from '../core/state.js';
 import { settings, saveSettings, resetSettings, ACTIONS, QUALITY, keyName, clearInput } from '../core/settings.js';
 import { $ } from '../core/util.js';
 import { H, SPAWN } from '../world/terrain.js';
-import { VEHICLES, LINEUP, GUNS, hePen, DEG, G, RHO } from '../data/vehicles.js';
+import { VEHICLES, LINEUP, ERAS, setEra, GUNS, hePen, DEG, G, RHO } from '../data/vehicles.js';
 import { buildTank, setArmorView } from '../vehicles/tank.js';
 import { buildPlane } from '../vehicles/plane.js';
 import { audioInit, audioPause, sndUi, eng } from '../fx/audio.js';
 import { cam, resetCam } from '../game/camera.js';
+import { resetAirCam } from '../air/camera.js';
 import { input, lockPointer, exitPointer } from '../game/controls.js';
 import { startMatch, spawnPlayer, clearWorld } from '../game/match.js';
 import { destroyVehicle } from '../combat/ballistics.js';
 import { buildPanels, hint } from './hud.js';
 
 const typeLabel = D => (D.type === 'plane' ? 'AVIÃO' : D.type === 'spaa' ? 'AA' : 'TANQUE');
-let choice = 'sherman', show = null, armorView = false;
+let choice = LINEUP[0], show = null, armorView = false;
 const HANGAR = new THREE.Vector3(0, 0, 334);
 
 // ---------- Hangar ----------
@@ -25,7 +26,7 @@ function buildShowcase(key) {
   show = D.type === 'plane' ? buildPlane(D) : buildTank(D);
   const y = H(HANGAR.x, HANGAR.z);
   show.root.position.set(HANGAR.x, y + (D.type === 'plane' ? 2.4 : 0), HANGAR.z);
-  if (D.type === 'plane') show.root.rotation.z = 0.12;
+  if (D.type === 'plane') { show.root.rotation.z = 0.12; for (const m of show.missileMeshes || []) m.visible = false; } // sem mísseis na batalha de tanques
   scene.add(show.root);
   if (D.type !== 'plane') setArmorView(show, armorView);
   $('#vArm').disabled = D.type === 'plane';
@@ -38,7 +39,7 @@ function fillSheet(key) {
   $('#shName').textContent = D.name;
   let rows;
   if (D.type === 'plane') {
-    rows = [['Massa de combate', `${(D.mass / 1000).toFixed(1).replace('.', ',')} t`], ['Carga alar', `${Math.round(D.mass / D.S)} kg/m²`], ['Motor', `${D.hp} hp (${D.wep} hp WEP)`], ['Potência/peso', `${(D.hp / (D.mass / 1000)).toFixed(0)} hp/t`],
+    rows = [['Massa de combate', `${(D.mass / 1000).toFixed(1).replace('.', ',')} t`], ['Carga alar', `${Math.round(D.mass / D.S)} kg/m²`], ...(D.jet ? [['Motor', `${D.engines > 1 ? D.engines + '× ' : ''}${(D.thrust / D.engines).toFixed(1).replace('.', ',')} kN`], ['Empuxo/peso', (D.thrust * 1000 / (D.mass * G)).toFixed(2).replace('.', ',')]] : [['Motor', `${D.hp} hp (${D.wep} hp WEP)`], ['Potência/peso', `${(D.hp / (D.mass / 1000)).toFixed(0)} hp/t`]]),
       ['Estol (limpo)', `${Math.round(Math.sqrt(2 * D.mass * G / (RHO * D.S * D.clmax)) * 3.6)} km/h`], ['Vel. máx. de mergulho', `${Math.round(D.vne * 3.6)} km/h`],
       ['Armamento', D.guns.map(g => `${g.n}× ${GUNS[g.w].name.split(' ').slice(0, 2).join(' ')}`).join(', ')],
       ['Carga externa', [...D.bombs.map(b => `${b.n}× ${b.name}`), D.rockets ? `${D.rockets.n}× ${D.rockets.name}` : null].filter(Boolean).join(', ')]];
@@ -53,19 +54,29 @@ function fillSheet(key) {
 }
 function slotHtml(key, extra) {
   const D = VEHICLES[key];
-  return `<span class="ic">${typeLabel(D)}</span><span>${D.short || D.name}<small>${D.nation} · ${D.year}</small></span><span class="cost">${extra ?? D.sp + ' SP'}</span>`;
+  return `<span class="ic" data-t="${D.type}">${typeLabel(D)}</span><span>${D.short || D.name}<small>${D.nation} · ${D.year}</small></span><span class="cost">${extra ?? D.sp + ' SP'}</span>`;
 }
 function syncLineup() {
   document.querySelectorAll('#lineup .slot').forEach(s => s.setAttribute('aria-pressed', s.dataset.k === choice));
   fillSheet(choice); buildShowcase(choice);
 }
 export function initMenus() {
-  const box = $('#lineup'); box.innerHTML = '';
-  for (const key of LINEUP) {
-    const b = document.createElement('button'); b.className = 'slot'; b.innerHTML = slotHtml(key); b.dataset.k = key;
-    b.onclick = () => { choice = key; sndUi(); syncLineup(); };
-    b.ondblclick = () => { choice = key; begin(); };
-    box.appendChild(b);
+  const fill = () => {
+    const box = $('#lineup'); box.innerHTML = '';
+    for (const key of LINEUP) {
+      const b = document.createElement('button'); b.className = 'slot'; b.innerHTML = slotHtml(key); b.dataset.k = key;
+      b.onclick = () => { choice = key; sndUi(); syncLineup(); };
+      b.ondblclick = () => { choice = key; begin(); };
+      box.appendChild(b);
+    }
+  };
+  fill();
+  // era da partida: troca o elenco inteiro
+  const eb = $('#eras'); eb.innerHTML = '';
+  for (const k in ERAS) {
+    const b = document.createElement('button'); b.textContent = ERAS[k].name; b.setAttribute('aria-pressed', k === (S.era || 'ww2'));
+    b.onclick = () => { S.era = k; setEra(k); choice = LINEUP[0]; sndUi(); fill(); syncLineup(); eb.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); };
+    eb.appendChild(b);
   }
   syncLineup();
   $('#vExt').onclick = () => { armorView = false; $('#vExt').setAttribute('aria-pressed', true); $('#vArm').setAttribute('aria-pressed', false); buildShowcase(choice); };
@@ -122,10 +133,11 @@ function onSpawnBtn() {
   const v = spawnPlayer(spawnSel); if (!v) return;
   $('#spawn').hidden = true; S.state = 'play';
   resetCam(v.type === 'plane' ? Math.PI : SPAWN[1].yaw);
+  if (v.type === 'plane') resetAirCam(Math.atan2(v.vel.x, v.vel.z));
   buildPanels(v);
   const b = settings.binds, k = id => keyName(b[id][0]);
   hint(v.type === 'plane'
-    ? `Mouse aponta · ${k('a_thr_up')}/${k('a_thr_dn')} potência · ${k('a_roll_l')}/${k('a_roll_r')} rolagem · ${k('a_guns')} armas · ${k('a_bomb')} bombas · ${k('a_rocket')} foguetes · ${k('a_flaps')} flaps · ${k('freelook')} olhar livre`
+    ? `Mouse aponta · ${k('a_thr_up')}/${k('a_thr_dn')} potência · ${k('a_roll_l')}/${k('a_roll_r')} rolagem · ${k('a_guns')} armas · ${k('a_bomb')} bombas (losango) · ${k('a_rocket')} foguetes (círculo) · ${k('a_flaps')} flaps · ${k('freelook')} olhar livre · sem carga: volte à BASE`
     : `${k('t_fwd')}${k('t_left')}${k('t_back')}${k('t_right')} dirigir · ${k('t_fire')} canhão · ${k('t_sight')} mira · ${k('t_zoom')} zoom · ${k('t_mg')} metralhadora · ${k('t_repair')} reparar · ${k('t_cruise_up')}/${k('t_cruise_dn')} cruzeiro`);
   lockPointer();
 }

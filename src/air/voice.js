@@ -25,12 +25,12 @@ export function pickVoice(p, agl) {
   const rw = p.sys.rwr, mw = p.sys.maw;
   if (!rw && !mw) return null;
   const vy = p.vel.y, ground = !p.onGround && vy < -12 ? agl / -vy : Infinity; // segundos até o chão
-  if (ground < 5) return { k: 'pullup', gap: 0.15 };
+  if (ground < 3) return { k: 'pullup', gap: 0.15 };
   const m = mw && mw.list[0];
   if (m) return { k: 'missile', gap: clamp(m.tti * 0.12, 0.1, 1.5) };
   const lvl = rw && rw.top && rw.top.lvl;
   if (lvl === 'GUIDANCE') return { k: 'guidance', gap: 0.4 };
-  if (ground < 10) return { k: 'altitude', gap: 0.7 };
+  if (ground < 5 && agl < 150) return { k: 'altitude', gap: 0.7 }; // só baixo e afundando (dono: a 300 m era alto demais; antes bastavam 10 s até o chão)
   if (lvl === 'LOCK') return { k: 'lock', gap: 1.5 };
   if (lvl === 'TRACK') return { k: 'track', gap: 4 };
   return null;

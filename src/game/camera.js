@@ -47,12 +47,16 @@ export function updateCamera(dt) {
   } else {
     const t = v, D = t.def;
     const sight = (cam.sniper || cam.binoc) && t.alive && t.turretOn && t === p;
+    const look = _dir;
     if (sight) {
-      t.turret.localToWorld(_cp.set(D.turret.w * .22, D.turret.h + .1, D.turret.l * .3));
+      // mira do atirador (como no WT): a luneta segue o MOUSE na hora; o canhão corre atrás na velocidade da
+      // torre/elevação e aparece como a bolinha (#gunret). Presa ao canhão, a imagem se arrastava atrás do mouse.
+      if (cam.binoc) t.turret.localToWorld(_cp.set(D.turret.w * .22, D.turret.h + .1, D.turret.l * .3));
+      else t.gunPivot.localToWorld(_cp.set(0, .28, .7));
       camera.position.copy(_cp); t.root.visible = false; cam.init = false;
       setFov(cam.binoc ? Math.min(cam.fov, 8) : cam.fov);
       if (!cam.binoc) t.aimPoint.copy(_cp).addScaledVector(_dir, 1500);
-      if ((cam.rangeT -= dt) <= 0) { cam.rangeT = .25; const h = raycast(_cp, _dir, 2000, t); cam.range = h ? h.t * 2000 : 0; }
+      if ((cam.rangeT -= dt) <= 0) { cam.rangeT = .25; const h = raycast(_cp, look, 2000, t); cam.range = h ? h.t * 2000 : 0; }
     } else {
       t.root.visible = true;
       setFov(isDown('t_zoom') && t === p ? 32 : 60);
@@ -64,7 +68,7 @@ export function updateCamera(dt) {
       camera.position.copy(cam.pos);
       if (t.alive && t === p && !isDown('freelook')) { const h = raycast(camera.position, _dir, 1800, t); if (h) t.aimPoint.copy(h.point); else t.aimPoint.copy(camera.position).addScaledVector(_dir, 1800); }
     }
-    camera.lookAt(_cb.copy(camera.position).add(_dir));
+    camera.lookAt(_cb.copy(camera.position).add(look));
   }
   if (S.shake > 0 && !REDUCED) { camera.rotation.x += rand(-1, 1) * S.shake * .01; camera.rotation.y += rand(-1, 1) * S.shake * .01; }
   S.shake = Math.max(0, S.shake - dt * 1.5);

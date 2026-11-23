@@ -21,7 +21,7 @@ $('#app').prepend(renderer.domElement);
 
 export const scene = new THREE.Scene();
 export const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.3, 30000);
-export const FOGC = new THREE.Color(0xb7c2c6);
+export const FOGC = new THREE.Color(0xb4c2cf);
 scene.fog = new THREE.FogExp2(FOGC, 0.00075);
 scene.background = FOGC.clone();
 
@@ -70,6 +70,8 @@ let activeScene = scene;
 // troca a cena desenhada (o hangar da Batalha Aérea tem cena própria)
 export function setScene(s) { activeScene = s; renderPass.scene = s; if (gtao) gtao.scene = s; }
 let gtao = null, bloom = null, aa = null;
+// objetos que só existem para projetar sombra (casco simples dos tanques com modelo glTF): somem no passe de normais do GTAO
+export const shadowOnly = new Set();
 const output = new OutputPass();
 let shadowSize = 0;
 export let Q = QUALITY[settings.graphics.quality] || QUALITY.alta;
@@ -88,7 +90,12 @@ export function applyQuality() {
   composer.addPass(renderPass);
   const w = innerWidth * renderer.getPixelRatio(), h = innerHeight * renderer.getPixelRatio();
   if (Q.ao) {
-    if (!gtao) { gtao = new GTAOPass(activeScene, camera, w, h); gtao.blendIntensity = 0.85; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 }); }
+    if (!gtao) { gtao = new GTAOPass(activeScene, camera, w, h); gtao.blendIntensity = 0.85;
+      const rnd = gtao.render.bind(gtao); gtao.render = (...x) => { for (const o of shadowOnly) o.visible = false; rnd(...x); for (const o of shadowOnly) o.visible = true; }; gtao.updateGtaoMaterial({ radius: 0.6, distanceFallOff: 1, thickness: 1 });
+      // o passe de normais/profundidade do GTAO desenha TUDO com material opaco: fumaça, rastro de míssil, chama e marcas
+      // (transparentes, sem escrita de profundidade) entravam como chapa sólida e a oclusão pintava uma laje PRETA em cima
+      // delas (o rastro do míssil "ficou preto"). Ficam fora desse passe, como já ficavam pontos e linhas.
+      gtao._overrideVisibility = function () { const cache = this._visibilityCache; this.scene.traverse(o => { if (!o.visible) return; const m = o.material; if (o.isPoints || o.isLine || o.isLine2 || ((o.isMesh || o.isSprite) && m && !Array.isArray(m) && m.depthWrite === false)) { o.visible = false; cache.push(o); } }); }; }
     composer.addPass(gtao);
   }
   if (Q.bloom) { if (!bloom) bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.22, 0.35, 4.0); composer.addPass(bloom); }
@@ -112,7 +119,7 @@ export function frameLighting(focus, camY, groundY, S, dt) {
   sun.position.copy(focus).addScaledVector(SUN_DIR, 400);
   sun.target.position.copy(focus);
   const agl = camY - groundY;
-  scene.fog.density = lerp(0.00075, 0.00012, clamp(agl / 900, 0, 1)) / Q.far * env.fogMul;
+  scene.fog.density = lerp(0.00042, 0.00006, clamp(agl / 700, 0, 1)) / Q.far * env.fogMul; // ~4 km de visibilidade no chão, serras à vista em altitude (era um paredão cinza a 2,5 km)
   sky.position.copy(camera.position);
   sky.material.uniforms.time.value += dt;
   if (S.flashT > 0) { S.flashT -= dt; if (S.flashT <= 0) flash.intensity = 0; }
@@ -120,4 +127,5 @@ export function frameLighting(focus, camY, groundY, S, dt) {
 // flush explícito a cada quadro: sem ele o Chrome/ANGLE (D3D11) acumulava comandos e a cada ~4,6 s
 // travava 200–550 ms num flush do compositor (medido com trace; a GPU em si gasta ~1,5 ms por quadro)
 const glCtx = renderer.getContext();
-export function renderFrame() { composer.render(); glCtx.flush(); }
+export const afterRender = []; // desenhos por cima do quadro pronto (hit-cam 3D): f() usa o renderer direto na tela
+export function renderFrame() { composer.render(); for (const f of afterRender) f(); glCtx.flush(); }

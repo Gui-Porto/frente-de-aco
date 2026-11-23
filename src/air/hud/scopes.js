@@ -16,15 +16,15 @@ import { kb } from './flight.js';
 // inimigos que você vê a olho ou pelo seu radar).
 // =====================================================================
 const RH = 252, RW = 286, WW = 176, DEG = Math.PI / 180;
+import { SIL } from './flight.js';
 const SCALES = [10000, 20000, 40000];
 
 export function leftPanels(p, T) {
   const k = clamp(Math.min(V.W / 1400, V.H / 820), 0.72, 1);
-  let x = 16;
-  const y = V.H - RH * k - 16;
-  const rd = p.sys.radar;
-  if (rd && !rd.ranging && T.scope) { g.save(); g.translate(x, y); g.scale(k, k); radarScope(p, rd, T); g.restore(); x += (RW + 12) * k; }
-  if (p.sys.rwr || p.sys.maw) { g.save(); g.translate(x, y); g.scale(k, k); rwrScope(p, p.sys.rwr, p.sys.maw, T); g.restore(); }
+  // esquerda: silhueta de dano (flight.js) e o RWR ao lado; direita: o escopo do radar
+  const y = V.H - RH * k - 16, rd = p.sys.radar;
+  if (rd && !rd.ranging && T.scope) { g.save(); g.translate(V.W - RW * k - 16, y); g.scale(k, k); radarScope(p, rd, T); g.restore(); }
+  if (p.sys.rwr || p.sys.maw) { g.save(); g.translate(16 + (SIL.w + 16) * k, y); g.scale(k, k); rwrScope(p, p.sys.rwr, p.sys.maw, T); g.restore(); }
 }
 
 // ---------- radar: B-scope ----------
@@ -93,8 +93,8 @@ function radarScope(p, rd, T) {
 function rwrScope(p, rw, mw, T) {
   plate(0, 0, WW, RH, T);
   ptxt(sysName(T, (rw || mw).W), 22, 22, 13, T.fg, 'left', UI, 700);
-  ptxt(rw ? 'RWR' : 'MAW', WW - 14, 22, 11, T.dim, 'right', UI, 700);
   const cx = WW / 2, cy = 32 + (RH - 66) / 2, R = 66, top = rw && rw.top;
+  ptxt(rw ? 'RWR' : 'MAW', WW - 14, 22, 11, T.dim, 'right', UI, 700);
   g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.arc(cx, cy, R + 4, 0, 7); g.fill();
   // avião no centro
   g.strokeStyle = T.dim; g.lineWidth = 1.2; g.beginPath(); g.moveTo(cx, cy - 7); g.lineTo(cx, cy + 6); g.moveTo(cx - 6, cy); g.lineTo(cx + 6, cy); g.moveTo(cx - 3, cy + 5); g.lineTo(cx + 3, cy + 5); g.stroke();
@@ -103,15 +103,25 @@ function rwrScope(p, rw, mw, T) {
     g.strokeStyle = T.faint; g.lineWidth = 1;
     for (const k of [0.4, 0.75, 1]) { g.beginPath(); g.arc(cx, cy, R * k, 0, 7); g.stroke(); }
     for (let a = 0; a < 360; a += 30) { const r0 = a % 90 ? R - 4 : R - 9, s = Math.sin(a * DEG), c = Math.cos(a * DEG); g.beginPath(); g.moveTo(cx + s * r0, cy - c * r0); g.lineTo(cx + s * R, cy - c * R); g.stroke(); }
-    for (const th of rw ? rw.list.slice(0, rw.W.maxShow) : []) {
-      const rr = R * (0.22 + 0.72 * (1 - th.strength)), x = cx + Math.sin(th.az) * rr, y = cy - Math.cos(th.az) * rr;
-      const col = th.lvl === 'SEARCH' ? T.fg : th.lvl === 'TRACK' ? C.amber : C.enemy;
-      const show = th.lvl !== 'GUIDANCE' || Math.sin(V.blink * 16) > -0.3;
-      if (show) ptxt(th.type || '?', x, y + 4, 12.5, col, 'center', MONO, 500);
-      if (th.lvl === 'LOCK' || th.lvl === 'GUIDANCE') { g.strokeStyle = col; g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y - 11); g.lineTo(x + 11, y); g.lineTo(x, y + 11); g.lineTo(x - 11, y); g.closePath(); g.stroke(); }
-      if (th === top) { g.strokeStyle = col; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y + 2, 13, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
-    }
+    // Como no WT: cada emissor é um rótulo na direção dele (mais perto do centro = sinal mais forte). Contato NOVO vem
+    // circulado por ~2,5 s; radar RASTREANDO você liga uma linha tracejada do centro até ele; LANÇAMENTO (iluminação de
+    // míssil) faz a linha piscar. Rótulos sobrepostos piscam alternados. O estado mais grave aparece no cabeçalho do painel.
+    const L = rw ? rw.list.slice(0, rw.W.maxShow) : [], P = L.map(th => { const rr = R * (0.22 + 0.72 * (1 - th.strength)); return [cx + Math.sin(th.az) * rr, cy - Math.cos(th.az) * rr]; });
+    L.forEach((th, i) => {
+      const [x, y] = P[i];
+      const col = th.lvl === 'SEARCH' ? T.fg : th.lvl === 'TRACK' ? C.amber : C.enemy, launch = th.lvl === 'GUIDANCE';
+      if (th.lvl !== 'SEARCH' && (!launch || Math.sin(V.blink * 16) > -0.2)) {
+        g.strokeStyle = col; g.lineWidth = 1.3; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(cx + Math.sin(th.az) * 9, cy - Math.cos(th.az) * 9); g.lineTo(x - Math.sin(th.az) * 10, y + Math.cos(th.az) * 10); g.stroke(); g.setLineDash([]);
+      }
+      const grp = P.map((q, k) => (Math.hypot(q[0] - x, q[1] - y) < 15 ? k : -1)).filter(k => k >= 0); // quem divide o lugar com este
+      if (grp.length > 1 && Math.floor(V.blink * 2.5) % grp.length !== grp.indexOf(i)) return;
+      ptxt(th.type || '?', x, y + 4, 12.5, col, 'center', MONO, 600);
+      if (S.now - (th.t0 ?? -9) < 2.5) { g.strokeStyle = col; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, 12, 0, 7); g.stroke(); }
+    });
   }
+  // cabeçalho: o pior estado, como o TRACK/LAUNCH que o WT escreve acima do indicador (fica DENTRO do painel do RWR)
+  const st = top && rw.W.res < 90 ? (top.lvl === 'GUIDANCE' ? 'LAUNCH' : top.lvl === 'LOCK' || top.lvl === 'TRACK' ? 'TRACK' : '') : '';
+  if (st && (st !== 'LAUNCH' || Math.sin(V.blink * 16) > -0.2)) { g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(WW - 70, 10, 58, 17); ptxt(st, WW - 41, 23, 12, st === 'LAUNCH' ? C.enemy : C.amber, 'center', MONO, 700); }
   // mísseis do MAW: triângulo vermelho piscando na direção, mais perto do centro quanto mais perto
   const blink = Math.sin(V.blink * 12) > -0.3;
   if (mw && blink) for (const m of mw.list) {
@@ -138,17 +148,21 @@ function quadrants(rw, T, cx, cy, R) {
 
 // ---------- mapa tático (canto superior direito) ----------
 export function tacMap(v, T) {
-  const R = 74, x = V.W - R - 22, y = R + 70, rng = Math.max(5000, (S.airLimit || 4200) * 1.1);
-  g.shadowBlur = 0; g.fillStyle = 'rgba(8,11,9,.5)'; g.beginPath(); g.arc(x, y, R, 0, 7); g.fill();
-  g.strokeStyle = T.faint; g.lineWidth = 1; for (const k of [1, 0.5]) { g.beginPath(); g.arc(x, y, R * k, 0, 7); g.stroke(); }
+  // maior e mais legível: aro claro, anel de meia distância com o valor, cruz fraca e o N girando na borda
+  const R = 98, x = V.W - R - 26, y = R + 66, rng = Math.max(5000, (S.airLimit || 4200) * 1.1);
+  g.shadowBlur = 0; g.fillStyle = 'rgba(10,14,18,.5)'; g.beginPath(); g.arc(x, y, R, 0, 7); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.4)'; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, R, 0, 7); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.13)'; g.lineWidth = 1; g.beginPath(); g.arc(x, y, R * 0.5, 0, 7); g.moveTo(x - R, y); g.lineTo(x + R, y); g.moveTo(x, y - R); g.lineTo(x, y + R); g.stroke();
   const hd = Math.atan2(cam.aimDir.x, cam.aimDir.z), c = Math.cos(hd), s = Math.sin(hd);
+  txt('N', x + s * (R + 10), y - c * (R + 10) + 4, 12, T.accent, 'center', UI);
+  txt(`${(rng / 2000).toFixed(1).replace('.', ',')}`, x + 3, y - R * 0.5 - 3, 9.5, 'rgba(255,255,255,.4)', 'left');
   const to = (wx, wz) => { const dx = wx - v.pos.x, dz = wz - v.pos.z; return [x - (dx * c - dz * s) / rng * R, y - (dx * s + dz * c) / rng * R]; };
   const o = B.obj;
   if (o && o.zone) { const [zx, zy] = to(o.zone.x, o.zone.z); g.strokeStyle = C.sky; g.setLineDash([3, 4]); g.beginPath(); g.arc(zx, zy, o.zone.r / rng * R, 0, 7); g.stroke(); g.setLineDash([]); }
   if (o && o.base) { const [bx, by] = to(o.base.x, o.base.z); g.fillStyle = C.ally; g.fillRect(bx - 4, by - 4, 8, 8); }
   g.save(); g.beginPath(); g.arc(x, y, R, 0, 7); g.clip();
   // pistas: a sua em azul, a inimiga em vermelho
-  for (const a of activeFields()) { const [ax, ay] = to(a.x, a.z - a.len / 2), [bx, by] = to(a.x, a.z + a.len / 2); g.strokeStyle = a.team === v.team ? C.ally : C.enemy; g.lineWidth = 3; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
+  for (const a of activeFields()) { const [ax, ay] = to(a.x, a.z - a.len / 2), [bx, by] = to(a.x, a.z + a.len / 2); g.strokeStyle = a.team === v.team ? C.ally : C.enemy; g.lineWidth = 4; g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); }
   g.lineWidth = 1;
   const rd = v.sys && v.sys.radar && !v.sys.radar.ranging ? v.sys.radar : null;
   for (const e of planes) {
@@ -161,10 +175,10 @@ export function tacMap(v, T) {
     else continue;
     const [qx, qy] = to(px, pz), eh = Math.atan2(e.vel.x, e.vel.z) - hd;
     g.save(); g.translate(qx, qy); g.rotate(-eh); g.globalAlpha = 0.35 + 0.65 * fresh; g.fillStyle = ally ? C.ally : C.enemy;
-    g.beginPath(); g.moveTo(0, -5); g.lineTo(3.5, 4); g.lineTo(-3.5, 4); g.closePath(); g.fill(); g.restore();
+    g.beginPath(); g.moveTo(0, -7); g.lineTo(4.5, 5); g.lineTo(0, 2.5); g.lineTo(-4.5, 5); g.closePath(); g.fill(); g.restore();
   }
   for (const m of missiles) if (m.pos.distanceTo(v.pos) < 2000) { const [px, py] = to(m.pos.x, m.pos.z); g.fillStyle = '#fff'; g.fillRect(px - 1, py - 1, 2, 2); }
   g.restore();
-  g.fillStyle = T.fg; g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 4, y + 4); g.lineTo(x - 4, y + 4); g.closePath(); g.fill();
-  txt(`${Math.round(rng / 1000)} km`, x + R - 4, y + R + 12, 10, T.dim, 'right');
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x, y - 8); g.lineTo(x + 5, y + 5); g.lineTo(x, y + 2.5); g.lineTo(x - 5, y + 5); g.closePath(); g.fill();
+  txt(`${Math.round(rng / 1000)} km`, x + R - 4, y + R + 14, 11, 'rgba(255,255,255,.6)', 'right');
 }

@@ -1,15 +1,16 @@
 import { updatePlaneFx, updateFlakes } from '../vehicles/planeFx.js';
-import { camera, frameLighting, renderFrame } from '../core/render.js';
+import { camera, frameLighting, renderFrame, renderer, afterRender } from '../core/render.js';
 import { S, tanks, planes, projs } from '../core/state.js';
 import { endFrame } from '../core/settings.js';
 import { V3, rv } from '../core/util.js';
-import { H } from '../world/terrain.js';
+import { H, HV } from '../world/terrain.js';
 import { world, STEP } from '../world/physics.js';
-import { grass, waveFlags } from '../world/scenery.js';
+import { grass, waveFlags, BUILDS, TREES, HEDGES } from '../world/scenery.js';
 import { Q } from '../core/render.js';
-import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle, fireProj } from '../combat/ballistics.js';
+import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, cookOff, blast } from '../combat/ballistics.js';
 import { updateParts, fxBurn, spawnP, TEX } from '../fx/particles.js';
-import { eng } from '../fx/audio.js';
+import { eng, tankVoices } from '../fx/audio.js';
+import * as AUDIO from '../fx/audio.js';
 import { updateMatch, startMatch, spawnPlayer, mkWho, spawnVehicle } from './match.js';
 import { controlPlayer } from './controls.js';
 import { updateCamera, cam } from './camera.js';
@@ -17,7 +18,7 @@ import { updateHUD } from '../ui/hud.js';
 import { initMenus, openSpawn } from '../ui/menus.js';
 import { B } from '../air/battle.js';
 import { updateAirCamera, aimAt, acam } from '../air/camera.js';
-import { updateAirHUD } from '../air/hud.js';
+import { updateAirHUD, updateFlyHUD } from '../air/hud.js';
 import { updateHangar } from '../air/hangar.js';
 import { airAudio, airAudioOff } from '../air/sound.js';
 import { initAir } from '../air/screens.js';
@@ -26,7 +27,7 @@ import { missiles, launchMissile } from '../air/missiles.js';
 let acc = 0;
 export function simulate(dt) {
   S.now += dt;
-  if (S.mode === 'air') B.update(dt); else controlPlayer(dt);
+  if (S.mode === 'air') B.update(dt); else { controlPlayer(dt); B.systemsStep(dt); }
   for (const t of tanks) if (t.brain) t.brain.update(dt);
   for (const p of planes) if (p.brain) p.brain.update(dt);
   for (const t of tanks) { if (t.alive) t.drive(dt); t.updateTurret(dt); t.updateSystems(dt); }
@@ -36,6 +37,7 @@ export function simulate(dt) {
   if (n === 8) acc = 0;
   for (const t of tanks) {
     t.afterPhysics(dt);
+    if (!t.alive) cookOff(t, dt);
     if (!t.alive && t.burnT > 0) { t.burnT -= dt; if ((t.smokeT -= dt) < 0) { t.smokeT = .22; fxBurn(t.centerPos(new V3()).add(rv(1)), 1.2); } }
   }
   for (const p of planes) { p.physics(dt); p.updateWeapons(dt); p.applyTransform(); updatePlaneFx(p, dt); }
@@ -51,28 +53,30 @@ function frame(ts) {
   const menu = S.state === 'menu' || S.state === 'airmenu';
   if (dt > 0 && !menu) simulate(dt);
   else if (menu) updateParts(dt);
-  if (S.state === 'airmenu') updateHangar(dt); else if (S.mode === 'air') updateAirCamera(dt); else updateCamera(dt);
+  if (S.state === 'airmenu') updateHangar(dt); else if (S.mode === 'air' || (S.player && S.player.type === 'plane' && S.player.alive && S.state === 'play')) updateAirCamera(dt); else updateCamera(dt); // avião do jogador usa a câmera aérea nos dois modos
   const p = S.player, f = S.state === 'menu' && cam.hangar ? cam.hangar.pos : p && p.alive ? p.pos : S.spectate ? S.spectate.pos : camera.position;
   frameLighting(f, camera.position.y, H(camera.position.x, camera.position.z), S, dt);
   grass.count = Q.grass; grass.update(dt);
   if ((flagT += dt) > 0.05) { waveFlags(S.now + ts / 1000); flagT = 0; }
   // motores
-  if (S.mode === 'air' || S.state === 'airmenu') { if (eng.tank) eng.tank.g.gain.value = eng.tank.track.g.gain.value = 0; airAudio(dt || 0.016); }
+  // quem voa na batalha de tanques ouve o mesmo áudio da Batalha Aérea (motor por perfil, vento, RWR, voz)
+  const flying = S.mode !== 'air' && p && p.alive && p.type === 'plane' && S.state === 'play';
+  if (S.mode === 'air' || S.state === 'airmenu' || flying) { if (eng.tank) eng.tank.set(false); tankVoices([]); airAudio(dt || 0.016); }
   else if (eng.tank) {
     airAudioOff(); // gravações/vozes do modo aéreo não ficam tocando na batalha de tanques
     const on = p && p.alive && S.state === 'play' && !S.paused && p.type !== 'plane';
-    eng.tank.g.gain.value = on ? 0.05 + Math.abs(p.throttle) * 0.03 : 0;
-    if (on) { eng.tank.o.frequency.value = 22 + p.rpm / 60; eng.tank.o2.frequency.value = 11 + p.rpm / 120; eng.tank.lfo.frequency.value = (22 + p.rpm / 60) / 4; }
-    // esteiras: chocalho dos elos no ritmo da velocidade
-    const sp = on ? Math.abs(p.vFwd || 0) : 0;
-    eng.tank.track.g.gain.value = Math.min(1, sp / 6) * 0.07; eng.tank.track.lfo.frequency.value = 2 + sp * 2.2; eng.tank.track.f.frequency.value = 700 + sp * 40;
+    // motor pela rotação real e pela carga (acelerador ou giro); esteiras no ritmo da velocidade
+    eng.tank.set(on, on ? p.rpm : 0, on ? Math.max(Math.abs(p.throttle), Math.abs(p.steer)) : 0, on ? Math.abs(p.vFwd || 0) : 0);
+    // os três blindados mais próximos da câmera também roncam (antes só o do jogador tinha som)
+    const nearT = S.paused || S.state === 'menu' ? [] : tanks.filter(t => t.alive && t !== p && t.pos.distanceToSquared(camera.position) < 48400).sort((a, b) => a.pos.distanceToSquared(camera.position) - b.pos.distanceToSquared(camera.position)).slice(0, 3);
+    tankVoices(nearT.map(t => ({ pos: t.pos, rpm: t.rpm || 700, load: Math.max(Math.abs(t.throttle || 0), Math.abs(t.steer || 0)) })));
     const pl = p && p.alive && p.type === 'plane' && !S.paused ? p : null;
     let near = pl, nd = 0;
     if (!near) { nd = 1e9; for (const q of planes) { if (!q.alive) continue; const d = q.pos.distanceTo(camera.position); if (d < nd) { nd = d; near = q; } } }
     eng.air.g.gain.value = near && !S.paused && S.state !== 'menu' ? (pl ? 0.06 : 0.12 / (1 + nd / 120)) * (near.engineOn ? 1 : 0.1) : 0;
     if (near) { eng.air.o.frequency.value = 45 + near.throttle * 40 + (near.wep ? 8 : 0); eng.air.o2.frequency.value = eng.air.o.frequency.value / 2; if (eng.air.lfo) eng.air.lfo.frequency.value = eng.air.o.frequency.value / 6; }
   }
-  if (S.mode === 'air') updateAirHUD(dt || 0.016); else updateHUD(dt || 0.016);
+  if (S.mode === 'air') updateAirHUD(dt || 0.016); else { updateHUD(dt || 0.016); updateFlyHUD(dt || 0.016); }
   renderFrame();
   endFrame();
 }
@@ -83,4 +87,5 @@ requestAnimationFrame(frame);
 // gancho para testes automatizados
 import * as R from '../core/render.js';
 window.__r = R;
-window.__game = { airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };
+import * as TRAILS from '../fx/trails.js'; import * as PARTS from '../fx/particles.js'; import * as AIRHUD from '../air/hud.js'; import * as AIRCAM from '../air/camera.js'; import * as MODELS from '../vehicles/modelLibrary.js'; import * as DATA from '../data/vehicles.js'; import * as DMG from '../vehicles/planeDamage.js';
+window.__game = { mods: { TRAILS, PARTS, AIRHUD, AIRCAM, MODELS, DATA, DMG }, audio: AUDIO, BUILDS, TREES, HEDGES, blast, renderer, renderFrame, afterRender, updateHUD, airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, HV, cam, camera };

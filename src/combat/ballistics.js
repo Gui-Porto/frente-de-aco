@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { scene, camera } from '../core/render.js';
 import { S, tanks, planes, projs, popped } from '../core/state.js';
 import { V3, QUAT, clamp, lerp, rand, rv } from '../core/util.js';
-import { H, terrainNormal } from '../world/terrain.js';
-import { obstNear, HEDGES, addCrater } from '../world/scenery.js';
+import { HV, terrainNormal } from '../world/terrain.js';
+import { obstNear, HEDGES, addCrater, damageObst, blastBuildings } from '../world/scenery.js';
 import { RAPIER, world, COL } from '../world/physics.js';
 import { PLANES, prepAmmo, penAt, hePen, DEG, G } from '../data/vehicles.js';
-import { spawnP, TEX, fxDust, fxSparks, fxExplosion, fxBigBlast, fxTrail } from '../fx/particles.js';
+import { spawnP, TEX, fxDust, fxSparks, fxExplosion, fxBigBlast, fxTrail, fxGroundHit } from '../fx/particles.js';
 import { sndBoom, sndPing, sndClank, sndSnap } from '../fx/audio.js';
 import { MODS } from '../vehicles/tank.js';
 import { hitPlaneModules, blastPlaneModules } from '../vehicles/planeDamage.js';
@@ -52,7 +52,7 @@ export function segmentHit(p, q, ignore, opts) {
   const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z, len2 = dx * dx + dy * dy + dz * dz || 1e-9;
   let best = 1, hit = null;
   _o[0] = p.x; _o[1] = p.y; _o[2] = p.z; _d[0] = dx; _d[1] = dy; _d[2] = dz;
-  for (const b of obstNear(p.x, p.z, q.x, q.z)) { const r = segBox(_o, _d, b.mn, b.mx); if (r && r.t < best) { best = r.t; hit = { type: 'obst' }; } }
+  for (const b of obstNear(p.x, p.z, q.x, q.z)) { const r = segBox(_o, _d, b.mn, b.mx); if (r && r.t < best) { best = r.t; hit = { type: 'obst', obst: b }; } }
   if (opts && opts.hedges) for (const b of HEDGES) { const r = segBox(_o, _d, b.mn, b.mx); if (r && r.t < best) { best = r.t; hit = { type: 'hedge' }; } }
   for (const t of tanks) {
     if (t === ignore) continue;
@@ -73,9 +73,9 @@ export function segmentHit(p, q, ignore, opts) {
   const segLen = Math.sqrt(len2) * best, steps = Math.max(1, Math.ceil(segLen / 2));
   if (!(p.y > 400 && q.y > 400)) for (let i = 1; i <= steps; i++) {
     const tt = best * i / steps;
-    if (p.y + dy * tt < H(p.x + dx * tt, p.z + dz * tt)) {
+    if (p.y + dy * tt < HV(p.x + dx * tt, p.z + dz * tt)) {
       let a = best * (i - 1) / steps, b = tt;
-      for (let k = 0; k < 10; k++) { const m = (a + b) / 2; if (p.y + dy * m < H(p.x + dx * m, p.z + dz * m)) b = m; else a = m; }
+      for (let k = 0; k < 10; k++) { const m = (a + b) / 2; if (p.y + dy * m < HV(p.x + dx * m, p.z + dz * m)) b = m; else a = m; }
       best = b; hit = { type: 'ground' }; break;
     }
   }
@@ -123,10 +123,12 @@ export function evalArmor(t, hit, am, speed) {
   const angN = Math.max(0, ang - norm);
   let thick = arm.t, track = false;
   if (hit.part === 'hull' && hit.axis === 0 && hit.lp[1] < D.clr + 0.5) { thick += 20; track = true; }
+  // armor.ce: quanto a composta da frente (casco e torre) rende a mais contra carga oca (os valores da ficha são contra energia cinética)
+  if (am.type === 'HEAT' && D.armor.ce && /glacis|frontal|frente/.test(arm.key)) thick *= D.armor.ce;
   const eff = thick / Math.cos(angN * DEG);
   const pen = penAt(am, speed) * rand(0.95, 1.05);
   const over = am.cal > 3 * arm.t;
-  const [r0, r1] = am.type === 'APCR' ? [60, 68] : am.type === 'MG' || am.type === 'HEF' ? [55, 70] : [70, 80];
+  const [r0, r1] = am.type === 'APFSDS' ? [78, 84] : am.type === 'APCR' ? [60, 68] : am.type === 'MG' || am.type === 'HEF' ? [55, 70] : [70, 80];
   const ricoP = over || ang <= r0 || am.type === 'HE' ? 0 : clamp((ang - r0) / (r1 - r0), 0, 1);
   return { arm, ang, eff, pen, ricoP, track };
 }
@@ -140,13 +142,18 @@ const shellMat = new THREE.MeshBasicMaterial({ color: 0xffd08a, fog: false });
 // do carregamento não serve: compila para o canvas, e o compositor desenha num render target linear)
 { const w = new THREE.Mesh(shellGeo, shellMat); w.scale.setScalar(1e-4); w.frustumCulled = false; scene.add(w); }
 const MAXTR = 900;
-export const tracerMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 4).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false }), MAXTR);
-tracerMesh.frustumCulled = false; tracerMesh.count = 0; scene.add(tracerMesh);
+// Traçantes: risco incandescente em HDR (com cor ≤ 1 saía laranja-marrom apagado contra o céu), cor por nação como
+// no WT (EUA/Reino Unido vermelho-alaranjado, URSS verde, Alemanha amarelo-claro) e engrossa com a distância para
+// nunca ficar mais fino que ~1 pixel. A cor por instância existe desde o carregamento (o programa já nasce com ela).
+export const tracerMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 5).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), MAXTR);
+tracerMesh.frustumCulled = false; tracerMesh.count = 1; tracerMesh.setMatrixAt(0, new THREE.Matrix4().makeScale(0, 0, 0)); scene.add(tracerMesh);
+const TRC = { URSS: new THREE.Color(0.35, 2.8, 0.4), Alemanha: new THREE.Color(3.2, 2.3, 0.45), _: new THREE.Color(3.6, 0.55, 0.2) }; // saturadas e não muito acima de 1: mais brilho e o AgX lava para branco
+tracerMesh.setColorAt(0, TRC._);
 const bombGeo = (() => { const b = new THREE.CylinderGeometry(0.5, 0.5, 2.6, 10); b.rotateX(Math.PI / 2); return b; })();
 const bombMat = new THREE.MeshStandardMaterial({ color: 0x3d4130, roughness: .7, metalness: .3 });
 for (const pd of Object.values(PLANES)) {
   for (const b of pd.bombs) { b.type = 'BOMB'; b.cal = b.d * 1000; prepAmmo(Object.assign(b, { v: 200 }), b.cal, 0.22); }
-  if (pd.rockets) { const r = pd.rockets; r.type = 'ROCKET'; r.cal = r.m > 20 ? 127 : 82; prepAmmo(r, r.cal, 0.35); }
+  if (pd.rockets) { const r = pd.rockets; r.type = 'ROCKET'; r.cal = r.cal || (r.m > 20 ? 127 : 82); prepAmmo(r, r.cal, 0.35); }
 }
 export function fireProj(owner, pos, vel, am, kind, extra) {
   const pr = Object.assign({ p: pos.clone(), v: vel.clone(), am, owner, kind, life: kind === 'bomb' ? 40 : kind === 'bullet' ? 4 : 8, age: 0, bounced: false, ignore: owner, tracer: false }, extra || {});
@@ -170,7 +177,7 @@ export function updateProjs(dt) {
     for (let k = 0; k < n && !dead; k++) {
       const sp = pr.v.length(), kk = pr.am.k * sp;
       pr.v.x += -kk * pr.v.x * h; pr.v.y += (-G - kk * pr.v.y) * h; pr.v.z += -kk * pr.v.z * h;
-      if (pr.kind === 'rocket' && pr.age < 1.1) { pr.v.addScaledVector(_n.copy(pr.v).normalize(), 260 * h); }
+      if (pr.kind === 'rocket' && pr.age < 1.1) { pr.v.addScaledVector(_n.copy(pr.v).normalize(), 0.5 * pr.am.v * h); } // sai a 0,45·v e o motor dá o resto em 1,1 s: am.v = velocidade real no fim da queima
       _q.copy(pr.p).addScaledVector(pr.v, h);
       const hit = segmentHit(pr.p, _q, pr.ignore, pr.kind === 'bullet' && pr.p.y > 400 ? null : null);
       if (hit) dead = onImpact(pr, hit);
@@ -194,11 +201,13 @@ export function updateProjs(dt) {
       pr.mesh.lookAt(_tp.copy(pr.mesh.position).add(_n));
       if (pr.kind === 'rocket' && pr.age < 1.4) { spawnP({ pos: pr.p.clone(), life: .12, size: .7, size1: .3, tex: TEX.fire, add: true, color: 0xffa040 }); fxTrail(pr.p.clone(), 0xc8c4bb, .7, 1.6); }
     } else if (pr.tracer && tc < MAXTR) {
-      _tq.setFromUnitVectors(_zf, _n); _ts.set(1, 1, Math.min(9, pr.v.length() * 0.012)); _tp.copy(pr.p).addScaledVector(_n, -_ts.z * 0.5);
-      _tm.compose(_tp, _tq, _ts); tracerMesh.setMatrixAt(tc++, _tm);
+      const w = clamp(pr.p.distanceTo(camera.position) * 0.022, 1.2, 30) * (pr.am.cal >= 20 ? 1.3 : 1);
+      _tq.setFromUnitVectors(_zf, _n); _ts.set(w, w, Math.min(20, pr.v.length() * 0.022)); _tp.copy(pr.p).addScaledVector(_n, -_ts.z * 0.5);
+      _tm.compose(_tp, _tq, _ts); tracerMesh.setColorAt(tc, TRC[pr.owner && pr.owner.def && pr.owner.def.nation] || TRC._); tracerMesh.setMatrixAt(tc++, _tm);
     }
   }
-  tracerMesh.count = tc; tracerMesh.instanceMatrix.needsUpdate = true;
+  if (!tc) { _tm.makeScale(0, 0, 0); tracerMesh.setMatrixAt(tc++, _tm); } // sempre uma instância (invisível): o programa do traçante existe antes do 1º tiro
+  tracerMesh.count = tc; tracerMesh.instanceMatrix.needsUpdate = true; tracerMesh.instanceColor.needsUpdate = true;
 }
 export function clearProjs() { for (const p of projs) if (p.mesh) scene.remove(p.mesh); projs.length = 0; }
 
@@ -208,35 +217,38 @@ function onImpact(pr, hit) {
     if (pr.age < 1.0) { fxDust(hit.point, 10, 1); sndClank(hit.point); return true; } // espoleta não armada
     blast(hit.point, am.tnt, pr.owner, { bomb: true, direct: hit.type === 'tank' ? hit.tank : null }); return true;
   }
-  if (pr.kind === 'rocket') { blast(hit.point, am.tnt, pr.owner, { direct: hit.type === 'tank' ? hit.tank : null, kinetic: am.m > 20 ? 30 : 12 }); return true; }
+  if (pr.kind === 'rocket') { blast(hit.point, am.tnt, pr.owner, { direct: hit.type === 'tank' ? hit.tank : null, kinetic: am.pen ? (hit.type === 'tank' ? am.pen : 0) : am.m > 20 ? 30 : 12 }); return true; } // am.pen: carga oca, só no impacto direto
   if (hit.type === 'ground') {
     terrainNormal(hit.point.x, hit.point.z, _n);
     const cosI = -dir.dot(_n);
-    if (cosI < 0.12 && sp > 300 && !pr.bounced && pr.kind === 'shell' && am.type !== 'HE') {
+    if (cosI < 0.12 && sp > 300 && !pr.bounced && pr.kind === 'shell' && am.type !== 'HE' && am.type !== 'HEAT') {
       pr.v.addScaledVector(_n, -2 * pr.v.dot(_n)).multiplyScalar(0.7);
       pr.p.copy(hit.point).addScaledVector(_n, 0.1); pr.bounced = true; pr.ignore = null;
       fxDust(hit.point, 4, .7); return false;
     }
     if (pr.kind === 'bullet') {
-      if (Math.random() < 0.35) spawnP({ pos: hit.point, vel: new V3(rand(-1, 1), rand(2, 5), rand(-1, 1)), life: rand(.6, 1.2), size: .5, size1: 1.8, color: 0x9c8a68, op: .7 });
+      // jato de terra em cada bala (a rajada risca o chão); longe da câmera não gasta partícula (toda bala perdida no ar cai em algum lugar)
+      if (hit.point.distanceToSquared(camera.position) < 1800 * 1800) fxGroundHit(hit.point, am.cal, (am.he || 0) > 0.005);
       if (am.type === 'HEF') blast(hit.point, am.tnt, pr.owner, {});
       return true;
     }
     fxDust(hit.point, 10, 1);
-    if (am.type === 'HE') blast(hit.point, am.tnt, pr.owner, {}); else if (am.type === 'APHE') fxExplosion(hit.point, .45);
+    if (am.type === 'HE' || am.type === 'HEAT') blast(hit.point, am.tnt, pr.owner, {}); else if (am.type === 'APHE') fxExplosion(hit.point, .45);
     sndBoom(hit.point, false); addCrater(hit.point, am.type === 'HE' ? 1.6 : 0.9);
     return true;
   }
   if (hit.type === 'obst') {
     if (pr.kind === 'bullet') { if (Math.random() < .5) fxSparks(hit.point, 2); if (am.type === 'HEF') blast(hit.point, am.tnt, pr.owner, {}); return true; }
-    fxDust(hit.point, 8, .9); fxSparks(hit.point, 4); sndBoom(hit.point, false);
-    if (am.type === 'HE') blast(hit.point, am.tnt, pr.owner, {});
+    fxDust(hit.point, 8, .9); fxSparks(hit.point, 4); sndBoom(hit.point, false); damageObst(hit.obst, 25); /* perfurante: abre a casa em ~5 tiros */
+    if (am.type === 'HE' || am.type === 'HEAT') blast(hit.point, am.tnt, pr.owner, {});
     return true;
   }
   if (hit.type === 'plane') return impactPlane(pr, hit, sp, dir);
   return impactTank(pr, hit, sp, dir);
 }
 
+const _brl = new V3();
+const NARROW = { APCR: true, APFSDS: true, HEAT: true }; // núcleo/dardo/jato: trajeto fino, pouco estilhaço
 function impactTank(pr, hit, sp, dir) {
   const t = hit.tank, am = pr.am, sh = pr.owner, shell = pr.kind === 'shell', isP = sh && sh.isPlayer;
   if (sh && sh.team !== t.team) t.lastHitBy = sh;
@@ -245,6 +257,11 @@ function impactTank(pr, hit, sp, dir) {
   const mat = hit.part === 'hull' ? t.root.matrixWorld : t.turret.matrixWorld;
   const nW = new V3(...E.arm.n).transformDirection(mat);
   if (E.track && t.alive && (shell ? Math.random() < 0.75 : E.pen > 15 && Math.random() < 0.1)) { t.breakMod('tracks'); if (t.isPlayer) showDmg('Esteira rompida'); }
+  // frente da torre, em cima do eixo do canhão: o projétil pega o cano/mantelete por fora
+  if (hit.part !== 'hull' && t.alive && !t.mods.barrel.broken) {
+    const T = t.def.turret, l = _brl.copy(hit.point).applyMatrix4(t.invTurret);
+    if (l.z > T.l / 2 - 0.05 && Math.abs(l.x) < 0.24 && Math.abs(l.y - T.h * 0.5) < 0.24 && Math.random() < (shell ? 0.6 : 0.03)) { t.breakMod('barrel'); if (t.isPlayer) showDmg('Cano danificado'); }
+  }
   if (isP && shell) S.stats.hits++;
   if (Math.random() < E.ricoP) {
     pr.v.addScaledVector(nW, -2 * pr.v.dot(nW)).multiplyScalar(0.55).add(rv(30));
@@ -259,11 +276,13 @@ function impactTank(pr, hit, sp, dir) {
     if (shell) {
       fxSparks(hit.point, 8); sndClank(hit.point);
       if (am.type === 'APHE') fxExplosion(hit.point, .35);
+      if (am.type === 'HEAT') blast(hit.point, am.tnt, sh, { direct: t, hit, small: true }); // o jato não passou: sobra a explosão por fora
       if (isP) xrayShot(t, hit, dir, E, am, 'NÃO PENETROU', `${Math.round(E.eff)} mm efetivos · ${Math.round(E.pen)} mm de perfuração`, 'enemy', null);
       if (t.isPlayer) { showDmg(`Impacto na ${E.arm.key} · sem penetração`, true); shakeCam(.25); }
     } else if (Math.random() < .25) fxSparks(hit.point, 2);
     return true;
   }
+  if (am.type === 'HEAT') { fxExplosion(hit.point, .6); sndBoom(hit.point, false); }
   postPen(t, pr, hit, dir, E);
   return true;
 }
@@ -288,7 +307,7 @@ function postPen(t, pr, hit, dir, E) {
   } else {
     // munição sólida: trajetória interna + estilhaços da chapa (cone)
     const len = shell ? Math.min(4, 0.8 + (E.pen - E.eff) / 35) : Math.min(1.2, 0.3 + (E.pen - E.eff) / 20);
-    const spall = shell ? (am.type === 'APCR' ? 0.18 : 0.35) : 0.05;
+    const spall = shell ? (NARROW[am.type] ? 0.18 : 0.35) : 0.05;
     const bx = lp.x + ld.x * len, by = lp.y + ld.y * len, bz = lp.z + ld.z * len;
     end = [bx, by, bz];
     for (const c of comps) {
@@ -298,9 +317,9 @@ function postPen(t, pr, hit, dir, E) {
       if (d < c.r + spall && Math.random() < (d < c.r ? (shell ? 1 : 0.5) : 0.6)) hits.add(c);
       if (!shell) continue;
       const vx = c.p[0] - lp.x, vy = c.p[1] - lp.y, vz = c.p[2] - lp.z, dd = Math.hypot(vx, vy, vz);
-      if (dd < 2.8 && (vx * ld.x + vy * ld.y + vz * ld.z) / dd > 0.95 && Math.random() < (am.type === 'APCR' ? .25 : .45)) hits.add(c);
+      if (dd < 2.8 && (vx * ld.x + vy * ld.y + vz * ld.z) / dd > 0.95 && Math.random() < (NARROW[am.type] ? .25 : .45)) hits.add(c);
     }
-    if (shell) for (let i = 0; i < (am.type === 'APCR' ? 8 : 16); i++) { const v = ld.clone().add(rv(.28)).normalize().multiplyScalar(rand(1.2, 2.8)); frags.push([[lp.x, lp.y, lp.z], [lp.x + v.x, lp.y + v.y, lp.z + v.z]]); }
+    if (shell) for (let i = 0; i < (NARROW[am.type] ? 8 : 16); i++) { const v = ld.clone().add(rv(.28)).normalize().multiplyScalar(rand(1.2, 2.8)); frags.push([[lp.x, lp.y, lp.z], [lp.x + v.x, lp.y + v.y, lp.z + v.z]]); }
   }
   const before = comps.map(c => c.kind === 'crew' ? c.ref.alive : !(c.name in t.mods) || !t.mods[c.name].broken);
   const names = applyCompHits(t, hits, am.type === 'APHE' ? 0.45 : 0.28);
@@ -339,7 +358,7 @@ export function applyCompHits(t, hits, detChance) {
 const _bl = new V3();
 export function blast(pos, tnt, owner, opts = {}) {
   const R = 1.2 + 2.6 * Math.cbrt(tnt), pen0 = hePen(tnt) + (opts.kinetic || 0);
-  const sc = Math.cbrt(tnt);
+  const sc = Math.cbrt(tnt); blastBuildings(pos, tnt);
   if (tnt >= 20) { fxBigBlast(pos, Math.min(2.6, sc / 3)); sndBoom(pos, true); addCrater(pos, 2 + sc * 1.2); shakeAt(pos, 1.6, 140); }
   else if (tnt > 0.2) { fxExplosion(pos, clamp(sc * .9, .5, 1.6)); sndBoom(pos, tnt > 2); addCrater(pos, 1 + sc); shakeAt(pos, .5, 40); }
   else { spawnP({ pos, life: .12, size: .8 + sc * 4, size1: .3, tex: TEX.fire, add: true, color: 0xffc070 }); spawnP({ pos, life: rand(.8, 1.4), size: .6 + sc * 5, size1: 2 + sc * 10, color: 0x3a3631, op: .7, drag: 2 }); }
@@ -439,15 +458,37 @@ export function destroyVehicle(v, killer, cause) {
   onVehicleDestroyed(v, k, cause);
 }
 function onTankDestroyed(t, cause) {
-  t.throttle = 0; t.steer = 0; t.fire = 0; t.deadT = 0; t.burnT = cause === 'ammo' ? 45 : 28;
+  const ammo = cause === 'ammo';
+  t.throttle = 0; t.steer = 0; t.fire = 0; t.deadT = 0; t.burnT = ammo ? 45 : 28;
   for (const m of t.mats) m.color.multiplyScalar(0.28);
-  const center = t.centerPos(new V3());
-  if (cause === 'ammo') {
-    fxExplosion(center, 2.2); sndBoom(center, true); shakeAt(center, 1.2, 80);
-    const obj = t.turret; scene.attach(obj); t.turretOn = false;
+  const center = t.centerPos(new V3()), up = new V3(0, 1, 0).applyQuaternion(t.q), sideV = new V3(1, 0, 0).applyQuaternion(t.q);
+  // o canhão cai no batente e o casco leva o tranco da explosão interna
+  t.gunPitch = -t.def.gun.dep * DEG * 0.9; if (t.turretOn) t.gunPivot.rotation.x = -t.gunPitch;
+  t.impulse(up.clone().multiplyScalar(t.mass * (ammo ? 2.2 : 0.8)).addScaledVector(sideV, t.mass * rand(-0.5, 0.5)), center);
+  // rodas arrancadas (só quem tem rodas separadas): viram destroços que rolam
+  for (let n = ammo ? rand(2, 5) | 0 : Math.random() < 0.6 ? 1 : 0; n > 0 && t.wheels.length > 4; n--) {
+    const w = t.wheels.splice(Math.floor(Math.random() * t.wheels.length), 1)[0]; scene.attach(w.m);
+    spawnDebris(w.m, sideV.clone().multiplyScalar(w.side * rand(3, 8)).addScaledVector(up, rand(3, 9)).add(t.vel), rv(7), [0.12, w.r, w.r], [0, 0, 0], 250);
+  }
+  // cozimento da munição: estouros e jatos de faísca pelas escotilhas nos segundos seguintes (loop.js consome t.cook)
+  t.cook = []; for (let i = 0, at = 0.25; i < (ammo ? 9 : 3); i++, at += rand(0.25, 0.9)) t.cook.push(at);
+  if (ammo) {
+    fxExplosion(center, 2.2); fxBigBlast(center, 1.4); sndBoom(center, true); shakeAt(center, 1.2, 80);
+    const obj = t.turret; scene.attach(obj); t.turretOn = false; if (t.lod) t.lod.turret.visible = false;
     const T = t.def.turret;
     t.popped = spawnDebris(obj, new V3(rand(-3, 3), rand(9, 15), rand(-3, 3)).add(t.vel), rv(3), [T.w / 2, T.h / 2, T.l / 2], [0, T.h / 2, 0], 4000);
-  } else { fxExplosion(center, 1); sndBoom(center, true); }
+  } else { fxExplosion(center, 1); sndBoom(center, true); shakeAt(center, 0.6, 50); }
+}
+// estouros do cozimento: chamado a cada quadro para tanque destruído
+export function cookOff(t, dt) {
+  if (!t.cook || !t.cook.length) return;
+  for (let i = 0; i < t.cook.length; i++) t.cook[i] -= dt;
+  while (t.cook.length && t.cook[0] <= 0) {
+    t.cook.shift();
+    const p = t.centerPos(new V3()).add(new V3(rand(-.8, .8), t.def.Hh * 0.5 + 0.3, rand(-1.2, 1.2)).applyQuaternion(t.q));
+    fxSparks(p, 22); fxExplosion(p, rand(0.35, 0.7)); sndBoom(p, false); shakeAt(p, 0.25, 40);
+    for (let k = 0; k < 6; k++) spawnP({ pos: p.clone(), vel: new V3(rand(-2, 2), rand(9, 18), rand(-2, 2)), life: rand(0.5, 1.1), size: 0.5, size1: 0.15, color: 0xffb040, add: true, grav: 9, drag: 0.4 });
+  }
 }
 // Destroço como corpo rígido do Rapier (quica, rola e colide com veículos e construções)
 const _dq = new QUAT();
@@ -467,12 +508,12 @@ export function updatePopped() {
     if (!d.body) continue;
     const t = d.body.translation(), r = d.body.rotation();
     // fora do heightfield (arena aérea) o destroço atravessa o chão: some ao passar dele
-    if (t.y < H(t.x, t.z) - 15) { scene.remove(d.obj); world.removeRigidBody(d.body); popped.splice(i, 1); continue; }
+    if (t.y < HV(t.x, t.z) - 15) { scene.remove(d.obj); world.removeRigidBody(d.body); popped.splice(i, 1); continue; }
     _dq.set(r.x, r.y, r.z, r.w);
     d.obj.quaternion.copy(_dq);
     d.obj.position.set(t.x, t.y, t.z).sub(d.offset.clone().applyQuaternion(_dq));
     const v = d.body.linvel();
-    if (!d.hit && v.y > -1 && t.y < H(t.x, t.z) + 2) { d.hit = true; fxDust(new V3(t.x, t.y, t.z), 6, 1); sndClank(d.obj.position); }
+    if (!d.hit && v.y > -1 && t.y < HV(t.x, t.z) + 2) { d.hit = true; fxDust(new V3(t.x, t.y, t.z), 6, 1); sndClank(d.obj.position); }
   }
 }
 export function clearDebris() {

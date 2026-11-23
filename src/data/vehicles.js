@@ -27,6 +27,8 @@ export const TANKS = {
     mass: 32000, hp: 500, rpm: 1800, vmax: 54 * 1.15 / 3.6, vrev: 8 * 1.25 / 3.6, wheels: 5, rpmTraverse: false,
     L: 6.1, W: 3.0, Hh: 1.25, clr: 0.4, trackW: 0.5, transFront: false,
     turret: { w: 2.0, l: 2.5, h: 0.8, z: 0.35, shape: 'hex' },
+    // "T-34-85 Soviet Tank" de Federico Oviedo, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/t34.py
+    model: { url: '/models/t34.glb', ring: [0, 1.70, 0.28], trunnion: [0, 2.06, 1.56], muzzle: 5.08 },
     armor: { front: [45, 60], lfront: [45, 53], side: [45, 20], rear: [45, 47], top: 20, bottom: 15, tFront: [90, 0], tSide: [75, 20], tRear: [52, 10], tTop: 20 },
     gun: { name: '85 mm ZiS-S-53', cal: 85, len: 4.6, reload: 7.8, trav: 22, elevRate: 6, dep: 5, elev: 22, brake: false,
       ammo: [
@@ -34,6 +36,38 @@ export const TANKS = {
         { name: 'BR-365P', type: 'APCR', pen: 189, v: 1050, m: 4.99, count: 5 },
         { name: 'O-365K', type: 'HE', v: 793, m: 9.5, tnt: 0.74, count: 20 }] },
     mg: { name: 'DT', cal: 7.62, rpm: 600, v: 840, m: 0.0096, pen: 9, he: 0, belt: 63, total: 1953, tracer: 5 }
+  },
+  t72: {
+    key: 't72', type: 'tank', name: 'T-72M1', nation: 'URSS', year: 1982, color: 0x4a5236, sp: 260, crew: ['driver', 'gunner', 'commander'], // carregador automático
+    mass: 41500, hp: 780, rpm: 2000, vmax: 60 * 1.15 / 3.6, vrev: 4 * 1.25 / 3.6, wheels: 6, rpmTraverse: false,
+    L: 6.86, W: 3.58, Hh: 0.93, clr: 0.45, trackW: 0.58, transFront: false,
+    turret: { w: 2.7, l: 2.9, h: 0.85, z: -0.05, shape: 'round' },
+    // "T72M1" de DustyMojito, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/prep.py
+    model: { url: '/models/t72.glb', ring: [0, 1.38, -0.05], trunnion: [-0.01, 1.72, 1.2], cut: 1.5, muzzle: 5.95,
+      run: { plate: [0.46, 0.32, 0.07], tol: 0.7, period: 2, fill: [[1.24, 2.89], [1.02, 2.2], [1.02, -2.2]], wheels: [[0.83, -2.89, 0.40], [0.46, -1.96, 0.40], [0.46, -1.15, 0.40], [0.46, -0.29, 0.40], [0.46, 0.53, 0.40], [0.46, 1.38, 0.40], [0.46, 2.21, 0.40], [0.85, 2.89, 0.30]] } },
+    // blindagem em equivalente contra energia cinética (a composta do glacis e a torre fundida entram pelo valor efetivo)
+    armor: { ce: 1.2, front: [140, 68], lfront: [80, 60], side: [80, 0], rear: [45, 10], top: 30, bottom: 20, tFront: [380, 0], tSide: [190, 0], tRear: [65, 0], tTop: 45 },
+    gun: { name: '125 mm 2A46', cal: 125, len: 6.0, reload: 7.1, trav: 24, elevRate: 3.5, dep: 6, elev: 14, brake: false, stab: true,
+      ammo: [
+        { name: '3BM22', type: 'APFSDS', pen: 380, v: 1760, m: 4.5, count: 22 },
+        { name: '3BK14M', type: 'HEAT', pen: 440, v: 905, m: 19, tnt: 1.6, count: 6 },
+        { name: '3OF19', type: 'HE', v: 850, m: 23, tnt: 3.15, count: 11 }] },
+    mg: { name: 'PKT', cal: 7.62, rpm: 700, v: 855, m: 0.0096, pen: 9, he: 0, belt: 250, total: 2000, tracer: 5 }
+  },
+  m1: {
+    key: 'm1', type: 'tank', name: 'M1A1 Abrams', nation: 'EUA', year: 1985, color: 0x6e6b4f, sp: 280, crew: ['driver', 'gunner', 'commander', 'loader'],
+    mass: 57000, hp: 1500, rpm: 3000, vmax: 67 * 1.15 / 3.6, vrev: 40 * 1.25 / 3.6, wheels: 7, rpmTraverse: false,
+    L: 7.9, W: 3.66, Hh: 1.05, clr: 0.48, trackW: 0.6, transFront: false,
+    turret: { w: 3.2, l: 3.9, h: 0.85, z: 0.34, shape: 'hex' },
+    // "M1 Abrams" de Artem.Goyko, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/m1.py
+    model: { url: '/models/m1.glb', ring: [0, 1.53, 0.34], trunnion: [0.01, 1.9, 1.6], muzzle: 5.9 },
+    // blindagem em equivalente contra energia cinética: glacis fino mas quase deitado; composta na frente da torre e do casco
+    armor: { ce: 1.7, front: [80, 82], lfront: [330, 25], side: [60, 0], rear: [30, 10], top: 25, bottom: 20, tFront: [600, 0], tSide: [300, 0], tRear: [40, 0], tTop: 40 },
+    gun: { name: '120 mm M256', cal: 120, len: 5.3, reload: 6, trav: 40, elevRate: 20, dep: 10, elev: 20, brake: false, stab: true,
+      ammo: [
+        { name: 'M829', type: 'APFSDS', pen: 490, v: 1670, m: 4.3, count: 27 },
+        { name: 'M830', type: 'HEAT', pen: 600, v: 1140, m: 13.5, tnt: 1.2, count: 13 }] }, // HEAT-MP-T: serve de alto-explosivo também
+    mg: { name: 'M240', cal: 7.62, rpm: 750, v: 853, m: 0.0096, pen: 9, he: 0, belt: 250, total: 4000, tracer: 5 }
   },
   pz4: {
     key: 'pz4', type: 'tank', name: 'Pz.Kpfw. IV H', nation: 'Alemanha', year: 1943, color: 0x6f6541, sp: 150,
@@ -53,6 +87,9 @@ export const TANKS = {
     mass: 56900, hp: 650, rpm: 2500, vmax: 40 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: true,
     L: 6.3, W: 3.56, Hh: 1.45, clr: 0.47, trackW: 0.72, transFront: true,
     turret: { w: 2.3, l: 2.9, h: 0.9, z: -0.1, shape: 'box' },
+    // "Tiger I (PzKpfw VI Ausf. E)" de M1RON, CC BY 4.0 (ver CREDITOS.md)
+    model: { url: '/models/tiger.glb', turret: 'turret', ring: [0.02, 1.8, -0.1], trunnion: [0.035, 2.27, 1.0], cut: 1.0, muzzle: 5.5,
+      run: { plate: [0.49, 0.2], wheels: [[0.47, -1.78, 0.42], [0.47, -1.24, 0.42], [0.47, -0.68, 0.42], [0.47, -0.15, 0.42], [0.47, 0.37, 0.42], [0.47, 0.91, 0.42], [0.47, 1.45, 0.42], [0.47, 2.01, 0.42], [0.78, 2.71, 0.465], [0.51, -2.48, 0.32]] } },
     armor: { front: [100, 9], lfront: [100, 24], side: [80, 0], rear: [80, 9], top: 25, bottom: 25, tFront: [120, 0], tSide: [80, 0], tRear: [80, 0], tTop: 25 },
     gun: { name: '88 mm KwK 36', cal: 88, len: 5.3, reload: 8.7, trav: 13, elevRate: 5, dep: 8, elev: 15, brake: true,
       ammo: [
@@ -66,11 +103,30 @@ export const TANKS = {
     mass: 22000, hp: 300, rpm: 3000, vmax: 38 * 1.15 / 3.6, vrev: 7 * 1.25 / 3.6, wheels: 8, rpmTraverse: false,
     L: 5.9, W: 2.88, Hh: 1.3, clr: 0.4, trackW: 0.4, transFront: true,
     turret: { w: 2.2, l: 2.2, h: 0.75, z: -0.2, shape: 'open' },
+    // "FlakPanzer IV Wirbelwind" de Prak, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/prep.py (sem textura: cor lisa)
+    model: { url: '/models/wirbel.glb', ring: [0.06, 1.85, -0.13], trunnion: [0.06, 2.55, -0.1], muzzle: 2.26, muzzles: [[-0.3, 2.75], [0.42, 2.75], [-0.3, 2.35], [0.42, 2.35]] },
     armor: { front: [80, 10], lfront: [80, 14], side: [30, 0], rear: [20, 10], top: 12, bottom: 10, tFront: [16, 25], tSide: [16, 25], tRear: [16, 25], tTop: 0 },
     gun: { name: '4× 2 cm FlaK 38', cal: 20, len: 1.9, auto: true, barrels: 4, rpm: 1800, clip: 80, reload: 6.0, trav: 60, elevRate: 45, dep: 10, elev: 90, brake: false,
       ammo: [
         { name: 'Sprgr (HEFI-T)', type: 'HEF', pen: 6, v: 900, m: 0.12, tnt: 0.008, count: 1600, tracer: 2, dmg: 3 },
         { name: 'PzGr 40 (APCR)', type: 'APCR', pen: 43, v: 1050, m: 0.1, count: 800, tracer: 3, dmg: 2 }] },
+    mg: null
+  },
+  gepard: {
+    key: 'gepard', type: 'spaa', name: 'Flakpanzer Gepard', short: 'Gepard', nation: 'Alemanha', year: 1976, color: 0x4f5a3a, sp: 160, crew: ['driver', 'gunner', 'commander'],
+    mass: 47500, hp: 830, rpm: 2200, vmax: 65 * 1.15 / 3.6, vrev: 24 * 1.25 / 3.6, wheels: 7, rpmTraverse: false,
+    L: 7.0, W: 3.25, Hh: 1.1, clr: 0.44, trackW: 0.55, transFront: false,
+    turret: { w: 2.6, l: 3.6, h: 1.1, z: 0.2, shape: 'hex' },
+    // "Flakpanzer Gepard — Animated Low Poly" de xFORTUNAx, CC BY 4.0 (ver CREDITOS.md); preparado por tools/blender/prep.py
+    model: { url: '/models/gepard.glb', ring: [0, 1.57, 0.22], trunnion: [0, 2.33, 0.09], muzzle: 3.93, muzzles: [[-1.17, 2.33], [1.17, 2.33]],
+      // a esteira do arquivo é uma cinta lisa (fica parada) com as garras soltas por cima: as garras é que andam
+      run: { plate: [0.59, 0.1], wheels: [[0.72, -2.86, 0.25], [0.41, -1.98, 0.345], [0.41, -1.31, 0.345], [0.41, -0.64, 0.345], [0.41, 0.04, 0.345], [0.41, 0.71, 0.345], [0.41, 1.38, 0.345], [0.41, 2.05, 0.345], [0.65, 2.76, 0.29]] } },
+    armor: { front: [70, 60], lfront: [70, 50], side: [35, 0], rear: [25, 10], top: 20, bottom: 15, tFront: [40, 20], tSide: [25, 0], tRear: [25, 0], tTop: 15 },
+    // 2× 35 mm Oerlikon KDA, 550 tiros/min por cano
+    gun: { name: '2× 35 mm KDA', cal: 35, len: 3.15, auto: true, barrels: 2, rpm: 1100, clip: 160, reload: 7.0, trav: 90, elevRate: 60, dep: 10, elev: 85, brake: false, stab: true,
+      ammo: [
+        { name: 'DM21 (HEI-T)', type: 'HEF', pen: 10, v: 1175, m: 0.55, tnt: 0.098, count: 640, tracer: 2, dmg: 9 },
+        { name: 'DM13 (APDS)', type: 'APCR', pen: 110, v: 1400, m: 0.29, count: 40, tracer: 3, dmg: 5 }] },
     mg: null
   }
 };
@@ -81,17 +137,25 @@ export const PLANES = {
     mass: 6600, S: 27.87, span: 12.4, L: 11.0, cla: 4.6, clmax: 1.45, cd0: 0.0175, e: 0.8, engine: 'r2800',
     vne: 810 / 3.6, glim: 12, kda: 0.04, kde: 0.32, kdr: 0.05, armor: { pilot: 9, engine: 0 },
     hpParts: { wingL: 38, wingR: 38, tail: 28, engine: 26, fuel: 20, fuse: 45 },
+    // pele: "P-47D22 Razorback Thunderbolt" de vachtar, CC BY 4.0 (ver CREDITOS.md); preparada por tools/blender/skin.py
+    spinner: 0.42,
+    model: { url: '/models/p47.glb', guns: true, glass: ['Material.004', 'Material.001'], off: [0, 0.15, 0], fz: 1.27, def: { L: 10.45, canopy: { z: 0.055 } } }, // def: ajustes da estrutura só quando a pele está carregada
     fuseR: 0.78, noseR: 0.72, wingZ: 0.6, chord: 2.6, tipChord: 1.3, cowl: 'radial', radial: { cyl: 9 }, // R-2800: fileira da frente com 9 cilindros
     // peças reais: dois tanques na fuselagem sob a cabine (sem tanque na asa no D-28), turbocompressor no ventre traseiro, radiadores de óleo na carenagem, flaps hidráulicos
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque principal', z: 0.04, y: -0.4, s: [0.55, 0.35, 0.6] }, { id: 'fuelA', k: 'fuel', n: 'Tanque auxiliar', z: -0.1, y: -0.45, s: [0.5, 0.3, 0.4] },
       { id: 'turbo', k: 'turbo', n: 'Turbocompressor', z: -0.3, y: -0.6, s: [0.35, 0.3, 0.45] }, { id: 'oilc', k: 'cool', n: 'Radiadores de óleo', z: 0.26, y: -0.75, s: [0.55, 0.18, 0.35] },
       { id: 'hyd', k: 'act', n: 'Hidráulico', does: ['flaps'], z: -0.12, y: -0.1, s: [0.3, 0.2, 0.3] }],
-    guns: [{ w: 'M2', n: 8, span: [1.9, 2.6, 3.0, 3.4], z: 0.9, ammo: 425 }],
-    bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.0, -2.0] }],
-    rockets: { name: 'M8/HVAR', m: 61, tnt: 3.5, v: 330, n: 6 }
+    // 8 M2 juntas, por fora do trem e do disco da hélice (antes abertas de 1,9 a 3,4 m: a de dentro atirava pela hélice)
+    guns: [{ w: 'M2', n: 8, span: [2.55, 2.75, 2.95, 3.15], z: 0.9, ammo: 425 }],
+    // pilones por fora do trem (em x = 2,0 ficavam na porta do alojamento); D-28: 2 lançadores triplos M10 com foguetes M8 de 4,5 pol
+    // (o HVAR de 127 mm em trilho só veio no D-30/D-40). rockets.v = velocidade no fim da queima, relativa ao avião
+    bombs: [{ name: 'AN-M64 500 lb', m: 227, tnt: 121, d: 0.36, n: 2, x: [2.9, -2.9] }],
+    rockets: { name: 'M8 4,5 pol', m: 17.5, tnt: 1.95, v: 260, n: 6, cal: 114, x0: 3.5 }
   },
   il2: {
     key: 'il2', type: 'plane', gear: { track: 3.85, ret: 'in' }, name: 'Il-2 (1942)', short: 'Il-2', nation: 'URSS', year: 1942, color: 0x3d4a2c, sp: 340,
+    // pele: "Ilyushin IL-2 Sturmovik" de helijah, CC BY 4.0 (ver CREDITOS.md)
+    model: { url: '/models/il2.glb', solo: true, fz: 3.6 }, // fz: leva a hélice procedural até o nariz da pele
     mass: 6100, S: 38.5, span: 14.6, L: 11.6, cla: 4.5, clmax: 1.4, cd0: 0.026, e: 0.8, engine: 'am38',
     vne: 620 / 3.6, glim: 9, kda: 0.035, kde: 0.3, kdr: 0.05, armor: { pilot: 12, engine: 6, fuel: 6 },
     hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 30, fuel: 22, fuse: 55 },
@@ -102,10 +166,10 @@ export const PLANES = {
       { id: 'pneu', k: 'act', n: 'Pneumático', does: ['flaps'], z: -0.18, y: 0, s: [0.25, 0.25, 0.3] }],
     guns: [{ w: 'VYa', n: 2, span: [2.4], z: 0.6, ammo: 150 }, { w: 'ShKAS', n: 2, span: [2.0], z: 0.6, ammo: 750 }],
     bombs: [{ name: 'FAB-100', m: 100, tnt: 40, d: 0.27, n: 4, x: [1.5, -1.5, 2.2, -2.2] }],
-    rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 350, n: 8 }
+    rockets: { name: 'RS-82', m: 6.8, tnt: 0.36, v: 340, n: 8 }
   },
   fw190: {
-    key: 'fw190', type: 'plane', gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
+    key: 'fw190', type: 'plane', model: { url: '/models/fw190.glb', solo: true, glass: ['PaletteMaterial002'], seats: [[0.72, -0.95]], fz: 1.3, def: { L: 7.4 } }, gear: { track: 3.5, ret: 'in' }, name: 'Fw 190 F-8', short: 'Fw 190', nation: 'Alemanha', year: 1944, color: 0x6b7069, sp: 360,
     mass: 4750, S: 18.3, span: 10.5, L: 9.0, cla: 4.8, clmax: 1.45, cd0: 0.0225, e: 0.8, engine: 'bmw801',
     vne: 850 / 3.6, glim: 12, kda: 0.06, kde: 0.32, kdr: 0.05, armor: { pilot: 8, engine: 6 },
     hpParts: { wingL: 30, wingR: 30, tail: 24, engine: 22, fuel: 18, fuse: 36 },
@@ -115,12 +179,12 @@ export const PLANES = {
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanque dianteiro', z: 0.04, y: -0.5, s: [0.45, 0.25, 0.45] }, { id: 'fuelA', k: 'fuel', n: 'Tanque traseiro', z: -0.1, y: -0.45, s: [0.45, 0.28, 0.5] },
       { id: 'oilc', k: 'cool', n: 'Radiador de óleo (anel)', z: 0.42, s: [0.6, 0.6, 0.1], hp: 14 }, { id: 'elec', k: 'act', n: 'Sistema elétrico', does: ['flaps', 'guns'], z: -0.2, y: 0, s: [0.3, 0.25, 0.3] }],
     guns: [{ w: 'MG131', n: 2, span: [0.25], z: 2.0, ammo: 475 }, { w: 'MG151', n: 2, span: [0.9], z: 0.9, ammo: 250 }],
-    bombs: [{ name: 'SC 500', m: 500, tnt: 220, d: 0.47, n: 1, x: [0] }, { name: 'SC 50', m: 50, tnt: 25, d: 0.2, n: 2, x: [1.6, -1.6] }],
+    bombs: [{ name: 'SC 500', m: 500, tnt: 220, d: 0.47, n: 1, x: [0] }, { name: 'SC 50', m: 50, tnt: 25, d: 0.2, n: 4, x: [2.3, -2.3, 2.75, -2.75] }], // F-8: ETC 501 no ventre + 4 ETC 50 sob as asas, por fora do trem
     rockets: null
   },
   // ---- Batalha aérea: caças sem carga externa e os primeiros jatos ----
   spit9: {
-    key: 'spit9', type: 'plane', gear: { track: 1.68, ret: 'out' }, name: 'Spitfire LF Mk IX', short: 'Spitfire IX', nation: 'Reino Unido', year: 1943, color: 0x59604a, sp: 300,
+    key: 'spit9', type: 'plane', model: { url: '/models/spit9.glb', solo: true, glass: ['PaletteMaterial003'], seats: [[0.5, -0.78]], fz: 1.15, def: { L: 8.2 } }, gear: { track: 1.68, ret: 'out' }, name: 'Spitfire LF Mk IX', short: 'Spitfire IX', nation: 'Reino Unido', year: 1943, color: 0x59604a, sp: 300,
     mass: 3400, S: 22.48, span: 11.23, L: 9.5, cla: 4.9, clmax: 1.5, cd0: 0.0195, e: 0.85, engine: 'merlin66',
     vne: 760 / 3.6, glim: 12, kda: 0.055, kde: 0.36, kdr: 0.05, armor: { pilot: 7 },
     hpParts: { wingL: 28, wingR: 28, tail: 22, engine: 20, fuel: 16, fuse: 32 },
@@ -133,7 +197,7 @@ export const PLANES = {
     bombs: [], rockets: null
   },
   f86: {
-    key: 'f86', type: 'plane', marks: { serial: '24513', buzz: 'FU-513', decalZ: -0.22 }, gear: { track: 2.5, ret: 'in' }, name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
+    key: 'f86', type: 'plane', model: { url: '/models/f86.glb', solo: true, glass: ['PaletteMaterial003'], seats: [[0.9, 2.3]], nozzles: [[0, -0.01, -5.55, 0.3]] }, marks: { serial: '24513', buzz: 'FU-513', decalZ: -0.22 }, gear: { track: 2.5, ret: 'in' }, name: 'F-86F-35 Sabre', short: 'F-86F', nation: 'EUA', year: 1953, color: 0xa9adb0, sp: 520, jet: true, sweep: 35,
     mass: 6600, S: 28.1, span: 11.3, L: 11.4, cla: 4.2, clmax: 1.25, cd0: 0.016, e: 0.78, engine: 'j47', mcrit: 0.9, vctrl: 290, flapV: [410, 305, 245],
     vne: 1150 / 3.6, glim: 12, kda: 0.05, kde: 0.3, kdr: 0.04, armor: { pilot: 8 },
     hpParts: { wingL: 44, wingR: 44, tail: 32, engine: 34, fuel: 28, fuse: 52 },
@@ -154,14 +218,14 @@ export const PLANES = {
     guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.2, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
     // freios aerodinâmicos: dois painéis nas laterais da fuselagem traseira, abrindo para fora
     brake: [{ zf: -0.17, ax: 1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }, { zf: -0.17, ax: -1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }],
-    missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', maw: 'pd',
+    missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', // sem RWR nem MAW, como o avião real: míssil só se vê pela fumaça
     bombs: [], rockets: null
   },
   mig15: {
-    key: 'mig15', type: 'plane', marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, fences: [{ ws: 0.4, h: 0.17, len: 0.95 }, { ws: 0.68, h: 0.12, len: 0.9 }], name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
+    key: 'mig15', type: 'plane', model: { url: '/models/mig15.glb', solo: true, nozzles: [[0, 0.05, -4.45, 0.33]] }, marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, fences: [{ ws: 0.4, h: 0.17, len: 0.95 }, { ws: 0.68, h: 0.12, len: 0.9 }], name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
     mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.023, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
-    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1', maw: 'pd',
+    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1',
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
     fuse: [[-0.53, .42, .46, .44, .08], [-0.45, .56, .62, .58, .08], [-0.32, .78, .86, .82, .05], [-0.16, .96, 1.04, 1, .02], [0, 1.04, 1.1, 1.06, 0], [0.14, 1.04, 1.1, 1.06, 0], [0.27, .98, 1.02, 1, -.01], [0.37, 'n1.06', 'n1.06', 'n1.06', -.02], [0.46, 'n1', 'n1', 'n1', -.02]],
     canopy: { z: 0.22, len: 2.3, w: 0.42, h: 0.55, frames: [0.24, 0.6], face: false },
@@ -184,6 +248,8 @@ export const PLANES = {
   // wave: arrasto de onda transônico/supersônico { mcr, peak (ΔCD no pico), mpk (Mach do pico) }
   f4e: {
     key: 'f4e', type: 'plane', marks: { serial: 'AF 67-270', decalZ: -0.33 }, gear: { track: 5.45, ret: 'in', mw: 0.26, twinN: true }, name: 'F-4E Phantom II', short: 'F-4E', nation: 'EUA', year: 1967, color: 0x7a7d63, sp: 640, jet: true, sweep: 45,
+    // pele: "McDonnell Douglas F-4 Phantom II" de andertan, CC BY 4.0 (ver CREDITOS.md)
+    model: { url: '/models/f4e.glb', solo: true, seats: [[0.72, 6.0], [0.76, 4.7]], nozzles: [[-0.67, -0.35, -3.9, 0.45], [0.67, -0.35, -3.9, 0.45]] }, // nozzles: bocais da PELE [x, y, z, raio] — é de onde sai a chama
     mass: 18200, fuel: 4000, S: 49.2, span: 11.7, L: 19.2, cla: 3.5, clmax: 1.25, cd0: 0.021, e: 0.7, engine: 'j79', engines: 2, rcs: 6,
     mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.72, 0.2], inertia: [223700, 44700, 253500], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² [arfagem, rolagem, guinada] do F-4C/E publicado (a estimativa por L² dava 2–2,4× mais)
     vne: 1400 / 3.6, glim: 9.5, kda: 0.05, kde: 0.36, kdr: 0.03, armor: { pilot: 6 },
@@ -207,16 +273,39 @@ export const PLANES = {
     // freios sob as asas, atrás do trem principal (abrem para baixo)
     brake: [{ ws: 0.16, cf: 0.62, ax: 1, w: 0.75, len: 0.8, open: 'down', deg: 50 }, { ws: 0.16, cf: 0.62, ax: -1, w: 0.75, len: 0.8, open: 'down', deg: 50 }],
     missiles: [{ w: 'AIM7E', n: 4 }, { w: 'AIM9J', n: 4 }],
-    bombs: [], rockets: null
+    // ataque ao solo (batalha de tanques): 6 Mk 82 no MER do ventre (duas fileiras de 3: z por bomba) e dois casulos LAU-3 de 19 FFAR nos pilones internos
+    bombs: [{ name: 'Mk 82 500 lb', m: 241, tnt: 87, d: 0.273, n: 6, x: [0, 0.32, -0.32, 0, 0.32, -0.32], z: [0.75, 0.75, 0.75, -0.75, -0.75, -0.75] }],
+    rockets: { name: 'FFAR 70 mm', m: 9.3, tnt: 1.0, v: 600, n: 38, cal: 70, pod: { x: [2.81, -2.81], r: 0.2, len: 2.4, ph: 0.3 } }
+  },
+  // A-10A: só na batalha de tanques (sem ficha na Batalha Aérea). O visual é todo da pele glTF (model.solo): a estrutura
+  // procedural não tem motores em casulo nem dois lemes — dela ficam só o trem, as bombas/casulos e os efeitos
+  a10: {
+    key: 'a10', type: 'plane', gear: { track: 5.25, ret: 'in' }, name: 'A-10A Thunderbolt II', short: 'A-10A', nation: 'EUA', year: 1977, color: 0x6f7a72, sp: 620, jet: true,
+    mass: 14800, fuel: 3200, S: 47.0, span: 17.53, L: 16.26, cla: 5.0, clmax: 1.6, cd0: 0.030, e: 0.82, engine: 'tf34', engines: 2, rcs: 10,
+    mcrit: 0.72, wave: { mcr: 0.7, peak: 0.05, mpk: 1.0 }, flapV: [370, 300, 250], inertia: [150000, 75000, 213000], // kg·m² publicados (a estimativa pela envergadura dava 2,4× mais em rolagem)
+    vne: 830 / 3.6, vspawn: 150, glim: 7.3, kda: 0.05, kde: 0.34, kdr: 0.04, armor: { pilot: 38 }, // banheira de titânio
+    hpParts: { wingL: 80, wingR: 80, tail: 55, engine: 55, fuel: 40, fuse: 90 },
+    fuseR: 0.75, noseR: 0.45, wingZ: 0.3, chord: 3.0, tipChord: 2.0, cowl: 'intake', dih: 5, nozzles: 2, finish: 'camo', rwr: 'apr36',
+    // "A-10 Thunderbolt II" de AIRMAN Magazine (modelo de Alfredo Tirado), CC BY 4.0 (ver CREDITOS.md); preparada por tools/blender/skin.py
+    model: { url: '/models/a10.glb', solo: true, split: false }, // dois lemes nas pontas do estabilizador: o fatiador de peças (skinSplit.js) não serve
+    parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanques da fuselagem', z: 0.04, y: 0.2, s: [0.6, 0.4, 1.4] }, { id: 'fuelW', k: 'fuel', n: 'Tanque da asa', w: [0.2, 0.4], s: [1.0, 0.12, 0.8] },
+      { id: 'hydA', k: 'act', n: 'Hidráulico A', does: ['flaps', 'brake', 'ctl'], x: 0.4, z: -0.1, y: 0, s: [0.25, 0.2, 0.5] }, { id: 'hydB', k: 'act', n: 'Hidráulico B', does: ['guns', 'ctl'], x: -0.4, z: -0.1, y: 0, s: [0.25, 0.2, 0.5] }],
+    // canhão de 7 canos no nariz; 6 Mk 82 nos pilones da asa e dois casulos LAU-3 nos externos
+    guns: [{ w: 'GAU8', n: 1, span: [0], z: 6.6, ammo: 1174 }],
+    missiles: [],
+    bombs: [{ name: 'Mk 82 500 lb', m: 241, tnt: 87, d: 0.273, n: 6, x: [2.1, -2.1, 3.3, -3.3, 4.6, -4.6], ph: 0.25 }],
+    rockets: { name: 'FFAR 70 mm', m: 9.3, tnt: 1.0, v: 600, n: 38, cal: 70, pod: { x: [5.9, -5.9], r: 0.2, len: 2.4, ph: 0.3 } }
   },
   mig21: {
     key: 'mig21', type: 'plane', marks: { nose: '24' }, gear: { track: 2.69, ret: 'in' }, fences: [{ ws: 0.5, h: 0.17, len: 0.85 }], ventral: { zf: -0.3, h: 0.45, c: 1.6 }, name: 'MiG-21MF', short: 'MiG-21MF', nation: 'URSS', year: 1970, color: 0xa8aca6, sp: 600, jet: true, sweep: 57,
+    // pele: "MiG-21bis Fishbed - Game-Ready Jet" de xFORTUNAx, CC BY 4.0 (ver CREDITOS.md)
+    model: { url: '/models/mig21.glb', solo: true, seats: [[0.84, 5.3]], nozzles: [[0, -0.03, -4.85, 0.45]] },
     mass: 7750, fuel: 2100, S: 23.0, span: 7.15, L: 14.1, cla: 2.9, clmax: 1.15, cd0: 0.0195, e: 0.7, engine: 'r13', rcs: 3,
     mcrit: 0.93, wave: { mcr: 0.93, peak: 0.026, mpk: 1.12 }, vctrl: 380, flapV: [400, 360, 300], damp: [22, 0.75, 0.17], inertia: [57000, 7000, 61000], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² aproximados do MiG-21 (asa curta e fuselagem fina)
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },
     hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
     fuseR: 0.62, noseR: 0.45, wingZ: -0.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,
-    radar: 'rp22', rwr: 'spo10', maw: 'pd',
+    radar: 'rp22', rwr: 'spo10', // só o SPO-10 (radar dos outros); nenhum destes tinha alerta de aproximação de míssil — o MAW inventado gritava MISSILE a cada míssil no ar
     fuse: [[-0.53, .82, .84, .82, 0], [-0.44, .86, .9, .86, 0], [-0.3, .92, 1, .92, 0], [-0.1, .96, 1.18, .96, 0], [0.08, .98, 1.22, .98, 0], [0.2, .98, 1.18, .98, 0], [0.3, .94, 1, .94, 0], [0.39, 'n1.18', 'n1.18', 'n1.18', 0], [0.46, 'n1.1', 'n1.1', 'n1.1', 0]],
     canopy: { z: 0.26, len: 2.7, w: 0.38, h: 0.5, frames: [0.26, 0.62] },
     // pétalas da pós-combustão, IFF "Odd Rods" sob o nariz, lâmina no dorso e tanque ventral de 490 l
@@ -233,7 +322,11 @@ export const PLANES = {
     // dois freios ventrais à frente e um atrás (abrem para baixo)
     brake: [{ zf: 0.15, ax: 0.45, ay: -1, w: 0.4, len: 0.72, open: 'down', deg: 40 }, { zf: 0.15, ax: -0.45, ay: -1, w: 0.4, len: 0.72, open: 'down', deg: 40 }, { zf: -0.3, ax: 0, ay: -1, w: 0.42, len: 0.5, open: 'down', deg: 40 }],
     missiles: [{ w: 'R3R', n: 2 }, { w: 'R3S', n: 2 }],
-    bombs: [], rockets: null
+    // freios aerodinâmicos: dois painéis dianteiros no ventre e um traseiro
+    brake: [{ zf: 0.06, ax: 0.55, w: 0.42, len: 0.95, deg: 35 }, { zf: 0.06, ax: -0.55, w: 0.42, len: 0.95, deg: 35 }, { zf: -0.2, ax: 0, w: 0.5, len: 0.8, deg: 40 }],
+    // ataque ao solo (batalha de tanques): 2 FAB-250 nos pilones internos e 2 casulos UB-16-57 (16 S-5K de carga oca cada) nos externos
+    bombs: [{ name: 'FAB-250', m: 250, tnt: 99, d: 0.325, n: 2, x: [1.72, -1.72], ph: 0.2 }],
+    rockets: { name: 'S-5K 57 mm', m: 3.65, tnt: 0.3, pen: 130, v: 600, n: 32, cal: 57, pod: { x: [2.43, -2.43], r: 0.17, len: 1.9, ph: 0.2 } }
   }
 };
 
@@ -243,11 +336,12 @@ export const GUNS = {
   ShKAS: { name: '7,62 mm ShKAS', cal: 7.62, rpm: 1800, v: 825, m: 0.0096, pen: 10, he: 0, dmg: 0.45, tracer: 4 },
   VYa: { name: '23 mm VYa-23', cal: 23, rpm: 600, v: 905, m: 0.2, pen: 35, he: 0.01, dmg: 3.2, tracer: 3 },
   MG131: { name: '13 mm MG 131', cal: 13, rpm: 900, v: 750, m: 0.034, pen: 18, he: 0.001, dmg: 1.1, tracer: 4 },
-  MG151: { name: '20 mm MG 151/20', cal: 20, rpm: 740, v: 705, m: 0.092, pen: 8, he: 0.0185, dmg: 3.5, tracer: 3 },
+  MG151: { name: '20 mm MG 151/20', cal: 20, rpm: 740, v: 785, m: 0.092, pen: 17, he: 0.0185, dmg: 3.5, tracer: 3 },
   Hispano: { name: '20 mm Hispano Mk II', cal: 20, rpm: 600, v: 880, m: 0.13, pen: 20, he: 0.011, dmg: 3.4, tracer: 3 },
   M3: { name: '12,7 mm M3', cal: 12.7, rpm: 1200, v: 890, m: 0.046, pen: 24, he: 0, dmg: 1.2, tracer: 4 },
   N37: { name: '37 mm N-37D', cal: 37, rpm: 400, v: 690, m: 0.735, pen: 40, he: 0.04, dmg: 12, tracer: 2 },
   NR23: { name: '23 mm NR-23', cal: 23, rpm: 850, v: 680, m: 0.2, pen: 25, he: 0.015, dmg: 3.6, tracer: 3 },
+  GAU8: { name: '30 mm GAU-8/A Avenger', cal: 30, rpm: 3900, v: 1010, m: 0.39, pen: 76, he: 0.02, dmg: 9, tracer: 6 },
   M61: { name: '20 mm M61A1 Vulcan', cal: 20, rpm: 6000, v: 1030, m: 0.1, pen: 22, he: 0.011, dmg: 3.2, tracer: 5 },
   GSh23: { name: '23 mm GSh-23L', cal: 23, rpm: 3400, v: 715, m: 0.175, pen: 24, he: 0.015, dmg: 3.6, tracer: 4 }
 };
@@ -311,7 +405,14 @@ for (const D of Object.values(PLANES)) {
   if (D.jet) D.thrust = E.mil * D.engines; else { D.hp = E.hp * D.engines; D.wep = E.wep * D.engines; D.eta = E.eta; }
 }
 export const VEHICLES = Object.assign({}, TANKS, PLANES);
-export const LINEUP = ['sherman', 't34', 'pz4', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'];
+// elenco enxuto a pedido do dono: Sherman e Pz IV continuam nos dados, só saíram da partida
+// Eras: cada partida usa só os veículos de uma (antigo não enfrenta moderno). LINEUP é o elenco da era ativa.
+export const ERAS = {
+  ww2: { name: 'Segunda Guerra', lineup: ['t34', 'tiger', 'wirbel', 'p47', 'il2', 'fw190'], ground: ['t34', 'tiger'], planes: ['p47', 'il2', 'fw190'], aa: 'wirbel' },
+  mod: { name: 'Moderno', lineup: ['t72', 'm1', 'gepard', 'a10', 'f4e', 'mig21'], ground: ['t72', 'm1'], planes: ['a10', 'f4e', 'mig21'], aa: 'gepard' }
+};
+export const LINEUP = [...ERAS.ww2.lineup];
+export function setEra(e) { LINEUP.splice(0, LINEUP.length, ...ERAS[e].lineup); }
 
 // ---------- Balística: arrasto quadrático a = -k|v|v, k = ½ρ·Cd·A/m ----------
 export function prepAmmo(am, cal, cd) {
@@ -338,4 +439,5 @@ export function ballistic(am, r) {
   return { ang: A.ang + (B.ang - A.ang) * f, v: A.v + (B.v - A.v) * f, t: A.t + (B.t - A.t) * f };
 }
 // Perfuração cai com a velocidade de impacto (relação de De Marre, expoente 1,43)
-export const penAt = (am, v) => am.type === 'HE' ? hePen(am.tnt) : am.pen * Math.pow(v / am.v, 1.43);
+// HEAT (carga oca): a perfuração não depende da velocidade nem da distância
+export const penAt = (am, v) => am.type === 'HE' ? hePen(am.tnt) : am.type === 'HEAT' ? am.pen : am.pen * Math.pow(v / am.v, 1.43);

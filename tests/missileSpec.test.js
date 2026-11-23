@@ -34,7 +34,7 @@ describe('ficha e motor dos mísseis', () => {
   });
   it('fumaça proporcional: Sparrow mais grossa que Sidewinder; AIM-9B na escala base', () => {
     const a = smokeOf(MISSILES.AIM9B), s = smokeOf(MISSILES.AIM7E);
-    expect(a.w0).toBeCloseTo(1.8, 5); expect(a.w1).toBeCloseTo(14, 5);
+    expect(a.w0).toBeCloseTo(0.35, 5); expect(a.w1).toBeCloseTo(3, 5);
     expect(s.w1).toBeGreaterThan(a.w1 * 1.3); expect(s.flame).toBeGreaterThan(a.flame);
   });
   it('ficha traz buscador, alcances, G, queima, ganho, ogiva e trava', () => {

@@ -75,7 +75,7 @@ export function updatePlaneFx(p, dt) {
       const len = ab > 0.01 ? f.r * (7 + 9 * ab) : wep > 0.01 ? f.r * (3.8 + 1.2 * Math.random()) : f.r * 1.1 * hot, rad = f.r * (ab > 0.01 ? 0.85 + 0.1 * ab : wep > 0.01 ? 0.8 : 0.7);
       // disco incandescente na boca: visto de trás é o que mais aparece (brilha já em potência militar)
       const gk = Math.max(ab, wep * 0.8, hot * 0.35);
-      f.glow.scale.setScalar(gk > 0.01 ? f.r * (1.25 + 0.6 * Math.max(ab, wep * 0.6)) * flick() : HIDE);
+      f.glow.scale.setScalar(gk > 0.01 ? f.r * (0.72 + 1.13 * Math.max(ab, wep * 0.6)) * flick() : HIDE); // sem PC o brilho fica dentro do bocal (era um disco laranja maior que ele)
       if (len < 0.02) { f.out.scale.setScalar(HIDE); f.inn.scale.setScalar(HIDE); continue; }
       f.out.scale.set(rad * flick(), rad * flick(), len * flick());
       f.inn.scale.copy(ab > 0.01 ? f.out.scale : _p.setScalar(HIDE)).multiplyScalar(ab > 0.01 ? 0.95 : 1);
@@ -108,7 +108,7 @@ export function updatePlaneFx(p, dt) {
       const c = p.pos.clone().addScaledVector(f, p.def.wingZ);
       for (let i = 0; i < 28; i++) {
         const t = i / 28 * Math.PI * 2, dir = a.clone().multiplyScalar(Math.cos(t)).addScaledVector(b, Math.sin(t));
-        spawnP({ pos: c.clone().addScaledVector(dir, r), vel: p.vel.clone().multiplyScalar(0.25).addScaledVector(dir, 22), life: rand(0.9, 1.5), size: 2.2, size1: 7, color: 0xf4f6f8, op: 0.55, drag: 2.2 });
+        spawnP({ pos: c.clone().addScaledVector(dir, r), vel: p.vel.clone().multiplyScalar(0.25).addScaledVector(dir, 22), life: rand(0.9, 1.5), size: 2.2, size1: 7, color: 0xf4f6f8, op: 0.55, drag: 2.2, lit: true });
       }
     }
     p._m0 = M;
@@ -198,8 +198,11 @@ const HOLEGEOS = Array.from({ length: 8 }, (_, i) => {
 for (const [g, m] of [[OUTER, FLAME], [INNER, DIAMOND], [DISC, GLOW], [OUTER, VAPOR], [HOLEGEO, HOLE]]) mk(g, m, scene, 0, -1e4, 0); // sementes dos shaders
 const _rc = new THREE.Raycaster(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Vector3();
 const matOf = h => (Array.isArray(h.object.material) ? h.object.material[0] : h.object.material);
-const solid = h => h.face && !h.object.userData.fx && !matOf(h).transparent;
-const glassy = h => h.face && !h.object.userData.fx && matOf(h).transparent && matOf(h).opacity < 0.5;
+// o Raycaster não olha `visible`: nos aviões com pele glTF a estrutura procedural está escondida por baixo e era ELA que
+// levava a marca (filha de malha invisível = marca invisível: nenhum furo aparecia nesses aviões)
+const seen = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+const solid = h => h.face && !h.object.userData.fx && !matOf(h).transparent && seen(h.object);
+const glassy = h => h.face && !h.object.userData.fx && matOf(h).transparent && matOf(h).opacity < 0.5 && seen(h.object);
 // marca `cell` no ponto da batida, deitada na face (normal voltada para `side`), presa à malha
 function mark(pl, hit, cell, size, side) {
   _n.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);

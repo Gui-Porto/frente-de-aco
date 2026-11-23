@@ -28,7 +28,20 @@ function smokeTex() {
   g.putImageData(img, 0, 0);
   return new THREE.CanvasTexture(c);
 }
+// Nuvem: miolo cheio e borda recortada (a textura de fumaça é rala demais: cúmulo ficava um fiapo)
+function cloudTex() {
+  const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+  const F = [3, 6, 12, 24, 48], G = F.map(f => Array.from({ length: (f + 1) * (f + 1) }, Math.random)), s = t => t * t * (3 - 2 * t);
+  const vn = (k, x, y) => { const f = F[k], X = x * f, Y = y * f, i = Math.min(f - 1, Math.floor(X)), j = Math.min(f - 1, Math.floor(Y)), u = s(X - i), v = s(Y - j), a = G[k][j * (f + 1) + i], b = G[k][j * (f + 1) + i + 1], cc = G[k][(j + 1) * (f + 1) + i], dd = G[k][(j + 1) * (f + 1) + i + 1]; return a + (b - a) * u + (cc - a) * v + (a - b - cc + dd) * u * v; };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N, v = y / N; let n = 0, amp = 0.5, tot = 0; for (let k = 0; k < 5; k++) { n += vn(k, u, v) * amp; tot += amp; amp *= 0.55; } n /= tot;
+    const r = Math.hypot(u - 0.5, (v - 0.5) * 1.15) * 2, a = Math.max(0, Math.min(1, (1 - r * r) * 1.5 + (n - 0.5) * 1.9 - 0.32) * 1.6), o = (y * N + x) * 4;
+    d[o] = d[o + 1] = d[o + 2] = 205 + n * 50; d[o + 3] = Math.min(1, a) ** 1.3 * 255;
+  }
+  g.putImageData(img, 0, 0); return new THREE.CanvasTexture(c);
+}
 export const TEX = {
+  cloud: cloudTex(),
   smoke: smokeTex(),
   fire: spriteTex([[0, 'rgba(255,250,220,1)'], [.35, 'rgba(255,170,60,.9)'], [1, 'rgba(255,80,0,0)']]),
 };
@@ -37,7 +50,7 @@ export const TEX = {
 const MAXP = 2400;
 const VS = `
 attribute vec3 iPos; attribute vec4 iData; attribute vec4 iCol;
-varying vec2 vUv; varying vec4 vCol; varying float vKind; varying float vFog; varying float vH;
+varying vec2 vUv; varying vec4 vCol; varying float vKind; varying float vFog; varying float vH; varying float vNear;
 void main(){
   vUv = uv; vCol = iCol; vKind = iData.w;
   float c = cos(iData.y), s = sin(iData.y);
@@ -46,19 +59,22 @@ void main(){
   vec4 mv = viewMatrix * vec4(iPos, 1.0);
   mv.xy += q * iData.x;
   vFog = -mv.z;
+  // fumaça (tipo 0) some quando a câmera entra nela: o tufo não estoura na tela ao voar por dentro do rastro
+  vNear = iData.w < 0.5 ? clamp((-mv.z - 0.3 * iData.x) / iData.x, 0.0, 1.0) : 1.0;
   gl_Position = projectionMatrix * mv;
 }`;
 const FS = `
-uniform sampler2D tSmoke; uniform sampler2D tFire; uniform vec3 fogColor; uniform float fogDensity; uniform vec3 sunTint;
-varying vec2 vUv; varying vec4 vCol; varying float vKind; varying float vFog; varying float vH;
+uniform sampler2D tSmoke; uniform sampler2D tFire; uniform sampler2D tCloud; uniform vec3 fogColor; uniform float fogDensity; uniform vec3 sunTint;
+varying vec2 vUv; varying vec4 vCol; varying float vKind; varying float vFog; varying float vH; varying float vNear;
 void main(){
-  vec4 t = vKind > 0.5 ? texture2D(tFire, vUv) : texture2D(tSmoke, vUv);
-  float a = t.a * vCol.a;
+  bool fire = vKind > 0.5 && vKind < 1.5; // 0 fumaça, 1 fogo, 2 nuvem
+  vec4 t = vKind > 1.5 ? texture2D(tCloud, vUv) : fire ? texture2D(tFire, vUv) : texture2D(tSmoke, vUv);
+  float a = t.a * vCol.a * vNear;
   if (a < 0.004) discard;
   vec3 col = vCol.rgb;
-  if (vKind < 0.5) col *= sunTint * mix(0.78, 1.12, vH) * (0.85 + 0.15 * t.r);
+  if (!fire) col *= sunTint * mix(0.78, 1.12, vH) * (0.85 + 0.15 * t.r);
   float f = 1.0 - exp(-fogDensity * fogDensity * vFog * vFog);
-  col = mix(col, fogColor, f * (vKind > 0.5 ? 0.6 : 1.0));
+  col = mix(col, fogColor * (vKind > 1.5 ? 2.2 : 1.0), f * (fire ? 0.6 : 1.0));
   gl_FragColor = vec4(col, a);
 }`;
 export function makeLayer(additive) {
@@ -73,21 +89,28 @@ export function makeLayer(additive) {
   const m = new THREE.ShaderMaterial({
     vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false,
     blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    uniforms: { tSmoke: { value: TEX.smoke }, tFire: { value: TEX.fire }, fogColor: { value: scene.fog.color }, fogDensity: { value: 0 }, sunTint: { value: new THREE.Color(1.0, 0.97, 0.92) } },
+    uniforms: { tSmoke: { value: TEX.smoke }, tFire: { value: TEX.fire }, tCloud: { value: TEX.cloud }, fogColor: { value: scene.fog.color }, fogDensity: { value: 0 }, sunTint: { value: new THREE.Color(1.0, 0.97, 0.92) } },
   });
   const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = additive ? 3 : 2; scene.add(mesh);
   return { g, pos, dat, col, mesh, list: [] };
 }
 const LAY = [makeLayer(false), makeLayer(true)];
 const _c = new THREE.Color();
+// Luz do dia sobre fumaça BRANCA vista contra o céu (rastro de míssil, contrail, vapor, vazamento de combustível): o céu
+// Preetham é HDR e branco com cor ≤ 1 sai cinza na frente dele. `lit: true` multiplica a cor por esta luz. Só para
+// fumaça clara: a escura (incêndio, motor, ogiva) fica sem — 0,11 de albedo × 2,6 já virava cinza-claro, cara de nuvem; o ambiente da Batalha Aérea ajusta por horário/clima (setSkyLit).
+// Fumaça rente ao chão (poeira, tiro de tanque) NÃO usa: contra o terreno ficaria acesa.
+export const SKYLIT = new THREE.Color(2.6, 2.55, 2.45);
+export function setSkyLit(c) { if (c) SKYLIT.copy(c); else SKYLIT.setRGB(2.6, 2.55, 2.45); }
 export function spawnP(o) {
   const L = LAY[o.add ? 1 : 0];
   if (L.list.length >= MAXP) L.list.shift();
-  _c.set(o.color ?? 0xffffff); if (o.add) _c.multiplyScalar(o.hdr ?? 1.3);
+  _c.set(o.color ?? 0xffffff); if (o.add) _c.multiplyScalar(o.hdr ?? 2.4); else if (o.hdr) _c.multiplyScalar(o.hdr); if (o.lit) _c.multiply(SKYLIT); // fogo bem acima de 1: contra o céu HDR, 1,3 saía laranja apagado
   L.list.push({
     pos: o.pos.clone(), vel: o.vel ? o.vel.clone() : new V3(), life: o.life, max: o.life,
     s0: o.size, s1: o.size1 ?? o.size * 2.2, op: o.op ?? 1, drag: o.drag ?? 1.5, rise: o.rise ?? 0, grav: o.grav ?? 0,
-    rot: Math.random() * 6.28, spin: o.spin ?? (Math.random() - 0.5) * 0.5, r: _c.r, g: _c.g, b: _c.b, kind: o.tex === TEX.fire ? 1 : 0, add: !!o.add,
+    rot: Math.random() * 6.28, spin: o.spin ?? (Math.random() - 0.5) * 0.5, fi: o.fadeIn ?? 4, // fadeIn: 4 = aparece no 1º quarto da vida; 30 = já nasce visível (fumaça colada na fonte)
+    r: _c.r, g: _c.g, b: _c.b, kind: o.tex === TEX.fire ? 1 : 0, add: !!o.add,
   });
 }
 export function updateParts(dt) {
@@ -101,7 +124,7 @@ export function updateParts(dt) {
       p.vel.multiplyScalar(Math.exp(-p.drag * dt)); p.vel.y += (p.rise - p.grav) * dt;
       p.pos.addScaledVector(p.vel, dt); p.rot += p.spin * dt;
       const size = lerp(p.s0, p.s1, 1 - (1 - k) * (1 - k));
-      const fin = Math.min(1, k * (p.add ? 12 : 4));
+      const fin = Math.min(1, k * (p.add ? 12 : p.fi));
       P[n * 3] = p.pos.x; P[n * 3 + 1] = p.pos.y; P[n * 3 + 2] = p.pos.z;
       D[n * 4] = size; D[n * 4 + 1] = p.rot; D[n * 4 + 2] = 0; D[n * 4 + 3] = p.kind;
       C[n * 4] = p.r; C[n * 4 + 1] = p.g; C[n * 4 + 2] = p.b; C[n * 4 + 3] = p.op * fin * Math.pow(1 - k, 1.5);
@@ -122,10 +145,17 @@ export function fxDust(pos, n = 8, s = 1) {
   for (let i = 0; i < n; i++) spawnP({ pos: pos.clone().add(rv(0.6 * s)), vel: rv(2.5 * s).setY(rand(1, 4) * s), life: rand(1.2, 2.2), size: 1.0 * s, size1: 3.2 * s, color: 0xa89a7c, op: .3, rise: 0.1, drag: 2.2 });
 }
 export function fxSparks(pos, n = 7) {
-  for (let i = 0; i < n; i++) spawnP({ pos, vel: rv(9), life: rand(.15, .35), size: .35, size1: .1, tex: TEX.fire, add: true, color: 0xffd080, grav: 9, drag: .5 });
+  spawnP({ pos, life: .06, size: 1.1, size1: 1.8, tex: TEX.fire, add: true, color: 0xfff0c8, hdr: 4 }); // clarão do impacto
+  for (let i = 0; i < n; i++) spawnP({ pos, vel: rv(15), life: rand(.2, .5), size: .32, size1: .08, tex: TEX.fire, add: true, color: 0xffd080, hdr: 4, grav: 9, drag: .5 });
 }
 export function fxExplosion(pos, s = 1) {
-  for (let i = 0; i < 10 * s; i++) spawnP({ pos: pos.clone().add(rv(.4 * s)), vel: rv(7 * s), life: rand(.25, .55), size: 1.5 * s, size1: 4.5 * s, tex: TEX.fire, add: true, color: 0xffb060 });
+  // clarão único e curtíssimo, bola de fogo, estilhaços incandescentes que riscam para fora e caem, fumaça quente no miolo
+  spawnP({ pos, life: .09, size: 5 * s, size1: 9 * s, tex: TEX.fire, add: true, color: 0xfff2d0, hdr: 5 });
+  for (let i = 0; i < 10 * s; i++) spawnP({ pos: pos.clone().add(rv(.4 * s)), vel: rv(7 * s), life: rand(.25, .6), size: 1.5 * s, size1: 4.5 * s, tex: TEX.fire, add: true, color: 0xff9038, hdr: 1.8 });
+  // miolo OPACO (mistura normal): contra o céu claro o fogo aditivo some no branco — é este que dá a bola laranja
+  for (let i = 0; i < 7 * s; i++) spawnP({ pos: pos.clone().add(rv(.3 * s)), vel: rv(5 * s), life: rand(.3, .65), size: 1.2 * s, size1: 3.6 * s, tex: TEX.fire, color: 0xff6418, hdr: 2.8, drag: 2 });
+  for (let i = 0; i < 12 * s; i++) spawnP({ pos, vel: rv(26 * s), life: rand(.5, 1.1), size: .3 * s, size1: .08 * s, tex: TEX.fire, add: true, color: 0xffc070, hdr: 4, grav: 9, drag: .6 });
+  for (let i = 0; i < 6 * s; i++) spawnP({ pos: pos.clone().add(rv(.5 * s)), vel: rv(4 * s), life: rand(1.2, 2), size: 1.4 * s, size1: 4.5 * s, color: 0x6e665c, op: .5, rise: .3, drag: 1.6 });
   for (let i = 0; i < 9 * s; i++) spawnP({ pos: pos.clone().add(rv(.8 * s)), vel: rv(3.5 * s).setY(rand(1, 5) * s), life: rand(2, 3.5), size: 1.6 * s, size1: 5.5 * s, color: 0x8a847c, op: .32, rise: .45, drag: 1.4 });
   flash(pos, 6 * s);
 }
@@ -147,4 +177,19 @@ export function fxBurn(pos, s) {
   spawnP({ pos: pos.clone().add(rv(.4)), vel: new V3(rand(-.4, .4), rand(1.5, 3), rand(-.4, .4)), life: rand(.35, .7), size: 1.0 * s, size1: .3, tex: TEX.fire, add: true, color: 0xff8a30, hdr: 1.2, drag: .5 });
   spawnP({ pos: pos.clone().add(new V3(0, 1, 0)), vel: new V3(rand(-.4, .4) + 0.6, rand(2, 3.2), rand(-.4, .4)), life: rand(4, 6), size: 1.2 * s, size1: 5 * s, color: 0x7c766e, op: .24, drag: .35, spin: (Math.random() - .5) * .3 });
 }
-export function fxTrail(pos, color, s = 1, life = 2.5) { spawnP({ pos, life, size: .8 * s, size1: 3.5 * s, color, op: .4, drag: 1 }); }
+export function fxTrail(pos, color, s = 1, life = 2.5, lit = false) { spawnP({ pos, life, size: .8 * s, size1: 3.5 * s, color, op: .4, drag: 1, lit }); }
+// Fogo PRESO ao avião: as labaredas saem com a velocidade dele (vel) e ficam para trás em ~0,2 s — uma língua de fogo
+// esticada pelo vento, não bolinhas largadas no ar. Miolo opaco laranja (aparece contra o céu) + brilho aditivo.
+export function fxPlaneFire(pos, vel, s = 1) {
+  const v = () => vel.clone().multiplyScalar(rand(0.82, 0.95)).add(rv(2.5));
+  spawnP({ pos: pos.clone().add(rv(.25 * s)), vel: v(), life: rand(.14, .3), size: 1.1 * s, size1: 2.6 * s, tex: TEX.fire, color: 0xff6a1c, hdr: 3, drag: 0 });
+  spawnP({ pos: pos.clone().add(rv(.2 * s)), vel: v(), life: rand(.1, .22), size: .8 * s, size1: 1.9 * s, tex: TEX.fire, add: true, color: 0xffb050, hdr: 3, drag: 0 });
+}
+// impacto de projétil no chão: jato de terra para cima (o que se vê do ar ao metralhar); canhão levanta mais e solta faísca
+export function fxGroundHit(pos, cal = 12.7, he = false) {
+  const k = cal >= 30 ? 1.7 : cal >= 20 ? 1.3 : cal >= 12 ? 1 : 0.7;
+  spawnP({ pos, vel: new V3(rand(-.8, .8), rand(9, 16) * k, rand(-.8, .8)), life: rand(.8, 1.3), size: .7 * k, size1: 3.4 * k, color: 0xa3906c, op: .85, grav: 7, drag: 1.2, fadeIn: 30 });
+  spawnP({ pos, vel: new V3(rand(-1.5, 1.5), rand(2, 4.5) * k, rand(-1.5, 1.5)), life: rand(2, 3.4), size: 1.2 * k, size1: 7 * k, color: 0xc2b596, op: .55, rise: .15, drag: 2, fadeIn: 12 });
+  if (cal >= 20) spawnP({ pos, life: .07, size: .9 * k, size1: (he ? 2.4 : 1.4) * k, tex: TEX.fire, add: true, color: 0xffe0a0, hdr: 4 });
+  if (he) for (let i = 0; i < 3; i++) spawnP({ pos, vel: rv(9).setY(rand(3, 10)), life: rand(.2, .45), size: .22, size1: .06, tex: TEX.fire, add: true, color: 0xffc070, hdr: 4, grav: 9, drag: .5 });
+}

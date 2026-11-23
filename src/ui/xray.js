@@ -1,88 +1,251 @@
+import * as THREE from 'three';
 import { S } from '../core/state.js';
-import { $, clamp, lerp } from '../core/util.js';
-import { hullProfile } from '../vehicles/tank.js';
+import { $, clamp } from '../core/util.js';
+import { renderer, afterRender, shadowOnly } from '../core/render.js';
+import { buildTank } from '../vehicles/tank.js';
 import { compLabel } from '../combat/ballistics.js';
 import { report } from './hud.js';
 
-// Hit-cam raio-X: vista 3D esquemática do interior do alvo, com trajetória e estilhaços
+// =====================================================================
+// Hit-cam raio-X em 3D: o PRÓPRIO modelo do alvo, translúcido, com tripulação e módulos por dentro, a trajetória do
+// projétil, os estilhaços e o que foi atingido. É desenhado no canvas principal, por cima do quadro, no retângulo do
+// #xray (que fica transparente e só leva os textos). Tudo em coordenadas locais do alvo (root), então o alvo pode
+// andar/explodir à vontade. Materiais criados e compilados na carga: nenhum shader novo na hora do tiro.
+// =====================================================================
 const xc = $('#xray'), xctx = xc.getContext('2d');
-export function xrayShot(t, hit, dir, E, am, word, detail, color, inner) {
+const DUR = 5.2;
+
+const VS = `varying vec3 vN; varying vec3 vV;
+void main(){ vec4 p = vec4(position, 1.0); vec3 n = normal;
+#ifdef USE_INSTANCING
+  p = instanceMatrix * p; n = mat3(instanceMatrix) * n;
+#endif
+  vec4 mv = modelViewMatrix * p; vN = normalize(normalMatrix * n); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`;
+// casca em "vidro": um pré-passe grava só a profundidade da casca e a cor sai apenas na camada da frente (EqualDepth),
+// então cada pixel recebe UMA face — borda clara (fresnel), frente quase transparente, interior visível por trás.
+const ghostPre = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: 'void main(){ gl_FragColor = vec4(0.0); }', colorWrite: false, side: THREE.DoubleSide });
+const ghost = new THREE.ShaderMaterial({
+  vertexShader: VS, transparent: true, depthWrite: false, depthFunc: THREE.LessEqualDepth, side: THREE.DoubleSide,
+  fragmentShader: 'varying vec3 vN; varying vec3 vV; void main(){ float f = 1.0 - abs(dot(normalize(vN), normalize(vV))); float e = f * f; gl_FragColor = vec4(mix(vec3(0.32, 0.56, 0.68), vec3(0.66, 0.93, 1.0), e), 0.07 + 0.8 * e); }'
+});
+// peças internas: cor chapada com sombreado simples; `glow` acende quando é atingida
+const solidProto = new THREE.ShaderMaterial({
+  vertexShader: VS, uniforms: { col: { value: new THREE.Color() }, glow: { value: 0 } },
+  fragmentShader: 'uniform vec3 col; uniform float glow; varying vec3 vN; varying vec3 vV; void main(){ float d = 0.45 + 0.55 * abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(col * d + vec3(1.0, 0.55, 0.2) * glow, 1.0); }'
+});
+const lineMat = new THREE.LineBasicMaterial({ color: 0xffb060, transparent: true, depthTest: false });
+const pathMat = new THREE.MeshBasicMaterial({ color: 0xffe2a8, depthTest: false, toneMapped: false });
+const blastMat = new THREE.MeshBasicMaterial({ color: 0xffb050, transparent: true, depthTest: false, blending: THREE.AdditiveBlending, toneMapped: false });
+const COL = { crew: 0x7fd070, dead: 0x4a1410, hit: 0xff4630, mod: 0xb9c2c4, ammo: 0xe0a040, fuel: 0x6f9bd0, radiator: 0x8fb0a8, barrel: 0x9aa3a6 };
+
+const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 460 / 290, 0.1, 100);
+const inner = new THREE.Group(); scene.add(inner);
+const ghosts = new Map(); // um fantasma por tipo de veículo
+function ghostOf(D, slot = 'hit') {
+  const key = slot + ':' + D.key; let g = ghosts.get(key);
+  if (!g) {
+    g = buildTank(D);
+    if (g.lod) { g.root.remove(g.lod.root); shadowOnly.delete(g.lod.root); } // o fantasma é só o modelo detalhado
+    const ms = []; g.root.traverse(o => { if (o.isMesh) ms.push(o); else if (o.isSprite || o.isLine) o.visible = false; });
+    for (const o of ms) {
+      o.castShadow = o.receiveShadow = false;
+      // irmão com a mesma geometria e transformação. NÃO usar o.clone(): ele serializa userData (onde mora o material
+      // original, userData.normalMat) e com isso converte todas as texturas em data-URL — travava 1 a 5 s no 1º acerto
+      const pre = o.isInstancedMesh ? new THREE.InstancedMesh(o.geometry, ghostPre, o.count) : new THREE.Mesh(o.geometry, ghostPre);
+      if (o.isInstancedMesh) pre.instanceMatrix = o.instanceMatrix;
+      pre.position.copy(o.position); pre.quaternion.copy(o.quaternion); pre.scale.copy(o.scale); pre.frustumCulled = o.frustumCulled;
+      pre.renderOrder = 1; o.parent.add(pre);
+      o.material = ghost; o.renderOrder = 2;
+    }
+    ghosts.set(key, g);
+  }
+  return g;
+}
+// geometrias das peças (unitárias; a escala vem do raio do componente)
+const GEO = {
+  body: new THREE.CapsuleGeometry(0.2, 0.36, 3, 10), head: new THREE.SphereGeometry(0.14, 12, 8),
+  box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 14).rotateX(Math.PI / 2), ring: new THREE.TorusGeometry(1, 0.07, 6, 28).rotateX(Math.PI / 2),
+  shell: new THREE.CylinderGeometry(0.035, 0.035, 1, 6).rotateX(Math.PI / 2).translate(0, 0, 0.5), ball: new THREE.SphereGeometry(1, 14, 10)
+};
+// [geometria, escala x/y/z em múltiplos do raio]
+const SHAPE = { engine: ['box', 1.5, 1.0, 1.9], transmission: ['box', 2.0, 0.9, 1.0], ammo: ['box', 1.0, 1.3, 2.0], fuel: ['box', 1.0, 1.1, 1.9], drive: ['ring', 2.2, 2.2, 2.2], breech: ['cyl', 1.0, 1.0, 2.6], barrel: ['cyl', 1.1, 1.1, 1], elev: ['box', 0.8, 1.6, 1.2], radiator: ['box', 2.0, 0.5, 1.6] };
+function compMesh(o) {
+  const mat = solidProto.clone(), g = new THREE.Group(); g.position.fromArray(o.p);
+  if (o.kind === 'crew') {
+    const b = new THREE.Mesh(GEO.body, mat), h = new THREE.Mesh(GEO.head, mat); b.position.y = -0.05; h.position.y = 0.42; g.add(b, h);
+  } else {
+    const [geo, sx, sy, sz] = SHAPE[o.name] || ['box', 1.2, 1.2, 1.2], m = new THREE.Mesh(GEO[geo], mat); m.scale.set(sx * o.r, sy * o.r, o.len || sz * o.r); g.add(m);
+    g.rotation.y = o.yaw || 0; // peças da torre giram com ela
+  }
+  g.userData = { o, mat };
+  return g;
+}
+const path = new THREE.Mesh(GEO.shell, pathMat), path2 = new THREE.Mesh(GEO.shell, pathMat), blast = new THREE.Mesh(GEO.ball, blastMat);
+const fragGeo = new THREE.BufferGeometry(), frags = new THREE.LineSegments(fragGeo, lineMat);
+for (const m of [path, path2, blast, frags]) { m.renderOrder = 5; m.frustumCulled = false; scene.add(m); }
+// compila tudo já (um fantasma qualquer não é preciso: os programas são os mesmos para qualquer geometria)
+{ const tmp = [ghost, ghostPre, solidProto].map(m => new THREE.Mesh(GEO.box, m)); scene.add(...tmp); renderer.compile(scene, cam); scene.remove(...tmp); }
+
+// o raio-X do avião (air/xray3d.js) usa os mesmos materiais e geometrias
+export const XR = { VS, ghost, ghostPre, solid: solidProto, GEO };
+const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+function stretch(m, p0, p1, k) { _a.fromArray(p0); _b.fromArray(p1); m.position.copy(_a); m.lookAt(_b); m.scale.set(1, 1, Math.max(0.001, _a.distanceTo(_b) * k)); }
+
+let cur = null; // fantasma em cena
+function open(t, x) {
+  S.xray = Object.assign(x, { t0: performance.now(), def: t.def });
+  if (cur) scene.remove(cur.root);
+  cur = ghostOf(t.def); scene.add(cur.root);
+  cur.turret.visible = t.turretOn; cur.turret.rotation.y = t.turretYaw; cur.gunPivot.rotation.x = -t.gunPitch;
+  inner.clear(); for (const o of x.comps) inner.add(compMesh(o));
+  const pts = []; for (const [f0, f1] of x.frags) pts.push(...f0, ...f0); // crescem a partir da origem
+  fragGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  xc.hidden = false;
+}
+const state = (c, t) => c.kind === 'crew' ? c.ref.alive : !(c.name in t.mods) || !t.mods[c.name].broken;
+
+export function xrayShot(t, hit, dir, E, am, word, detail, color, inn) {
   report(t, word, detail, color);
   const lp = hit.part === 'hull' ? hit.lp : hit.point.clone().applyMatrix4(t.invRoot).toArray();
   const ld = dir.clone().transformDirection(t.invRoot);
-  const ent = inner ? inner.lp : lp;
-  const pre = [ent[0] - ld.x * 3, ent[1] - ld.y * 3, ent[2] - ld.z * 3];
-  S.xray = { t0: performance.now(), def: t.def, ty: t.turretYaw, turret: t.turretOn, entry: ent, pre, end: inner ? inner.end : null, frags: inner ? inner.frags : [], blast: inner ? inner.blast : null,
-    comps: inner ? inner.comps.map((c, i) => ({ p: c.p, r: c.r, kind: c.kind, label: compLabel(c), was: inner.before[i], now: c.kind === 'crew' ? c.ref.alive : !(c.name in t.mods) || !t.mods[c.name].broken })) : t.components().map(c => ({ p: c.p, r: c.r, kind: c.kind, was: true, now: true })),
-    word, color, ammo: `${am.name} · ${Math.round(E.pen)} mm`, plate: `${E.arm.t} mm · ${Math.round(E.ang)}° → ${Math.round(E.eff)} mm` };
-  xc.hidden = false;
+  const ent = inn ? inn.lp : lp;
+  open(t, {
+    entry: ent, pre: [ent[0] - ld.x * 4, ent[1] - ld.y * 4, ent[2] - ld.z * 4], end: inn ? inn.end : null, frags: inn ? inn.frags : [], blast: inn ? inn.blast : null,
+    comps: inn ? inn.comps.map((c, i) => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, yaw: c.yaw, len: c.len, label: compLabel(c), was: inn.before[i], now: state(c, t) }))
+      : t.components().map(c => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, yaw: c.yaw, len: c.len, was: state(c, t), now: state(c, t) })),
+    word, color, ammo: `${am.name} · ${Math.round(E.pen)} mm`, plate: `${E.arm.t} mm · ${Math.round(E.ang)}° → ${Math.round(E.eff)} mm`
+  });
 }
 export function xrayReport(r) {
   report(r.t, r.w, r.s, r.c);
   if (!r.x) return;
   const t = r.t;
-  S.xray = { t0: performance.now(), def: t.def, ty: t.turretYaw, turret: t.turretOn, entry: r.x.lp, pre: [r.x.lp[0], r.x.lp[1] + 3, r.x.lp[2]], end: null, frags: r.x.frags, blast: r.x.blast,
-    comps: r.x.comps.map((c, i) => ({ p: c.p, r: c.r, kind: c.kind, label: compLabel(c), was: r.x.before[i], now: c.kind === 'crew' ? c.ref.alive : !(c.name in t.mods) || !t.mods[c.name].broken })),
-    word: r.w, color: r.c, ammo: 'Alto-explosivo', plate: r.s.split(' · ').slice(1, 2).join('') };
-  xc.hidden = false;
-}
-export function drawXray() {
-  if (!S.xray) return;
-  const el = (performance.now() - S.xray.t0) / 1000;
-  if (el > 4.2) { S.xray = null; xc.hidden = true; return; }
-  const W = xc.width, Hh = xc.height, c = xctx, D = S.xray.def;
-  c.clearRect(0, 0, W, Hh);
-  c.fillStyle = 'rgba(8,14,18,.92)'; c.fillRect(0, 0, W, Hh);
-  const yaw = 0.7 + el * 0.25, pit = 0.42, cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pit), sp = Math.sin(pit);
-  const sc = Math.min(W, Hh) / (D.L * 1.25), ox = W / 2, oy = Hh * 0.58;
-  const P = (x, y, z) => { y -= D.clr + D.Hh * 0.5; const X = x * cy - z * sy, Z = x * sy + z * cy; const Y = y * cp - Z * sp; return [ox + X * sc, oy - Y * sc, Z * cp + y * sp]; };
-  const box = (mn, mx, tf) => {
-    const v = []; for (const x of [mn[0], mx[0]]) for (const y of [mn[1], mx[1]]) for (const z of [mn[2], mx[2]]) v.push(P(...(tf ? tf(x, y, z) : [x, y, z])));
-    const e = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
-    c.beginPath(); for (const [a, b] of e) { c.moveTo(v[a][0], v[a][1]); c.lineTo(v[b][0], v[b][1]); } c.stroke();
-  };
-  c.strokeStyle = 'rgba(120,190,220,.55)'; c.lineWidth = 1;
-  // casco pelo perfil real
-  const pr = hullProfile(D), hw = (D.W - 2 * D.trackW) / 2;
-  c.beginPath();
-  for (const s of [hw, -hw]) pr.forEach(([z, y], i) => { const q = P(s, y, z); i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]); if (i === pr.length - 1) { const q0 = P(s, pr[0][1], pr[0][0]); c.lineTo(q0[0], q0[1]); } });
-  for (const [z, y] of pr) { const a = P(hw, y, z), b = P(-hw, y, z); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); }
-  c.stroke();
-  c.strokeStyle = 'rgba(120,190,220,.3)';
-  box([-D.W / 2, 0.05, -D.L * .47], [-D.W / 2 + D.trackW, D.clr + .45, D.L * .47]); box([D.W / 2 - D.trackW, 0.05, -D.L * .47], [D.W / 2, D.clr + .45, D.L * .47]);
-  if (S.xray.turret) {
-    const T = D.turret, yH = D.clr + D.Hh, ct = Math.cos(S.xray.ty), st = Math.sin(S.xray.ty);
-    c.strokeStyle = 'rgba(120,190,220,.55)';
-    box([-T.w / 2, 0, -T.l / 2], [T.w / 2, T.h, T.l / 2], (x, y, z) => [x * ct + z * st, yH + y, -x * st + z * ct + T.z]);
-    const g0 = P(T.l / 2 * st, yH + T.h / 2, T.l / 2 * ct + T.z), g1 = P((T.l / 2 + D.gun.len) * st, yH + T.h / 2, (T.l / 2 + D.gun.len) * ct + T.z);
-    c.lineWidth = 2; c.beginPath(); c.moveTo(g0[0], g0[1]); c.lineTo(g1[0], g1[1]); c.stroke(); c.lineWidth = 1;
-  }
-  // componentes ordenados por profundidade
-  const k = clamp((el - 0.6) / 0.8, 0, 1);
-  const comps = S.xray.comps.map(o => ({ o, q: P(...o.p) })).sort((a, b) => b.q[2] - a.q[2]);
-  for (const { o, q } of comps) {
-    const hitNow = o.was && !o.now && k > 0.5;
-    c.fillStyle = hitNow ? 'rgba(230,70,50,.95)' : o.now ? (o.kind === 'crew' ? 'rgba(110,200,110,.85)' : 'rgba(170,170,160,.7)') : 'rgba(120,40,30,.8)';
-    c.beginPath(); c.arc(q[0], q[1], Math.max(3, o.r * sc * 0.55), 0, 7); c.fill();
-  }
-  // trajetória do projétil
-  const s = clamp(el / 0.6, 0, 1), a = P(...S.xray.pre), b = P(...S.xray.entry);
-  c.strokeStyle = '#ffd08a'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(lerp(a[0], b[0], s), lerp(a[1], b[1], s)); c.stroke();
-  if (s >= 1 && S.xray.end) { const e = P(...S.xray.end); c.beginPath(); c.moveTo(b[0], b[1]); c.lineTo(lerp(b[0], e[0], k), lerp(b[1], e[1], k)); c.stroke(); }
-  if (k > 0) {
-    c.strokeStyle = 'rgba(255,170,80,.75)'; c.lineWidth = 1; c.beginPath();
-    for (const [f0, f1] of S.xray.frags) { const p0 = P(...f0), p1 = P(...f1); c.moveTo(p0[0], p0[1]); c.lineTo(lerp(p0[0], p1[0], k), lerp(p0[1], p1[1], k)); }
-    c.stroke();
-    if (S.xray.blast && k < 0.7) { const q = P(...S.xray.blast); c.fillStyle = `rgba(255,180,80,${0.7 - k})`; c.beginPath(); c.arc(q[0], q[1], 10 + k * 30, 0, 7); c.fill(); }
-  }
-  c.fillStyle = '#ddd6b7'; c.font = '600 13px "Barlow Condensed", sans-serif'; c.textAlign = 'left';
-  c.fillText(`${D.short || D.name}`, 10, 18);
-  c.font = '500 11px "IBM Plex Mono", monospace'; c.fillStyle = 'rgba(221,214,183,.75)';
-  c.fillText(S.xray.ammo, 10, Hh - 26); c.fillText(S.xray.plate || '', 10, Hh - 11);
-  c.textAlign = 'right'; c.font = '400 18px "Saira Stencil One", sans-serif';
-  c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--' + S.xray.color);
-  c.fillText(S.xray.word, W - 10, 22);
-  const lost = S.xray.comps.filter(o => o.was && !o.now && o.label).map(o => o.label);
-  if (k > 0.5 && lost.length) { c.font = '500 11px "IBM Plex Mono", monospace'; c.fillStyle = '#e65a42'; lost.slice(0, 5).forEach((l, i) => c.fillText(l, W - 10, 42 + i * 14)); }
+  open(t, {
+    entry: r.x.lp, pre: [r.x.lp[0], r.x.lp[1] + 4, r.x.lp[2]], end: null, frags: r.x.frags, blast: r.x.blast,
+    comps: r.x.comps.map((c, i) => ({ p: c.p, r: c.r, kind: c.kind, name: c.name, yaw: c.yaw, len: c.len, label: compLabel(c), was: r.x.before[i], now: state(c, t) })),
+    word: r.w, color: r.c, ammo: 'Alto-explosivo', plate: r.s.split(' · ').slice(1, 2).join('')
+  });
 }
 
+// linha do tempo: 0–0,7 s o projétil chega; 0,7–1,6 s atravessa e os estilhaços abrem; depois o estrago fica à mostra
+const _vp = new THREE.Vector4(), _sc = new THREE.Vector4(), _cc = new THREE.Color();
+afterRender.push(() => {
+  const X = S.xray; if (!X || xc.hidden) return;
+  const el = (performance.now() - X.t0) / 1000, D = X.def, s = clamp(el / 0.7, 0, 1), k = clamp((el - 0.7) / 0.9, 0, 1);
+  // câmera: orbita devagar em volta do alvo, do lado de onde veio o tiro
+  const side = Math.atan2(X.pre[0] - X.entry[0], X.pre[2] - X.entry[2]), yaw = side + 0.9 - el * 0.16, pit = 0.36, dist = D.L * 1.95, cy = D.clr + D.Hh * 0.6;
+  cam.position.set(Math.sin(yaw) * Math.cos(pit) * dist, cy + Math.sin(pit) * dist, Math.cos(yaw) * Math.cos(pit) * dist); cam.lookAt(0, cy, 0);
+  for (const g of inner.children) {
+    const { o, mat } = g.userData, lost = o.was && !o.now, shown = lost && k > 0.45;
+    mat.uniforms.col.value.setHex(shown ? (el < 2.6 ? COL.hit : COL.dead) : !o.was ? COL.dead : o.kind === 'crew' ? COL.crew : COL[o.name] || COL.mod);
+    mat.uniforms.glow.value = shown ? Math.max(0, 1 - (el - 1.1) / 0.9) : 0;
+    if (o.kind === 'crew') g.rotation.z = shown || !o.was ? 0.9 : 0; // tripulante atingido tomba
+  }
+  stretch(path, X.pre, X.entry, s);
+  path2.visible = s >= 1 && !!X.end; if (path2.visible) stretch(path2, X.entry, X.end, k);
+  const fp = fragGeo.attributes.position; if (fp) { X.frags.forEach(([f0, f1], i) => { fp.setXYZ(i * 2 + 1, f0[0] + (f1[0] - f0[0]) * k, f0[1] + (f1[1] - f0[1]) * k, f0[2] + (f1[2] - f0[2]) * k); }); fp.needsUpdate = true; }
+  frags.visible = k > 0; lineMat.opacity = clamp(2.2 - el * 0.5, 0.25, 1);
+  blast.visible = !!X.blast && k > 0 && k < 0.8; if (blast.visible) { blast.position.fromArray(X.blast); blast.scale.setScalar(0.2 + k * 1.1); blastMat.opacity = 0.8 - k; }
+  // desenha no retângulo do #xray
+  const r = xc.getBoundingClientRect(), H = renderer.domElement.clientHeight;
+  renderer.getViewport(_vp); renderer.getScissor(_sc); const st = renderer.getScissorTest(), ac = renderer.autoClear, a0 = renderer.getClearAlpha(); renderer.getClearColor(_cc);
+  cam.aspect = r.width / r.height; cam.updateProjectionMatrix();
+  renderer.setRenderTarget(null); renderer.autoClear = false; renderer.setScissorTest(true);
+  renderer.setViewport(r.left, H - r.bottom, r.width, r.height); renderer.setScissor(r.left, H - r.bottom, r.width, r.height);
+  renderer.setClearColor(0x070d11, 1); renderer.clear(true, true, false);
+  renderer.render(scene, cam);
+  renderer.setClearColor(_cc, a0); renderer.setViewport(_vp); renderer.setScissor(_sc); renderer.setScissorTest(st); renderer.autoClear = ac;
+});
+
+// textos por cima (canvas 2D transparente)
+export function drawXray() {
+  const X = S.xray; if (!X) return;
+  const el = (performance.now() - X.t0) / 1000;
+  if (el > DUR) { S.xray = null; xc.hidden = true; return; }
+  const W = xc.width, Hh = xc.height, c = xctx, D = X.def;
+  c.clearRect(0, 0, W, Hh);
+  c.fillStyle = '#ddd6b7'; c.font = '600 15px "Barlow Condensed", sans-serif'; c.textAlign = 'left';
+  c.fillText(`${D.short || D.name}`, 12, 22);
+  c.font = '500 11px "IBM Plex Mono", monospace'; c.fillStyle = 'rgba(221,214,183,.8)';
+  c.fillText(X.ammo, 12, Hh - 28); c.fillText(X.plate || '', 12, Hh - 12);
+  c.textAlign = 'right'; c.font = '400 22px "Saira Stencil One", sans-serif';
+  c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--' + X.color);
+  c.fillText(X.word, W - 12, 26);
+  // o que foi perdido, aparecendo um a um depois que os estilhaços abrem
+  const lost = X.comps.filter(o => o.was && !o.now && o.label);
+  c.font = '500 12px "IBM Plex Mono", monospace';
+  lost.slice(0, 7).forEach((o, i) => {
+    if (el < 1.15 + i * 0.12) return;
+    c.fillStyle = '#ff5a40'; c.fillText(o.label, W - 26, 48 + i * 16); c.fillRect(W - 20, 40 + i * 16, 8, 8);
+  });
+  if (el > 1.2 && !lost.length && X.end) { c.fillStyle = 'rgba(221,214,183,.7)'; c.fillText('sem dano crítico', W - 12, 48); }
+}
+
+// =====================================================================
+// Painel de estado do SEU tanque, no mesmo raio-X 3D: casco translúcido visto de trás/cima, torre e canhão ao vivo,
+// tripulação e módulos coloridos pelo estado (verde/cinza = inteiro, vermelho = avariado, escuro = morto, âmbar =
+// tripulante trocando de posto). Renderizado no canvas principal, no retângulo do #status, e copiado para ele (o
+// painel tem fundo próprio, então não dá para deixar o WebGL aparecer por baixo como no hit-cam).
+// =====================================================================
+const stc = $('#status'), stx = stc.getContext('2d');
+const sScene = new THREE.Scene(), sCam = new THREE.PerspectiveCamera(28, 230 / 190, 0.1, 100), sInner = new THREE.Group(); sScene.add(sInner);
+let sGhost = null, sFor = null, sTick = 0;
+const MODSHORT = { engine: 'MOTOR', radiator: 'RADIAD', transmission: 'TRANSM', tracks: 'ESTEIRA', breech: 'CULATRA', barrel: 'CANO', drive: 'GIRO', elev: 'ELEVAÇ' }, VIEW = 0.62;
+afterRender.push(() => {
+  const t = S.player;
+  if (!t || t.type === 'plane' || S.mode === 'air' || S.state !== 'play' || !stc.offsetParent) return;
+  if (sTick++ % 6 && sFor === t) return; // ~10 Hz: render + cópia WebGL -> 2D custavam ~4 ms em todo quadro
+  const r = stc.getBoundingClientRect(); if (r.width < 10) return;
+  const D = t.def, comps = t.components();
+  if (sFor !== t || sInner.children.length !== comps.length) {
+    if (sGhost) sScene.remove(sGhost.root);
+    sGhost = ghostOf(D, 'own'); sScene.add(sGhost.root); sFor = t;
+    sInner.clear(); for (const c of comps) sInner.add(compMesh({ p: c.p, r: c.r, kind: c.kind, name: c.name, yaw: c.yaw, len: c.len }));
+  }
+  sGhost.root.visible = t.alive; sGhost.turret.visible = t.turretOn; sGhost.turret.rotation.y = t.turretYaw; sGhost.gunPivot.rotation.x = -t.gunPitch;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 110), swap = new Set(Object.values(t.replace).map(x => x.spare));
+  comps.forEach((c, i) => {
+    const g = sInner.children[i], mat = g.userData.mat, ok = state(c, t);
+    g.position.fromArray(c.p); g.rotation.z = c.kind === 'crew' && !ok ? 0.9 : 0; g.rotation.y = c.yaw || 0;
+    mat.uniforms.col.value.setHex(c.kind === 'crew' ? (!ok ? COL.dead : swap.has(c.ref) ? 0xe8a23c : COL.crew) : !ok ? COL.hit : COL[c.name] || COL.mod);
+    mat.uniforms.glow.value = (c.kind !== 'crew' && !ok ? 0.25 * pulse : 0) + (t.fire > 0 && c.name === 'engine' ? 0.8 * pulse : 0);
+  });
+  const yaw = Math.PI + 0.55, pit = 0.62, dist = D.L * 2.05, cy = D.clr + D.Hh * 0.55;
+  sCam.position.set(Math.sin(yaw) * Math.cos(pit) * dist, cy + Math.sin(pit) * dist, Math.cos(yaw) * Math.cos(pit) * dist + D.L * 0.08); sCam.lookAt(0, cy, D.L * 0.08);
+  const Hc = renderer.domElement.clientHeight, pr = renderer.getPixelRatio();
+  renderer.getViewport(_vp); renderer.getScissor(_sc); const st = renderer.getScissorTest(), ac = renderer.autoClear, a0 = renderer.getClearAlpha(); renderer.getClearColor(_cc);
+  const vh = r.height * VIEW; // o 3D ocupa a parte de cima; embaixo ficam as fileiras
+  sCam.aspect = r.width / vh; sCam.updateProjectionMatrix();
+  renderer.setRenderTarget(null); renderer.autoClear = false; renderer.setScissorTest(true);
+  renderer.setViewport(r.left, Hc - r.top - vh, r.width, vh); renderer.setScissor(r.left, Hc - r.top - vh, r.width, vh);
+  renderer.setClearColor(0x10140f, 1); renderer.clear(true, true, false);
+  renderer.render(sScene, sCam);
+  renderer.setClearColor(_cc, a0); renderer.setViewport(_vp); renderer.setScissor(_sc); renderer.setScissorTest(st); renderer.autoClear = ac;
+  // cópia para o canvas do painel (2× para ficar nítido) + avisos por cima
+  const W = Math.round(r.width * 2), Hh = Math.round(r.height * 2); if (stc.width !== W || stc.height !== Hh) { stc.width = W; stc.height = Hh; }
+  stx.clearRect(0, 0, W, Hh);
+  const V2 = Math.round(Hh * VIEW);
+  stx.drawImage(renderer.domElement, r.left * pr, r.top * pr, r.width * pr, vh * pr, 0, 0, W, V2);
+  // fileiras: tripulação (posto) e módulos; verde/cinza = inteiro, âmbar = trocando de posto/em reparo, vermelho = fora
+  const row = (items, y) => {
+    const gap = 6, w = (W - 16 - gap * (items.length - 1)) / items.length, h = (Hh - V2 - 28) / 3;
+    const fs = Math.round(Math.min(h * 0.5, (w - 8) / Math.max(...items.map(it => it[0].length)) * 1.6));
+    stx.font = `600 ${fs}px "IBM Plex Mono", monospace`; stx.textAlign = 'center'; stx.textBaseline = 'middle';
+    items.forEach(([label, st], i) => {
+      const x = 8 + i * (w + gap), col = st === 'bad' ? `rgba(255,84,60,${0.75 + 0.25 * pulse})` : st === 'warn' ? '#efa53c' : st === 'crew' ? '#93cf6c' : 'rgba(201,196,171,.8)';
+      stx.fillStyle = st === 'bad' ? 'rgba(120,24,16,.55)' : 'rgba(255,255,255,.04)'; stx.fillRect(x, y, w, h);
+      stx.strokeStyle = col; stx.lineWidth = 2; stx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      stx.fillStyle = col; stx.fillText(label, x + w / 2, y + h / 2 + 1);
+      if (st === 'bad') { stx.beginPath(); stx.moveTo(x + 4, y + h - 4); stx.lineTo(x + w - 4, y + 4); stx.stroke(); }
+    });
+    return h;
+  };
+  const h1 = row(t.crew.map(c => [c.short, !c.alive ? 'bad' : swap.has(c) ? 'warn' : 'crew']), V2 + 6);
+  const ml = Object.keys(t.mods).map(k => [MODSHORT[k] || k, t.mods[k].broken ? (t.repairT > 0 ? 'warn' : 'bad') : 'ok']), half = Math.ceil(ml.length / 2);
+  row(ml.slice(0, half), V2 + 12 + h1); row(ml.slice(half), V2 + 18 + h1 * 2);
+  stx.font = '600 20px "IBM Plex Mono", monospace'; stx.textBaseline = 'top'; stx.textAlign = 'right';
+  const dead = t.crew.filter(c => !c.alive).length, af = t.ammoFrac();
+  stx.fillStyle = 'rgba(221,214,183,.75)'; stx.fillText(`MUN ${Math.round(af * 100)}%`, W - 10, 10);
+  if (t.repairT > 0) { stx.strokeStyle = '#efa53c'; stx.lineWidth = 7; stx.beginPath(); stx.arc(W - 34, Hh - 34, 22, -Math.PI / 2, -Math.PI / 2 + (1 - t.repairT / t.repairMax) * Math.PI * 2); stx.stroke(); }
+  if (t.fire > 0) { stx.strokeStyle = `rgba(255,120,40,${0.5 + 0.5 * pulse})`; stx.lineWidth = 6; stx.strokeRect(3, 3, W - 6, Hh - 6); }
+});

@@ -3,7 +3,7 @@ import { camera } from '../core/render.js';
 import { S } from '../core/state.js';
 import { settings, isDown } from '../core/settings.js';
 import { V3, UP, clamp, lerp, rand, REDUCED } from '../core/util.js';
-import { H } from '../world/terrain.js';
+import { HV } from '../world/terrain.js';
 import { cam } from '../game/camera.js';
 import { cmd } from './input.js';
 // =====================================================================
@@ -67,7 +67,11 @@ export function updateAirCamera(dt) {
   // o horizonte nivela devagar (mais rápido quando de cabeça para baixo)
   upQ(aimQ, _u); autoLevel(aimQ, 1 - Math.exp(-dt * (_u.y < 0 ? 2.2 : 1.4)), own ? upQ(v.q, _ref) : null);
   // visão: igual à mira; no modo livre ela gira sozinha e volta ao sair
-  if (!free) viewQ.slerp(aimQ, 1 - Math.exp(-dt * 28)); else autoLevel(viewQ, 1 - Math.exp(-dt * 2));
+  // como no WT a vista é RÍGIDA com o mouse: o círculo fica cravado, sem nadar atrás do cursor. Só ao voltar do olhar
+  // livre a vista desliza até a mira.
+  if (free) { autoLevel(viewQ, 1 - Math.exp(-dt * 2)); acam.back = true; }
+  else if (acam.back) { viewQ.slerp(aimQ, 1 - Math.exp(-dt * 14)); if (viewQ.angleTo(aimQ) < 0.01) acam.back = false; }
+  else viewQ.copy(aimQ);
   fwdQ(aimQ, _d); cam.aimDir.copy(own ? _d : fwdQ(viewQ, _t));
   const aiming = own && cmd.aim;
   acam.aimK += ((aiming ? 1 : 0) - acam.aimK) * (1 - Math.exp(-dt * 8));
@@ -85,6 +89,7 @@ export function updateAirCamera(dt) {
   // Plano próximo curto só aqui (painel a ~0,8 m, consoles e trilhos da capota mais perto que os 0,3 m de sempre)
   v.root.visible = true;
   if (v.pilotMesh) v.pilotMesh.visible = !cockpit;
+  if (v.skinView && v._skinCock !== cockpit) v.skinView(v._skinCock = cockpit);
   const near = cockpit ? 0.04 : 0.3; if (camera.near !== near) { camera.near = near; camera.updateProjectionMatrix(); }
   fwdQ(viewQ, _f); upQ(viewQ, _u);
   // A suavização é feita no DESLOCAMENTO em relação ao avião (não na posição do mundo):
@@ -109,7 +114,7 @@ export function updateAirCamera(dt) {
   if (acam.aimK > 0.01) fov = lerp(fov, 32, acam.aimK);
   acam.fov += (fov - acam.fov) * (1 - Math.exp(-dt * 5));
   setFov(acam.fov);
-  acam.pos.y = Math.max(acam.pos.y, H(acam.pos.x, acam.pos.z) + 2);
+  acam.pos.y = Math.max(acam.pos.y, HV(acam.pos.x, acam.pos.z) + 2);
   camera.position.copy(acam.pos);
   camera.quaternion.copy(viewQ).multiply(FLIP); // a câmera olha para −z
   // tremores: impacto, armas, buffet perto do estol, velocidade-limite

@@ -7,6 +7,7 @@ const KIT = {
   t34: { skirts: false, fenderH: 0.06, cupola: 'low', loader: true, bore: false, antenna: 1.6, mgBall: true, drums: 2, bustle: false, hullBoxes: 1, handrail: true },
   pz4: { skirts: true, fenderH: 0.12, cupola: 'tall', loader: true, bore: false, antenna: 0, mgBall: true, drums: 0, bustle: true, hullBoxes: 2, tskirts: true },
   tiger: { skirts: false, fenderH: 0.14, cupola: 'tall', loader: true, bore: false, antenna: 0, mgBall: true, drums: 0, bustle: true, hullBoxes: 2, spare: true },
+  gepard: { skirts: true, fenderH: 0.12, cupola: null, loader: false, bore: false, antenna: 0, mgBall: false, drums: 0, bustle: false, hullBoxes: 1 },
   wirbel: { skirts: true, fenderH: 0.12, cupola: null, loader: false, bore: false, antenna: 0, mgBall: false, drums: 0, bustle: false, hullBoxes: 1 }
 };
 

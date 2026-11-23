@@ -3,8 +3,8 @@ import { camera } from '../core/render.js';
 import { S, tanks, planes, TICKETS } from '../core/state.js';
 import { settings } from '../core/settings.js';
 import { V3, $, clamp } from '../core/util.js';
-import { POINTS } from '../world/terrain.js';
-import { VEHICLES, ballistic, hePen } from '../data/vehicles.js';
+import { POINTS, AIRSPAWN, H } from '../world/terrain.js';
+import { VEHICLES, ballistic, hePen, G } from '../data/vehicles.js';
 import { segmentHit, raycast, evalArmor } from '../combat/ballistics.js';
 import { drawXray } from './xray.js';
 import { drawMini } from './minimap.js';
@@ -45,48 +45,7 @@ export function addFeed(k, v, cause) {
 const sc = $('#status'), sx = sc.getContext('2d'), SX = sx;
 const C = { ok: '#c9c4ab', warn: '#efa53c', bad: '#e65a42', dead: '#5a1f18', dim: 'rgba(201,196,171,.35)', line: 'rgba(221,214,183,.55)', crew: '#93cf6c' };
 const modCol = m => (m.broken ? C.bad : C.ok);
-function drawTankStatus(t) {
-  const W = sc.width, Hh = sc.height, D = t.def;
-  sx.clearRect(0, 0, W, Hh);
-  const s = Math.min((Hh - 24) / D.L, (W - 60) / D.W) * 0.95, ox = W / 2, oy = Hh / 2 + 4;
-  const P = (x, z) => [ox - x * s, oy - z * s]; // frente para cima, +x (esquerda do tanque) à esquerda
-  sx.lineWidth = 1.5;
-  // lagartas
-  for (const side of [1, -1]) {
-    const [x0, y0] = P(side * D.W / 2, D.L * 0.48);
-    sx.fillStyle = t.mods.tracks.broken ? C.bad : 'rgba(201,196,171,.25)';
-    sx.fillRect(Math.min(x0, x0 + side * D.trackW * s), y0, D.trackW * s, D.L * 0.96 * s);
-  }
-  // casco
-  const [hx, hy] = P(D.W / 2 - D.trackW, D.L / 2);
-  sx.strokeStyle = C.line; sx.strokeRect(hx, hy, (D.W - 2 * D.trackW) * s, D.L * s);
-  // módulos
-  const box = (x, z, w, l, col) => { const [a, b] = P(x + w / 2, z + l / 2); sx.fillStyle = col; sx.fillRect(a, b, w * s, l * s); };
-  box(0, -D.L * .33, D.W * .42, D.L * .2, modCol(t.mods.engine));
-  box(0, D.transFront ? D.L * .43 : -D.L * .46, D.W * .38, D.L * .07, modCol(t.mods.transmission));
-  const af = t.ammoFrac();
-  for (const side of [1, -1]) box(side * (D.W - 2 * D.trackW) * .36, -D.L * .02, .45, .7, `rgba(239,165,60,${0.25 + af * 0.6})`);
-  // torre e canhão (giram com a torre)
-  if (t.turretOn) {
-    const T = D.turret, [tx, ty] = P(0, T.z);
-    sx.save(); sx.translate(tx, ty); sx.rotate(-t.turretYaw);
-    sx.strokeStyle = t.mods.drive.broken ? C.bad : C.line; sx.lineWidth = 2;
-    sx.beginPath(); sx.ellipse(0, 0, T.w / 2 * s, T.l / 2 * s, 0, 0, 7); sx.stroke();
-    sx.strokeStyle = t.mods.breech.broken ? C.bad : C.ok; sx.lineWidth = 3;
-    sx.beginPath(); sx.moveTo(0, -T.l * .3 * s); sx.lineTo(0, -(T.l / 2 + D.gun.len) * s * 0.7); sx.stroke();
-    sx.restore();
-  }
-  // tripulação
-  for (const c of t.components()) {
-    if (c.kind !== 'crew') continue;
-    const [x, y] = P(c.p[0], c.p[2]), rep = Object.values(t.replace).some(r => r.spare === c.ref);
-    sx.fillStyle = !c.ref.alive ? C.dead : rep ? C.warn : C.crew;
-    sx.beginPath(); sx.arc(x, y, 5, 0, 7); sx.fill();
-    if (!c.ref.alive) { sx.strokeStyle = C.bad; sx.lineWidth = 2; sx.beginPath(); sx.moveTo(x - 4, y - 4); sx.lineTo(x + 4, y + 4); sx.moveTo(x + 4, y - 4); sx.lineTo(x - 4, y + 4); sx.stroke(); }
-  }
-  if (t.fire > 0) { sx.fillStyle = `rgba(255,${100 + Math.random() * 80},30,${0.35 + Math.random() * 0.25})`; const [a, b] = P(D.W / 2, D.L / 2); sx.fillRect(a, b, D.W * s, D.L * s); }
-  if (t.repairT > 0) { sx.strokeStyle = C.warn; sx.lineWidth = 4; sx.beginPath(); sx.arc(W - 20, 20, 13, -Math.PI / 2, -Math.PI / 2 + (1 - t.repairT / t.repairMax) * Math.PI * 2); sx.stroke(); }
-}
+// o estado do tanque é o raio-X 3D de ui/xray.js (desenhado depois do quadro)
 export function drawPlaneStatus(p, sx = SX, W = sc.width, Hh = sc.height) {
   const D = p.def;
   sx.clearRect(0, 0, W, Hh);
@@ -128,23 +87,6 @@ export function buildPanels(v) {
   }
 }
 function updatePanels(v) {
-  if (v.type === 'plane') {
-    drawPlaneStatus(v);
-    $('#iIas').textContent = Math.round(v.ias * 3.6);
-    $('#iAlt').textContent = Math.round(v.pos.y);
-    $('#iVsi').textContent = (v.vel.y >= 0 ? '+' : '') + v.vel.y.toFixed(0);
-    $('#iThr').textContent = v.wep ? 'WEP' : Math.round(v.throttle * 100) + '%'; $('#iThr').className = 'mono' + (v.wep ? ' warn' : '');
-    $('#iG').textContent = v.n.toFixed(1); $('#iG').className = 'mono' + (Math.abs(v.n) > v.def.glim * .8 ? ' bad' : Math.abs(v.n) > 6 ? ' warn' : '');
-    $('#iTemp').textContent = Math.round(v.temp) + '°'; $('#iTemp').className = 'mono' + (v.temp > 110 ? ' bad' : v.temp > 100 ? ' warn' : '');
-    $('#iAoa').textContent = (v.alpha * 57.3).toFixed(0) + '°';
-    $('#planeFlags').innerHTML = [v.flaps ? '<span class="chip warn">FLAPS</span>' : '', v.airbrake ? '<span class="chip warn">FREIO AR.</span>' : '', v.fire > 0 ? '<span class="chip dead">FOGO</span>' : '', v.oil > 0 ? '<span class="chip warn">ÓLEO</span>' : '', !v.engineOn ? '<span class="chip dead">MOTOR PARADO</span>' : ''].join('');
-    $('#weapons').querySelectorAll('[data-g]').forEach(el => (el.querySelector('b').textContent = v.guns[+el.dataset.g].ammo));
-    const b = $('#weapons').querySelector('[data-b] b'); if (b) b.textContent = v.bombs.length;
-    const r = $('#weapons').querySelector('[data-r] b'); if (r) r.textContent = v.rockets;
-    $('#gdark').style.opacity = (v.blackout || 0) * 0.97;
-    return;
-  }
-  drawTankStatus(v);
   $('#tSpeed').textContent = Math.round(Math.abs(v.vFwd) * 3.6);
   $('#tGear').textContent = v.gear < 0 ? 'R' : Math.abs(v.vFwd) < 0.2 && Math.abs(v.throttle) < 0.05 ? 'N' : String(v.gear);
   $('#tRpm').textContent = Math.round(v.rpm / 10) * 10;
@@ -157,7 +99,7 @@ function updatePanels(v) {
   const mg = $('#weapons').querySelector('.mg b'); if (mg) mg.textContent = v.mgReload > 0 ? `${v.mgReload.toFixed(0)} s` : `${v.mgBelt}/${v.mgAmmo}`;
   const frac = ready ? (g.auto ? v.clip / g.clip : 1) : 1 - v.reload / g.reload;
   $('#reloadBar').style.width = frac * 100 + '%'; $('#reloadBox').className = 'reload' + (ready ? ' ready' : '');
-  $('#reloadT').textContent = !v.alive ? 'destruído' : v.mods.breech.broken ? 'culatra danificada' : !v.seat('gunner').alive ? 'sem atirador' : ready ? (g.auto ? `pente ${v.clip}/${g.clip}` : 'carregado') : `${v.reload.toFixed(1)} s`;
+  $('#reloadT').textContent = !v.alive ? 'destruído' : v.mods.breech.broken ? 'culatra danificada' : v.mods.barrel.broken ? 'cano danificado' : !v.seat('gunner').alive ? 'sem atirador' : ready ? (g.auto ? `pente ${v.clip}/${g.clip}` : 'carregado') : `${v.reload.toFixed(1)} s`;
   $('#tFire').hidden = !(v.fire > 0);
   $('#tRepair').hidden = !(v.repairT > 0); if (v.repairT > 0) $('#tRepair').textContent = `Reparando · ${Math.ceil(v.repairT)} s (F cancela)`;
   $('#tBroken').hidden = !(v.brokenCount() && v.repairT <= 0 && v.fire <= 0);
@@ -165,7 +107,33 @@ function updatePanels(v) {
 
 // ---------- Retículos ----------
 const _a = new V3(), _b = new V3(), _c = new V3(), _sp = new V3();
-const gunret = $('#gunret'), drop = $('#drop'), lead = $('#lead');
+const gunret = $('#gunret'), drop = $('#drop'), lead = $('#lead'), rkt = $('#rkt');
+// Onde a bomba (ou o foguete) cai se for largada AGORA: mesma integração dos projéteis (arrasto k·v, gravidade; o
+// foguete sai a 0,45·v e o motor empurra por 1,1 s). É o retículo de impacto do avião (CCIP): ponha o losango no alvo.
+const _ip = new V3(), _iv = new V3();
+export function ordImpact(p, rocket, out) {
+  const am = rocket ? p.def.rockets : p.bombs[p.bombs.length - 1]; if (!am) return null;
+  _ip.copy(p.pos); _iv.copy(p.vel);
+  if (rocket) _iv.add(_b.set(0, 0, 1).applyQuaternion(p.q).multiplyScalar(am.v * 0.45));
+  for (let i = 0, t = 0, h = 0.05; i < 500; i++, t += h) {
+    const sp = _iv.length(), k = am.k * sp;
+    _iv.x -= k * _iv.x * h; _iv.y += (-G - k * _iv.y) * h; _iv.z -= k * _iv.z * h;
+    if (rocket && t < 1.1) _iv.addScaledVector(_b.copy(_iv).normalize(), 0.5 * am.v * h);
+    _ip.addScaledVector(_iv, h);
+    if (_ip.y < H(_ip.x, _ip.z)) return out.copy(_ip);
+  }
+  return null;
+}
+const _ccB = new V3(), _ccR = new V3(); let ccT = 0, ccHasB = false, ccHasR = false;
+// marcadores fixos na tela: pontos de captura (sempre) e a própria base aérea (só para quem voa)
+const ptMarks = POINTS.map(pt => { const el = document.createElement('div'); el.className = 'lbl pt'; el.innerHTML = `<b>${pt.id}</b><span></span>`; $('#labels').appendChild(el); return el; });
+const baseMark = (() => { const el = document.createElement('div'); el.className = 'lbl pt base'; el.innerHTML = '<b>BASE</b><span></span>'; $('#labels').appendChild(el); return el; })();
+const km = d => d < 1000 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(1).replace('.', ',') + ' km';
+function mark(el, x, y, z, text) {
+  const d = _a.set(x, y, z).distanceTo(camera.position); _a.project(camera);
+  if (_a.z > 1 || Math.abs(_a.x) > 1.05 || Math.abs(_a.y) > 1.05) { el.style.display = 'none'; return; }
+  el.style.display = ''; el.style.transform = `translate(${(_a.x + 1) / 2 * innerWidth}px, ${(1 - _a.y) / 2 * innerHeight}px) translate(-50%,-100%)`; el.lastChild.textContent = text || km(d);
+}
 function toScreen(p, el) {
   _sp.copy(p).project(camera);
   if (_sp.z > 1 || Math.abs(_sp.x) > 1.2 || Math.abs(_sp.y) > 1.2) { el.hidden = true; return false; }
@@ -186,33 +154,28 @@ function predictImpact(t, out) {
 }
 function reticles(t) {
   const inPlane = t && t.type === 'plane' && t.alive;
-  $('#aimcircle').hidden = !inPlane; $('#nose').hidden = !inPlane;
   $('#cross').hidden = inPlane || cam.sniper || !t || !t.alive;
-  lead.hidden = true; drop.hidden = true;
+  lead.hidden = true; drop.hidden = true; if (!inPlane) rkt.hidden = true;
   if (inPlane) {
-    toScreen(_a.set(0, 0, 350).applyMatrix4(t.root.matrixWorld), $('#nose'));
-    if (settings.gameplay.leadMarker) {
-      let best = null, bd = 1300;
-      for (const e of planes) { if (!e.alive || e.team === t.team) continue; const d = e.pos.distanceTo(t.pos); if (d < bd) { bd = d; best = e; } }
-      if (best) {
-        const W = t.guns[0].W, tof = ballistic(W, bd).t || bd / W.v;
-        _c.copy(best.pos).addScaledVector(best.vel, tof).addScaledVector(t.vel, -tof); _c.y += 0.5 * 9.81 * tof * tof;
-        _c.addScaledVector(t.vel, tof); // as balas herdam a velocidade do avião
-        toScreen(_c, lead);
-      }
-    }
+    // retículos de impacto: losango = bomba, círculo com ponto = foguete (recalculados a ~20 Hz)
+    if ((ccT -= 1) <= 0) { ccT = 3; ccHasB = t.bombs.length > 0 && !!ordImpact(t, false, _ccB); ccHasR = t.rockets > 0 && !!ordImpact(t, true, _ccR); }
+    if (ccHasB) toScreen(_ccB, drop); if (ccHasR) toScreen(_ccR, rkt); else rkt.hidden = true;
     return;
   }
   if (t && t.alive && t.turretOn) {
     const mp = t.muzzles[0].getWorldPosition(_a), gd = _b.set(0, 0, 1).transformDirection(t.gunPivot.matrixWorld);
     const h = raycast(mp, gd, 1600, t), pt = h ? h.point : _c.copy(mp).addScaledVector(gd, 1600);
     toScreen(pt, gunret);
+    gunret.dataset.r = h && t.seat('commander').alive ? (d => d < 1000 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(2) + ' km')(mp.distanceTo(pt)) : ''; // distância até onde o canhão aponta (telêmetro do comandante)
     let cls = '';
     if (h && h.type === 'tank' && h.tank.team !== t.team && h.tank.alive && t.ammo.type !== 'HE') {
       const d = mp.distanceTo(h.point), E = evalArmor(h.tank, h, t.ammo, ballistic(t.ammo, d).v);
       cls = E.ricoP > .5 || E.pen < E.eff ? 'nopen' : E.pen < E.eff * 1.15 ? 'maybe' : 'pen';
     }
     gunret.className = cls + (t.canFire() ? '' : ' unready');
+    const rl = t.loaded >= 0 ? 1 : 1 - t.reload / t.gun.reload; gunret.style.setProperty('--rl', rl.toFixed(3)); gunret.style.setProperty('--rlo', rl < 1 ? 1 : 0); cam.reloadK = rl;
+    // na luneta o centro é o mouse e a bolinha é o canhão chegando; a chance de perfurar pinta o chevron do retículo
+    cam.penCls = cls;
     if (settings.gameplay.tankAssist && !t.def.gun.auto) { const ip = predictImpact(t, new V3()); if (ip) toScreen(ip, drop); }
   } else gunret.hidden = true;
 }
@@ -236,19 +199,24 @@ function drawScope(t) {
     for (let m = -40; m <= 40; m += 10) { const x = cx + Math.tan(m / 1000) * f; sctx.fillRect(x - 1, cy - (m % 20 ? 5 : 10), 2, m % 20 ? 10 : 20); }
   } else {
     sctx.fillRect(cx - R, cy - 1.5, R - 60, 3); sctx.fillRect(cx + 60, cy - 1.5, R - 60, 3); sctx.fillRect(cx - 1.5, cy + 60, 3, R - 60);
+    if (cam.reloadK < 1) { sctx.save(); sctx.lineWidth = 4; sctx.strokeStyle = 'rgba(0,0,0,.4)'; sctx.beginPath(); sctx.arc(cx, cy, 30, 0, 7); sctx.stroke(); sctx.strokeStyle = '#e8a23c'; sctx.beginPath(); sctx.arc(cx, cy, 30, -Math.PI / 2, -Math.PI / 2 + cam.reloadK * Math.PI * 2); sctx.stroke(); sctx.restore(); } // recarga na luneta
+    sctx.save(); sctx.strokeStyle = { pen: '#58c26a', maybe: '#e8b23c', nopen: '#e2553f' }[cam.penCls] || 'rgba(10,10,10,.85)'; sctx.lineWidth = 2.5;
     sctx.beginPath(); sctx.moveTo(cx - 9, cy + 14); sctx.lineTo(cx, cy); sctx.lineTo(cx + 9, cy + 14); sctx.stroke();
+    sctx.restore();
     const am = t.ammo;
     sctx.font = '500 12px "IBM Plex Mono", monospace'; sctx.textAlign = 'right'; sctx.textBaseline = 'middle';
-    for (let r = 200; r <= 2000; r += 200) {
+    // munição rápida (APFSDS) cai pouco: marcas de 400 em 400 m até 4 km, senão a escala amontoava no centro
+    const st = am.v > 1200 ? 400 : 200; let ly = -1e9;
+    for (let r = st; r <= Math.min(st * 10, (am.tab.length - 1) * 25); r += st) {
       const y = cy + Math.tan(ballistic(am, r).ang) * f; if (y > cy + R * .95) break;
-      const big = r % 400 === 0; sctx.fillRect(cx - (big ? 46 : 30), y - 1, big ? 28 : 16, 2);
-      if (big) sctx.fillText(String(r / 100), cx - 50, y);
+      const big = r % (st * 2) === 0; sctx.fillRect(cx - (big ? 46 : 30), y - 1, big ? 28 : 16, 2);
+      if (big && y - ly >= 13) { sctx.fillText(String(r / 100), cx - 50, y); ly = y; }
     }
   }
   sctx.textAlign = 'center'; sctx.fillStyle = 'rgba(221,214,183,.85)'; sctx.font = '500 12px "IBM Plex Mono", monospace';
   const zoom = Math.tan(30 * Math.PI / 180) / Math.tan(camera.fov * Math.PI / 360);
   const rng = t.seat('commander').alive && cam.range ? `≈ ${Math.round(cam.range / 25) * 25} m` : 'sem telemetria';
-  sctx.fillText(`×${zoom.toFixed(1)}  ·  ${cam.binoc ? 'binóculo' : t.ammo.name}  ·  ${rng}`, cx, cy + R - 24);
+  sctx.fillText(`×${zoom.toFixed(1)}  ·  ${cam.binoc ? 'binóculo' : t.ammo.name}  ·  ${rng}`, cx, Math.min(cy + R - 24, h - 118)); // acima do painel de munição (ficava escondido atrás dele)
 }
 
 // ---------- Placar ----------
@@ -257,6 +225,25 @@ export function drawScore() {
     .map(w => `<tr class="${w.isPlayer ? 'me' : ''}"><td>${w.name}</td><td>${w.veh ? (VEHICLES[w.veh].short || VEHICLES[w.veh].name) : '—'}</td><td class="mono">${w.kills}</td><td class="mono">${w.airKills}</td><td class="mono">${w.deaths}</td><td class="mono">${w.score}</td></tr>`).join('');
   const head = '<tr><th>Nome</th><th>Veículo</th><th>Terrestres</th><th>Aéreos</th><th>Mortes</th><th>Pontos</th></tr>';
   $('#scoreA').innerHTML = head + rows(1); $('#scoreE').innerHTML = head + rows(-1);
+}
+
+// ---------- Bússola (fita de rumo no topo; N = +z, como na HUD aérea) com a direção dos pontos de captura ----------
+const cmp = $('#compass'), cg = cmp.getContext('2d');
+function drawCompass(on) {
+  if (cmp.hidden === on) cmp.hidden = !on; if (!on) return;
+  const W = cmp.width, d = camera.getWorldDirection(_a), hdg = ((Math.atan2(-d.x, d.z) * 180 / Math.PI) + 360) % 360, pxd = W / 110, cx = W / 2;
+  cg.clearRect(0, 0, W, cmp.height); cg.textAlign = 'center'; cg.shadowColor = 'rgba(0,0,0,.9)'; cg.shadowBlur = 3;
+  for (let a = Math.ceil((hdg - 55) / 5) * 5; a <= hdg + 55; a += 5) {
+    const x = Math.round(cx + (a - hdg) * pxd), dd = ((a % 360) + 360) % 360, big = dd % 30 === 0, n = { 0: 'N', 90: 'L', 180: 'S', 270: 'O' }[dd];
+    cg.globalAlpha = Math.min(1, 1.25 - Math.abs(a - hdg) / 50); cg.fillStyle = big ? '#e9e3c8' : 'rgba(233,227,200,.6)'; cg.fillRect(x, big ? 15 : 18, 1, big ? 8 : 5);
+    if (big) { cg.font = `600 ${n ? 15 : 13}px "Barlow Condensed", sans-serif`; cg.fillStyle = n ? '#efa53c' : '#f3eed8'; cg.fillText(n || String(dd), x, 12); }
+  }
+  cg.globalAlpha = 1; cg.font = '700 14px "Barlow Condensed", sans-serif';
+  for (const p of POINTS) {
+    const b = Math.atan2(-(p.x - camera.position.x), p.z - camera.position.z) * 180 / Math.PI, rel = clamp(((b - hdg + 540) % 360) - 180, -53, 53);
+    cg.fillStyle = p.owner === 1 ? '#6db4e3' : p.owner === -1 ? '#e65a42' : '#ddd6b7'; cg.fillText(p.id, cx + rel * pxd, 39);
+  }
+  cg.fillStyle = '#e9e3c8'; cg.beginPath(); cg.moveTo(cx, 24); cg.lineTo(cx - 4, 30); cg.lineTo(cx + 4, 30); cg.closePath(); cg.fill();
 }
 
 // ---------- Atualização por quadro ----------
@@ -271,22 +258,26 @@ export function updateHUD(dt) {
   drawScope(t);
   const live = t && t.alive;
   $('#vehHud').hidden = !live;
+  drawCompass(!!live && t.type !== 'plane' && S.state === 'play');
   const oob = live && t.oobT > 0;
   $('#oob').hidden = !oob; if (oob) $('#oob').textContent = `Retorne à área de combate · ${Math.max(0, Math.ceil((t.type === 'plane' ? 15 : 12) - t.oobT))} s`;
-  if (!live || t.type !== 'plane') $('#gdark').style.opacity = 0;
   if ((hudT -= dt) > 0) return; hudT = .08;
+  const flying = live && t.type === 'plane';
   for (const k of [...tanks, ...planes]) {
     const el = k.label;
-    if (k === t || !k.alive || (k.team === -1 && k.spottedUntil < S.now)) { el.style.display = 'none'; continue; }
+    if (k === t || !k.alive || (k.team === -1 && k.spottedUntil < S.now) || (flying && k.type === 'plane')) { /* quem voa vê os aviões pela HUD aérea */ el.style.display = 'none'; continue; }
     const p = k.type === 'plane' ? _a.copy(k.pos).add(_b.set(0, 3, 0)) : k.eyePos(_a).add(_b.set(0, 1.4, 0));
     const d = p.distanceTo(camera.position); p.project(camera);
-    if (p.z > 1 || d > (k.type === 'plane' ? 3000 : 900)) { el.style.display = 'none'; continue; }
+    // quem voa enxerga os marcadores de solo de longe (com a distância); no chão valem os 900 m de sempre
+    if (p.z > 1 || d > (k.type === 'plane' ? 3000 : flying ? 4000 : 900)) { el.style.display = 'none'; continue; }
     el.style.display = ''; el.style.transform = `translate(${(p.x + 1) / 2 * innerWidth}px, ${(1 - p.y) / 2 * innerHeight}px) translate(-50%,-100%)`;
-    el.style.opacity = d > 500 ? .6 : 1;
+    el.style.opacity = d > 500 && !flying ? .6 : 1; el.dataset.d = flying && k.type !== 'plane' ? km(d) : '';
   }
+  POINTS.forEach((pt, i) => { ptMarks[i].className = 'lbl pt o' + pt.owner; if (live) mark(ptMarks[i], pt.x, H(pt.x, pt.z) + 14, pt.z); else ptMarks[i].style.display = 'none'; });
+  if (flying) { const s = AIRSPAWN[t.team]; mark(baseMark, s.x, s.y, s.z, t.rearmT > 0 ? 'rearmando…' : ''); } else baseMark.style.display = 'none';
   [...$('#caps').children].forEach((c, i) => { const p = POINTS[i]; c.className = 'cap o' + p.owner; const bar = c.querySelector('i'); bar.style.width = Math.abs(p.prog) * 100 + '%'; bar.style.background = p.prog > 0 ? 'var(--ally)' : 'var(--enemy)'; });
   const v = live ? t : S.spectate;
   drawMini(v, v && v.type === 'plane', cam);
-  if (live) updatePanels(t);
+  if (live && !flying) updatePanels(t);
   if (!$('#score').hidden) drawScore();
 }

@@ -1,7 +1,7 @@
 import { Quaternion } from 'three';
 import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
-import { isDown, settings, keyName } from '../core/settings.js';
+import { isDown, settings, keyName, pressed } from '../core/settings.js';
 import { V3, clamp } from '../core/util.js';
 import { drawScore } from '../ui/hud.js';
 import { $ } from '../core/util.js';
@@ -13,7 +13,8 @@ import { acam, CAM_MODES } from './camera.js';
 import { cam } from '../game/camera.js';
 import { cv, g, V, C, MONO, UI, glow, txt, otxt, gstroke, fmtD } from './hud/kit.js';
 import { themeOf } from './hud/themes.js';
-import { flightPanel, xrayPanel } from './hud/flight.js';
+import { flightPanel, kb } from './hud/flight.js';
+import { xr, modWear } from './xray3d.js';
 import { deathCard } from './hud/cards.js';
 import { leftPanels, tacMap } from './hud/scopes.js';
 import { warnings } from './hud/warnings.js';
@@ -24,6 +25,31 @@ import { warnings } from './hud/warnings.js';
 // a aeronave tiver. Cada avião tem o próprio tema (themes.js).
 // =====================================================================
 const _a = new V3(), _b = new V3(), _s = new V3();
+// raio-X: a tecla liga e desliga (segurar atrapalhava voar olhando o painel)
+let xray = false; const xrayOn = () => { if (pressed('a_xray')) xray = !xray; return xray; };
+// Raio-X no próprio caça (air/xray3d.js desenha a casca e os módulos por cima do quadro): aqui o avião sai do quadro
+// normal e entram as etiquetas — só do que está avariado, ligadas ao módulo por um traço, sem empilhar uma na outra
+const _xw = new V3(), XP = { x: 0, y: 0, on: false };
+function xrayView(p, on) {
+  xr.on = on; xr.plane = p; if (!on) return;
+  p.root.visible = false; // o quadro normal não desenha o avião; o raio-X redesenha em afterRender
+  const L = [];
+  for (const m of Object.values(p.mods)) {
+    if (m.kind === 'skin' || (!m.dead && modWear(m) < 0.02)) continue;
+    const q = proj(_xw.fromArray(m.c).applyMatrix4(p.root.matrixWorld), XP); if (!q || !q.on) continue;
+    L.push({ m, x: q.x, y: q.y, w: m.lost ? 3 : m.dead ? 2 : modWear(m) });
+  }
+  L.sort((a, b) => b.w - a.w); L.length = Math.min(L.length, 12); L.sort((a, b) => a.y - b.y);
+  const cx = L.reduce((s, l) => s + l.x, 0) / (L.length || 1); let yl = -1e9, yr = -1e9;
+  for (const l of L) {
+    const right = l.x >= cx, col = l.m.lost || l.m.dead ? C.enemy : l.w > 0.5 ? C.amber : '#ffe08a';
+    const ty = Math.max(l.y, (right ? yr : yl) + 17), tx = l.x + (right ? 46 : -46); if (right) yr = ty; else yl = ty;
+    g.beginPath(); g.moveTo(l.x, l.y); g.lineTo(tx - (right ? 4 : -4), ty - 4); g.lineWidth = 1; g.strokeStyle = col; g.globalAlpha = 0.7; g.stroke(); g.globalAlpha = 1;
+    g.beginPath(); g.arc(l.x, l.y, 2, 0, 7); g.fillStyle = col; g.fill();
+    otxt(`${l.m.label} · ${l.m.lost ? 'perdido' : l.m.dead ? 'destruído' : Math.round((1 - l.w) * 100) + '%'}`, tx, ty, 13, col, right ? 'left' : 'right', UI, 600);
+  }
+  otxt(`RAIO-X · ${p.def.short}${L.length ? '' : ' · sem avarias'} · ${kb('a_xray')} fecha`, V.W / 2, V.H - 58, 13, 'rgba(255,255,255,.85)', 'center', UI, 600);
+}
 export function showAirHud(on) { cv.hidden = !on; $('#hud').classList.toggle('air', on); }
 
 // projeta um ponto do mundo; retorna null se atrás da câmera
@@ -34,16 +60,32 @@ function proj(p, out = { x: 0, y: 0, on: false }) {
 }
 const P1 = { x: 0, y: 0, on: false }, P2 = { x: 0, y: 0, on: false };
 
-export function updateAirHUD(dt) {
-  if (S.state === 'airmenu' || S.mode !== 'air') return;
+function begin(dt) {
   V.dpr = Math.min(2, devicePixelRatio || 1);
   if (cv.width !== innerWidth * V.dpr || cv.height !== innerHeight * V.dpr) { cv.width = innerWidth * V.dpr; cv.height = innerHeight * V.dpr; }
   V.W = innerWidth; V.H = innerHeight; V.blink += dt;
   g.setTransform(V.dpr, 0, 0, V.dpr, 0, 0); g.clearRect(0, 0, V.W, V.H);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+}
+// Avião do jogador na batalha de tanques: a MESMA HUD da Batalha Aérea (retículo, painel, radar/RWR, alertas) por cima
+// do que é da partida de solo (tickets, minimapa, marcadores de blindados/pontos/base e retículos de bomba/foguete)
+let flyOn = false;
+export function updateFlyHUD(dt) {
+  const p = S.player, on = !!(p && p.alive && p.type === 'plane' && S.state === 'play');
+  if (on !== flyOn) { flyOn = on; cv.hidden = !on; $('#hud').classList.toggle('fly', on); if (!on) gdark(0); }
+  if (!on) return;
+  begin(dt);
+  const T = themeOf(p.def);
+  targets(p, true); speedLines(p); reticle(p); flightPanel(p, T); leftPanels(p, T); warnings(p);
+  xrayView(p, xrayOn());
+  gdark(p.blackout);
+}
+export function updateAirHUD(dt) {
+  if (S.state === 'airmenu' || S.mode !== 'air') return;
+  begin(dt);
   $('#score').hidden = !isDown('score'); if (!$('#score').hidden) drawScore();
   const p = S.player, live = p && p.alive && S.state === 'play';
   const v = live ? p : S.spectate;
-  g.lineCap = 'round'; g.lineJoin = 'round';
   topBar(v);
   if (p && !live) deathCard(themeOf(p.def)); // você caiu: quem, com o quê e o que levou
   if (!v) return;
@@ -58,7 +100,7 @@ export function updateAirHUD(dt) {
     warnings(p);
     hitMessages();
     baseHud(p);
-    if (isDown('a_xray')) xrayPanel(p, T);
+    xrayView(p, xrayOn());
   } else if (S.state === 'spectate' && v) {
     txt(`ASSISTINDO · ${v.who ? v.who.name : ''} · ${v.def.short}`, V.W / 2, V.H - 40, 15, C.ally, 'center', UI);
   }
@@ -150,15 +192,16 @@ function targets(v, live) {
     const lab = en ? `${e.def.short}  ${fmtD(d)}` : `${e.who ? e.who.name : ''}`;
     if (en || d < 1500) placeLabel(lab, pr.x, pr.y, r, col, rx, ry);
     // avanço (lead) do alvo marcado: onde mirar para as balas encontrarem o alvo
-    if (live && e === mk && d < 1600) {
+    // marcado: até 1,6 km com a linha; os outros inimigos ao alcance das armas ganham o círculo sozinhos (como no WT arcade)
+    if (live && en && d < (e === mk ? 1600 : 900)) {
       const Wg = v.guns.find(q => q.ammo > 0) || v.guns[0];
       leadPoint(v.pos, v.vel, e.pos, e.vel, Wg.W.v, _a);
       const lp = proj(_a, P2);
       if (lp && lp.on) {
         g.strokeStyle = C.enemy; g.lineWidth = 1.6; glow(C.enemy, 5);
-        g.beginPath(); g.arc(lp.x, lp.y, 7, 0, 7); g.stroke();
+        g.beginPath(); g.arc(lp.x, lp.y, e === mk ? 7 : 5, 0, 7); g.stroke();
         g.beginPath(); g.arc(lp.x, lp.y, 1.6, 0, 7); g.fillStyle = C.enemy; g.fill();
-        g.globalAlpha = 0.35; g.beginPath(); g.moveTo(pr.x, pr.y); g.lineTo(lp.x, lp.y); g.stroke(); g.globalAlpha = 1; g.shadowBlur = 0;
+        if (e === mk) { g.globalAlpha = 0.35; g.beginPath(); g.moveTo(pr.x, pr.y); g.lineTo(lp.x, lp.y); g.stroke(); g.globalAlpha = 1; } g.shadowBlur = 0;
       }
     }
   }
@@ -179,6 +222,9 @@ const _q = new Quaternion();
 // branco e fino como no WT: contorno escuro leve só para ler contra céu claro
 const RW = 'rgba(255,255,255,.85)', RWD = 'rgba(255,255,255,.5)';
 function rstroke(w, col = RW) { g.shadowBlur = 0; g.lineWidth = w + 1.2; g.strokeStyle = 'rgba(0,0,0,.35)'; g.stroke(); g.lineWidth = w; g.strokeStyle = col; g.stroke(); }
+// mira VERDE (escolha do dono; a branca sumia no céu claro e a que escurecia sozinha ele não quis): cruz das armas,
+// rodinha do mouse e anel de aquecimento
+const retCol = (k, a = 1) => `rgba(56,255,92,${a})`;
 function reticle(p) {
   // para onde as balas vão (eixo fixo das armas — plane.fireDir), a 400 m
   p.fireDir(_a).multiplyScalar(400).add(p.pos);
@@ -188,26 +234,19 @@ function reticle(p) {
   const mk = rr ? rr.target : B.marked, d = rr ? rr.range : mk ? mk.pos.distanceTo(p.pos) : 0;
   const fpx = V.H / 2 / Math.tan(camera.fov * Math.PI / 360);
   if (pr) {
-    const x = pr.x, y = pr.y, R = 11, inR = mk && d < 1200;
-    // anel partido: quatro arcos com folga nos pontos cardeais, traços para fora e ponto central
+    const x = pr.x, y = pr.y, inR = mk && d < 1200;
+    // eixo das armas: cruz pequena e fina com ponto no centro (o retículo antigo, anel partido + traços + anel de
+    // alcance sempre aceso, ficava grande e poluído — reprovado pelo dono)
     g.beginPath();
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; g.moveTo(x + Math.cos(a - 0.5) * R, y + Math.sin(a - 0.5) * R); g.arc(x, y, R, a - 0.5, a + 0.5); }
-    rstroke(1.1);
-    g.beginPath();
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * (R + 3), y + s * (R + 3)); g.lineTo(x + c * (R + 7), y + s * (R + 7)); }
-    rstroke(1.1);
-    g.beginPath(); g.arc(x, y, 1.1, 0, 7); g.fillStyle = RW; g.fill();
-    // régua de alcance (como a barra do K-14): arco de 1200 m que encolhe até a distância do alvo marcado;
-    // a marca branca é a convergência das armas (400 m) — o alvo está no alcance ideal quando o arco passa dela
-    const RR = 24, a0 = -Math.PI / 2;
-    g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2); g.lineWidth = 0.7; g.strokeStyle = 'rgba(255,255,255,.14)'; g.stroke();
-    if (inR) {
-      const k = clamp(d / 1200, 0, 1), close = d < 450;
-      g.beginPath(); g.arc(x, y, RR, a0, a0 + Math.PI * 2 * k); rstroke(close ? 1.8 : 1.2, close ? RW : RWD);
-      const ac = a0 + Math.PI * 2 * k; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 3), y + Math.sin(ac) * (RR - 3)); g.lineTo(x + Math.cos(ac) * (RR + 3), y + Math.sin(ac) * (RR + 3)); rstroke(1.1);
-      otxt((rr ? 'RADAR ' : '') + fmtD(d), x + RR + 8, y + 4, 11, close ? RW : RWD, 'left', MONO, 500);
-    }
-    const ac = a0 + Math.PI * 2 / 3; g.beginPath(); g.moveTo(x + Math.cos(ac) * (RR - 3), y + Math.sin(ac) * (RR - 3)); g.lineTo(x + Math.cos(ac) * (RR + 3), y + Math.sin(ac) * (RR + 3)); rstroke(1, RWD);
+    // mira das armas no formato do WT: cruz aberta de quatro traços com o ponto no meio, de tamanho que se enxerga (a de
+    // antes tinha 9 px de braço e sumia contra o chão)
+    // (dono, 3ª volta: como no WT a mira das armas é uma cruz pequena e bem marcada com a bolinha no meio, MENOR que a rodinha
+    // do mouse — a rodinha diz para onde você aponta, a cruz para onde o avião atira; o aquecimento fica na cruz)
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); g.moveTo(x + c * 5, y + s * 5); g.lineTo(x + c * 12, y + s * 12); }
+    // branco limpo, sem contorno preto (o dono achou sujo)
+    g.shadowBlur = 0; g.lineCap = 'butt'; g.lineWidth = 2; g.strokeStyle = retCol(0); g.stroke();
+    g.beginPath(); g.arc(x, y, 1.8, 0, 7); g.fillStyle = retCol(0); g.fill();
+    // (o arco de alcance com os metros ao lado da mira saiu a pedido do dono: a distância já está no rótulo do alvo)
     // marcador de acerto: X que abre e some (branco; âmbar se foi forte)
     const ha = S.now - B.hitT;
     if (ha < 0.2) {
@@ -233,9 +272,17 @@ function reticle(p) {
   const ap = proj(_b, P2);
   if (ap && acam.mode !== 3) {
     const near = pr ? Math.hypot(ap.x - pr.x, ap.y - pr.y) : 99;
-    g.globalAlpha = clamp((near - 6) / 20, 0.25, 1);
-    g.beginPath(); g.arc(ap.x, ap.y, 8, 0, 7); gstroke(1.3, C.white);
+    g.globalAlpha = clamp((near - 6) / 20, 0.75, 1); // sempre visível, como no WT (antes quase sumia com o nariz no lugar)
+    g.beginPath(); g.arc(ap.x, ap.y, 19, 0, 7); g.shadowBlur = 0; g.lineWidth = 1.6; g.strokeStyle = retCol(1, 0.92); g.stroke();
     g.globalAlpha = 1;
+  }
+  // aquecimento das armas (como no WT): arco em volta da CRUZ das armas que se fecha conforme o cano esquenta —
+  // branco, âmbar acima de 45%, vermelho acima de 75%; arma travada = anel vermelho piscando até esfriar
+  const hc = pr, ht = p.guns.reduce((m, q) => Math.max(m, q.heat), 0), jam = p.guns.some(q => q.jam);
+  if (hc && (ht > 0.03 || jam)) {
+    const a0 = -Math.PI / 2, col = jam ? (Math.sin(V.blink * 14) > 0 ? C.enemy : 'rgba(230,90,66,.35)') : ht > 0.75 ? C.enemy : ht > 0.45 ? C.amber : retCol(0, 0.9);
+    g.beginPath(); g.arc(hc.x, hc.y, 16, 0, 7); g.lineWidth = 1; g.strokeStyle = retCol(0, 0.25); g.stroke(); // trilho do arco, bem fraco
+    g.beginPath(); g.arc(hc.x, hc.y, 16, a0, a0 + Math.PI * 2 * (jam ? 1 : ht)); g.lineWidth = 2.4; g.strokeStyle = col; g.stroke();
   }
 }
 
@@ -263,12 +310,6 @@ function hitMessages() {
       g.globalAlpha = clamp((life - age) * 3, 0, 1); otxt(m.t, V.W / 2, V.H * 0.2, size, col, 'center', UI, 700); g.globalAlpha = 1;
     }
   }
-  let i = 0;
-  for (const c of B.critLog) {
-    const age = S.now - c.at; if (age > 2.5) continue;
-    g.globalAlpha = clamp(2.5 - age, 0, 1); otxt(c.t, V.W / 2, V.H * 0.2 + 26 + i * 20, 15, C.amber, 'center'); i++;
-  }
-  g.globalAlpha = 1;
 }
 
 // ---------- efeitos de tela ----------

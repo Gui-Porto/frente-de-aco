@@ -34,7 +34,7 @@ export class Rwr {
       if (g.r > hear) continue;
       seen.add(e);
       let th = this.threats.get(e);
-      if (!th) { th = { e, bias: (Math.random() - 0.5) * W.res * 0.4 * DEG, lvl: null }; this.threats.set(e, th); }
+      if (!th) { th = { e, bias: (Math.random() - 0.5) * W.res * 0.4 * DEG, lvl: null, t0: now }; this.threats.set(e, th); }
       const step = W.res * DEG, az = g.az + th.bias;
       // só quadrante (centro a ±45°/±135°) ou setor de `res` graus
       th.az = W.res >= 90 ? (az >= 0 ? 1 : -1) * (Math.abs(az) < Math.PI / 2 ? 45 : 135) * DEG : Math.round(az / step) * step;

@@ -7,3 +7,5 @@ Thumbs.db
 .env
 .env.*
 __pycache__/
+
+public/audio/local/

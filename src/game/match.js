@@ -2,8 +2,8 @@ import { clearFlakes } from '../vehicles/planeFx.js';
 import { S, tanks, planes, TICKETS } from '../core/state.js';
 import { V3, rand, rv, clamp } from '../core/util.js';
 import { POINTS, SPAWN, AIRSPAWN } from '../world/terrain.js';
-import { resetTrees, hideCraters } from '../world/scenery.js';
-import { VEHICLES } from '../data/vehicles.js';
+import { resetTrees, hideCraters, resetBuildings } from '../world/scenery.js';
+import { VEHICLES, ERAS } from '../data/vehicles.js';
 import { Tank } from '../vehicles/tank.js';
 import { Plane } from '../vehicles/plane.js';
 import { TankBrain, PlaneBrain } from '../ai/brains.js';
@@ -12,10 +12,11 @@ import { fxBurn, clearParts } from '../fx/particles.js';
 import { addFeed, showDmg } from '../ui/hud.js';
 import { openSpawn, showEnd } from '../ui/menus.js';
 import { cam } from './camera.js';
+import { clearMissiles } from '../air/missiles.js';
 import { $ } from '../core/util.js';
 
 const NAMES = { 1: ['Sgt. Moura', 'Cb. Teixeira', 'Ten. Barros', 'Sd. Ribeiro'], '-1': ['Ofw. Brandt', 'Ltn. Krause', 'Uffz. Lenz', 'St. Sokolov', 'Sgt. Orlov'] };
-const GROUND = ['sherman', 't34', 'pz4', 'tiger'];
+const era = () => ERAS[S.era || 'ww2'];
 let respawns = [], lastPlane = { 1: -999, '-1': -999 }, ticketT = 0;
 
 export function mkWho(name, team, isPlayer) {
@@ -26,12 +27,15 @@ export function spawnVehicle(who, key, slot) {
   const D = VEHICLES[key]; let v;
   if (D.type === 'plane') {
     const s = AIRSPAWN[who.team], off = (slot - 2) * 60;
-    v = new Plane(key, who.team, who, new V3(s.x + off, s.y + rand(-50, 50), s.z), s.yaw, 125);
+    v = new Plane(key, who.team, who, new V3(s.x + off, s.y + rand(-50, 50), s.z), s.yaw, D.vspawn || (D.jet ? 200 : 125)); // jato nasce mais rápido (125 m/s é perto do estol dele)
     if (!who.isPlayer) v.brain = new PlaneBrain(v);
     lastPlane[who.team] = S.now;
   } else {
     const s = SPAWN[who.team];
-    v = new Tank(key, who.team, who, s.x + (slot - 2) * 14 + rand(-2, 2), s.z + rand(-4, 4), s.yaw);
+    let x = s.x + (slot - 2) * 14 + rand(-2, 2); const z = s.z + rand(-4, 4);
+    // vaga ocupada (aliado parado ou destroço): procura para os lados, de vaga em vaga — nascer em cima de outro tanque fazia os dois capotarem
+    for (let k = 1; k < 12 && tanks.some(t => Math.hypot(t.pos.x - x, t.pos.z - z) < 9); k++) x += (k % 2 ? k : -k) * 14;
+    v = new Tank(key, who.team, who, x, z, s.yaw);
     if (!who.isPlayer) v.brain = new TankBrain(v);
   }
   who.veh = key; who.v = v;
@@ -41,16 +45,16 @@ function botPick(team) {
   const enemyPlanes = planes.some(p => p.alive && p.team !== team);
   const haveAA = tanks.some(t => t.alive && t.team === team && t.type === 'spaa');
   const myPlanes = planes.some(p => p.alive && p.team === team);
-  if (enemyPlanes && !haveAA && Math.random() < 0.55) return 'wirbel';
-  if (!myPlanes && S.now - lastPlane[team] > 75 && S.matchT > 40 && Math.random() < 0.45) return ['p47', 'il2', 'fw190'][Math.floor(Math.random() * 3)];
-  return GROUND[Math.floor(Math.random() * GROUND.length)];
+  if (era().aa && enemyPlanes && !haveAA && Math.random() < 0.55) return era().aa;
+  if (era().planes.length && !myPlanes && S.now - lastPlane[team] > 75 && S.matchT > 40 && Math.random() < 0.45) return era().planes[Math.floor(Math.random() * era().planes.length)];
+  return era().ground[Math.floor(Math.random() * era().ground.length)];
 }
 export function clearWorld() {
   while (tanks.length) tanks[0].remove();
   while (planes.length) planes[0].remove();
-  clearProjs(); clearDebris(); clearParts(); clearFlakes(); respawns = [];
+  clearProjs(); clearMissiles(); clearDebris(); clearParts(); clearFlakes(); respawns = [];
   for (const p of POINTS) { p.owner = 0; p.prog = 0; }
-  resetTrees(); hideCraters();
+  resetTrees(); hideCraters(); resetBuildings();
   S.tickets = { 1: TICKETS, '-1': TICKETS }; S.player = null; S.spectate = null; S.roster = []; S.xray = null;
   lastPlane = { 1: -999, '-1': -999 };
   $('#feed').innerHTML = ''; $('#xray').hidden = true;
@@ -59,8 +63,8 @@ export function startMatch() {
   clearWorld();
   S.stats = { kills: 0, airKills: 0, deaths: 0, shots: 0, hits: 0, pens: 0 }; S.matchT = 0;
   S.me = mkWho('Você', 1, true); S.me.sp = 300; S.me.used = new Set(); S.me.firstSpawn = true;
-  NAMES[1].forEach((n, i) => spawnVehicle(mkWho(n, 1, false), GROUND[Math.floor(Math.random() * 4)], i < 2 ? i : i + 1));
-  NAMES[-1].forEach((n, i) => spawnVehicle(mkWho(n, -1, false), GROUND[Math.floor(Math.random() * 4)], i));
+  NAMES[1].forEach((n, i) => spawnVehicle(mkWho(n, 1, false), era().ground[Math.floor(Math.random() * era().ground.length)], i < 2 ? i : i + 1));
+  NAMES[-1].forEach((n, i) => spawnVehicle(mkWho(n, -1, false), era().ground[Math.floor(Math.random() * era().ground.length)], i));
   S.paused = false;
   $('#caps').innerHTML = POINTS.map(p => `<div class="cap">${p.id}<i></i></div>`).join('');
   openSpawn('Primeiro spawn sem custo. Aviões liberam com SP, ganhos por abates e capturas.');
@@ -90,8 +94,17 @@ function deathText(k, cause) {
   const why = { ammo: 'Detonação da munição.', crew: 'Tripulação fora de combate.', fire: 'O incêndio tomou o veículo.', pilot: 'Piloto morto.', wing: 'Asa arrancada.', tail: 'Cauda destruída.', structure: 'Estrutura destruída.', crash: 'Colisão com o solo.', overg: 'A asa quebrou por excesso de G.', vne: 'Excesso de velocidade: a estrutura cedeu.', oob: 'Fora da área de combate.', flip: 'Veículo capotado.', bail: 'Veículo abandonado.' }[cause] || 'Veículo perdido.';
   return why + (k ? ` Abatido por ${k.who ? k.who.name : ''} (${k.def.short || k.def.name}).` : '');
 }
+// Rearme do avião do jogador: sem bombas/foguetes (ou com pouca munição), passar a até 900 m da própria base por 4 s
+// repara e rearma em voo — arcade, mas dá um ciclo ao avião (antes, gastou a carga, acabou o que fazer)
+function rearmStep(dt) {
+  const p = S.player; if (!p || p.type !== 'plane' || !p.alive) return;
+  const spent = p.bombs.length < p.ord0.bombs || p.rockets < p.ord0.rockets || p.guns.some(g => g.ammo < g.max * 0.5);
+  const s = AIRSPAWN[p.team], near = Math.hypot(p.pos.x - s.x, p.pos.z - s.z) < 900;
+  if (!spent || !near) { p.rearmT = 0; if (spent && !p.bombs.length && !p.rockets && !p.rearmHint) { p.rearmHint = true; showDmg('Carga esgotada · voe até a BASE para rearmar', true); } return; }
+  if ((p.rearmT = (p.rearmT || 0) + dt) > 4) { p.refit(); p.rearmT = 0; p.rearmHint = false; showDmg('Rearmado e reparado', true); }
+}
 export function updateMatch(dt) {
-  S.matchT += dt;
+  S.matchT += dt; rearmStep(dt);
   for (const p of POINTS) {
     let a = 0, e = 0, meIn = false;
     for (const t of tanks) if (t.alive && Math.hypot(t.pos.x - p.x, t.pos.z - p.z) < p.r) { t.team === 1 ? a++ : e++; if (t === S.player) meIn = true; }
@@ -109,8 +122,9 @@ export function updateMatch(dt) {
   if ((ticketT += dt) >= 1) {
     ticketT = 0;
     const own = POINTS.reduce((s, p) => s + p.owner, 0);
-    if (own > 0) S.tickets[-1] = Math.max(0, S.tickets[-1] - own * 1.5);
-    if (own < 0) S.tickets[1] = Math.max(0, S.tickets[1] + own * 1.5);
+    // medido em partida só de IA: com 1,5/s por ponto a partida acabava em 4,5 min (domínio dos 3 pontos = 3 min)
+    if (own > 0) S.tickets[-1] = Math.max(0, S.tickets[-1] - own * 0.7);
+    if (own < 0) S.tickets[1] = Math.max(0, S.tickets[1] + own * 0.7);
   }
   for (let i = respawns.length - 1; i >= 0; i--) {
     const r = respawns[i];

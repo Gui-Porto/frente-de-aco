@@ -1,6 +1,6 @@
 import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
-import { AC, eng, cockpitTone, cockpitVoice, cockpitThump, sndWhoosh, sndSonicBoom, sndMachCross, sndBoostIgnite, sndCrackle, sndGear, sndTouch, sndFlaps, soundAt } from '../fx/audio.js';
+import { AC, eng, cockpitTone, cockpitVoice, cockpitThump, sndWhoosh, sndSonicBoom, sndMachCross, sndBoostIgnite, sndCrackle, sndGear, sndTouch, sndFlaps, soundAt, sndOwnGuns } from '../fx/audio.js';
 import { shakeCam } from '../ui/hud.js';
 import { acam } from './camera.js';
 import { clamp } from '../core/util.js';
@@ -48,10 +48,11 @@ function engine(q, vol, dt) {
   // PC: ronco grave (o tremor vem da variação lenta, os estalos são estouros à parte)
   glide(eng.ab.g.gain, jet ? vol * (sd.ab || 0) * E.ab * (0.85 + 0.3 * Math.random()) : 0, 0.12);
   eng.rumble.g.gain.value = jet ? vol * (0.05 + 0.12 * Math.min(1, E.output)) : 0;
+  if (eng.hiss) eng.hiss.g.gain.value = jet ? vol * 0.05 * E.N * E.N * (pit ? 0.3 : 1) : 0;
   // gravações: viram a base do som; a síntese fica por baixo (rotação, apito, sub-grave)
   const rp = eng.recP, rj = eng.recJ;
-  if (rp) { eng.air.g.gain.value *= 0.12; rp.g.gain.value = E && !jet ? vol * 0.55 * (0.55 + 0.45 * Math.min(E.power, 1.2)) : 0; }
-  if (rj) { eng.jet.g.gain.value *= 0.25; eng.rumble.g.gain.value *= 0.6; rj.g.gain.value = jet ? vol * 0.7 * (0.3 + 0.7 * Math.max(0, (E.N - E.E.nIdle) / (1 - E.E.nIdle))) : 0; }
+  if (rp) { eng.air.g.gain.value *= 0.2; rp.g.gain.value = E && !jet ? vol * 0.8 * (0.55 + 0.45 * Math.min(E.power, 1.2)) : 0; }
+  if (rj) { eng.jet.g.gain.value *= 0.25; eng.rumble.g.gain.value *= 1.5; rj.g.gain.value = jet ? vol * 0.75 * (0.3 + 0.7 * Math.max(0, (E.N - E.E.nIdle) / (1 - E.E.nIdle))) : 0; }
   if (!E) return;
   if (rp && !jet) { rp.s.playbackRate.value = 0.72 + 0.4 * Math.min(E.power, 1.2); rp.f.frequency.value = pit ? 1600 : 16000; }
   if (rj && jet) { rj.s.playbackRate.value = 0.62 + 0.55 * E.N; rj.f.frequency.value = pit ? 1400 : 16000; }
@@ -86,10 +87,10 @@ function engine(q, vol, dt) {
 }
 // gatilho: rajada gravada da Browning em laço (tom pelo calibre da metralhadora), solta rápido ao parar
 function gunLoop(p, on) {
-  const gl = eng.gunLoop; if (!gl) return;
-  const mg = p && on ? p.guns.find(g => g.W.cal < 20 && g.ammo > 0 && !g.jam && !g.broken) : null, fire = !!(mg && p.firing);
-  gl.g.gain.setTargetAtTime(fire ? (acam.mode === 2 ? 0.5 : 0.38) : 0, AC.currentTime, fire ? 0.01 : 0.04);
-  if (mg) gl.s.playbackRate.value = Math.min(1.3, Math.max(0.85, 12.7 / mg.W.cal));
+  if (eng.gunLoop) eng.gunLoop.g.gain.value = 0; // laço gravado aposentado: cada arma toca na própria cadência (sndOwnGuns)
+  if (!p || !on) return;
+  const gs = p.guns.filter(g => g.on && g.W.rpm < 2400).map(g => ({ cal: g.W.cal, rpm: g.W.rpm, n: g.pts.length }));
+  if (gs.length) sndOwnGuns(gs, acam.mode === 2 ? 0.3 : 0.25);
 }
 // Motores dos OUTROS aviões por perto: até 3 vozes, com Doppler (sobe chegando, cai indo embora) e lado estéreo.
 // `skip` é o avião cujo motor já toca na voz principal (o jogador ou o mais próximo assistindo).
@@ -201,4 +202,4 @@ function tones(p, dt) {
   else if (w === 'stall') { wn.o.frequency.value = 330; wn.g.gain.value = pulse(3, 0.6) ? 0.025 : 0; }
   else wn.g.gain.value = 0;
 }
-export function airAudioOff() { voice(voiceStep(null, 0, false)); if (eng.boost) for (const k of ['log', 'cg', 'hg', 'sg', 'rg']) eng.boost[k].gain.value = 0; if (!eng.jet) return; for (const v of eng.voices) { v.g.gain.value = 0; if (v.recP) v.recP.g.gain.value = 0; if (v.recJ) v.recJ.g.gain.value = 0; } for (const r of [eng.recP, eng.recJ, eng.recC, eng.gunLoop]) if (r) r.g.gain.value = 0; eng.roll.g.gain.value = 0; eng.wind.buffet.gain.value = 0; eng.jet.g.gain.value = 0; eng.ab.g.gain.value = 0; eng.wind.g.gain.value = 0; eng.rumble.g.gain.value = 0; eng.seek.g.gain.value = 0; eng.warn.g.gain.value = 0; eng.air.g.gain.value = 0; }
+export function airAudioOff() { voice(voiceStep(null, 0, false)); if (eng.boost) for (const k of ['log', 'cg', 'hg', 'sg', 'rg']) eng.boost[k].gain.value = 0; if (!eng.jet) return; for (const v of eng.voices) { v.g.gain.value = 0; if (v.recP) v.recP.g.gain.value = 0; if (v.recJ) v.recJ.g.gain.value = 0; } for (const r of [eng.recP, eng.recJ, eng.recC, eng.gunLoop]) if (r) r.g.gain.value = 0; eng.roll.g.gain.value = 0; eng.wind.buffet.gain.value = 0; eng.jet.g.gain.value = 0; eng.ab.g.gain.value = 0; eng.wind.g.gain.value = 0; eng.rumble.g.gain.value = 0; if (eng.hiss) eng.hiss.g.gain.value = 0; eng.seek.g.gain.value = 0; eng.warn.g.gain.value = 0; eng.air.g.gain.value = 0; }

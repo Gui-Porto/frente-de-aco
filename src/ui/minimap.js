@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { S, tanks, planes } from '../core/state.js';
 import { $, clamp } from '../core/util.js';
-import { H, POINTS, LIMIT, groundSample } from '../world/terrain.js';
+import { H, POINTS, LIMIT, ROADS, groundSample } from '../world/terrain.js';
 import { OBST, TREES, HEDGES } from '../world/scenery.js';
 import { DEG } from '../data/vehicles.js';
 import { yawOf } from '../ai/brains.js';
@@ -10,26 +10,38 @@ import { yawOf } from '../ai/brains.js';
 const mini = $('#mini'), mctx = mini.getContext('2d');
 const MMBASE = 1600, mmBase = document.createElement('canvas'); mmBase.width = mmBase.height = 640;
 {
-  const g = mmBase.getContext('2d'), img = g.createImageData(640, 640), s = 640 / (MMBASE * 2), c = new THREE.Color();
+  const g = mmBase.getContext('2d'), img = g.createImageData(640, 640), s = 640 / (MMBASE * 2), c = new THREE.Color(), c2 = new THREE.Color();
   for (let j = 0; j < 640; j++) for (let i = 0; i < 640; i++) {
     const x = i / s - MMBASE, z = j / s - MMBASE, h = H(x, z), sl = H(x + 4, z) - H(x, z);
-    groundSample(x, z, c, null);
-    const sh = 1 + sl * 0.25, o = (j * 640 + i) * 4;
+    // carta: cor média do terreno com 30% do lote (com a cor cheia de cada lavoura virava um camuflado ilegível) e relevo sombreado
+    groundSample(x, z, c, null, true, true); groundSample(x, z, c2, null, false, true); c.lerp(c2, 0.3);
+    const sh = 1 + clamp(sl * 0.35, -0.3, 0.3), o = (j * 640 + i) * 4;
     img.data[o] = clamp(Math.sqrt(c.r) * 255 * sh, 0, 255); img.data[o + 1] = clamp(Math.sqrt(c.g) * 255 * sh, 0, 255); img.data[o + 2] = clamp(Math.sqrt(c.b) * 255 * sh, 0, 255); img.data[o + 3] = 255;
   }
   g.putImageData(img, 0, 0);
+  g.strokeStyle = '#c4b48c'; g.lineCap = 'round'; for (const r of ROADS) { g.lineWidth = Math.max(1.3, r[4] * 2 * s * 1.5); g.beginPath(); g.moveTo((r[0] + MMBASE) * s, (r[1] + MMBASE) * s); g.lineTo((r[2] + MMBASE) * s, (r[3] + MMBASE) * s); g.stroke(); }
   g.fillStyle = '#b3ab98'; for (const b of OBST) g.fillRect((b.mn[0] + MMBASE) * s, (b.mn[2] + MMBASE) * s, Math.max(1, (b.mx[0] - b.mn[0]) * s), Math.max(1, (b.mx[2] - b.mn[2]) * s));
-  g.fillStyle = 'rgba(20,35,15,.7)'; for (const t of TREES) g.fillRect((t.x + MMBASE) * s - 1, (t.z + MMBASE) * s - 1, 2, 2);
-  g.strokeStyle = 'rgba(15,30,10,.8)'; g.lineWidth = 1.5; for (const h of HEDGES) { g.strokeRect((h.mn[0] + MMBASE) * s, (h.mn[2] + MMBASE) * s, (h.mx[0] - h.mn[0]) * s, (h.mx[2] - h.mn[2]) * s); }
+  g.fillStyle = 'rgba(24,42,18,.5)'; for (const t of TREES) g.fillRect((t.x + MMBASE) * s - 1, (t.z + MMBASE) * s - 1, 2, 2);
+  g.strokeStyle = 'rgba(24,44,18,.45)'; g.lineWidth = 1; for (const h of HEDGES) { g.strokeRect((h.mn[0] + MMBASE) * s, (h.mn[2] + MMBASE) * s, (h.mx[0] - h.mn[0]) * s, (h.mx[2] - h.mn[2]) * s); }
+}
+// marcador de blindado como no WT: casco orientado + linha do canhão (para onde a torre aponta); destruído vira um X
+function tankIcon(x, z, yaw, turretYaw, col, alive, aa, k = 1) {
+  mctx.save(); mctx.translate(x, z);
+  if (!alive) { mctx.strokeStyle = col; mctx.lineWidth = 1.5; mctx.beginPath(); mctx.moveTo(-3, -3); mctx.lineTo(3, 3); mctx.moveTo(3, -3); mctx.lineTo(-3, 3); mctx.stroke(); mctx.restore(); return; }
+  mctx.rotate(-yaw + Math.PI); mctx.scale(k, k);
+  mctx.fillStyle = col; mctx.strokeStyle = 'rgba(0,0,0,.75)'; mctx.lineWidth = 1;
+  mctx.beginPath(); mctx.moveTo(-3, -4.5); mctx.lineTo(0, -6); mctx.lineTo(3, -4.5); mctx.lineTo(3, 5); mctx.lineTo(-3, 5); mctx.closePath(); mctx.fill(); mctx.stroke();
+  if (turretYaw != null) { mctx.rotate(-turretYaw); mctx.strokeStyle = col; mctx.lineWidth = aa ? 1 : 1.6; mctx.beginPath(); mctx.moveTo(0, 0); mctx.lineTo(0, -10); if (aa) { mctx.moveTo(-1.5, 0); mctx.lineTo(-1.5, -9); mctx.moveTo(1.5, 0); mctx.lineTo(1.5, -9); } mctx.stroke(); }
+  mctx.restore();
 }
 export function drawMini(viewer, air, cam) {
-  const R = air ? 1500 : 390, W = 210, s = W / (R * 2), cx = air ? 0 : 0, cz = 0;
+  const R = air ? 1500 : LIMIT + 30, W = 210, s = W / (R * 2), cx = air ? 0 : 0, cz = 0;
   const bs = 640 / (MMBASE * 2);
   mctx.drawImage(mmBase, (cx - R + MMBASE) * bs, (cz - R + MMBASE) * bs, R * 2 * bs, R * 2 * bs, 0, 0, W, W);
   const X = x => (x - cx + R) * s, Z = z => (z - cz + R) * s;
   // grade estilo carta militar
   mctx.strokeStyle = 'rgba(0,0,0,.35)'; mctx.lineWidth = 1; mctx.font = '600 10px "Barlow Condensed", sans-serif'; mctx.fillStyle = 'rgba(230,225,200,.7)';
-  const cell = air ? 400 : 100; const n = Math.round(R * 2 / cell);
+  const cell = air ? 400 : 250; const n = Math.round(R * 2 / cell);
   for (let i = 0; i <= n; i++) {
     const p = i * W / n;
     mctx.beginPath(); mctx.moveTo(p, 0); mctx.lineTo(p, W); mctx.moveTo(0, p); mctx.lineTo(W, p); mctx.stroke();
@@ -46,8 +58,7 @@ export function drawMini(viewer, air, cam) {
   for (const t of tanks) {
     if (t === viewer) continue;
     if (!(t.team === 1 || t.spottedUntil > S.now)) continue;
-    mctx.fillStyle = !t.alive ? '#555' : t.team === 1 ? '#6db4e3' : '#e65a42';
-    mctx.fillRect(X(t.pos.x) - 2.5, Z(t.pos.z) - 2.5, 5, 5);
+    tankIcon(X(t.pos.x), Z(t.pos.z), yawOf(t), t.turretOn ? t.turretYaw : null, !t.alive ? '#5a5a52' : t.team === 1 ? '#6db4e3' : '#e65a42', t.alive, t.type === 'spaa');
   }
   for (const p of planes) {
     if (p === viewer || p.gone) continue;
@@ -62,9 +73,10 @@ export function drawMini(viewer, air, cam) {
     mctx.fillStyle = 'rgba(221,214,183,.12)'; mctx.beginPath(); mctx.moveTo(x, z);
     const a = Math.atan2(Math.cos(cam.yaw), Math.sin(cam.yaw)), fov = cam.sniper ? cam.fov * DEG : .9;
     mctx.arc(x, z, 40, a - fov / 2, a + fov / 2); mctx.fill();
-    const yaw = viewer.type === 'plane' ? Math.atan2(viewer.vel.x, viewer.vel.z) : yawOf(viewer);
-    mctx.save(); mctx.translate(x, z); mctx.rotate(-yaw + Math.PI);
-    mctx.fillStyle = '#efa53c'; mctx.beginPath(); mctx.moveTo(0, -7); mctx.lineTo(4.5, 5); mctx.lineTo(-4.5, 5); mctx.closePath(); mctx.fill(); mctx.restore();
+    if (viewer.type === 'plane') {
+      mctx.save(); mctx.translate(x, z); mctx.rotate(-Math.atan2(viewer.vel.x, viewer.vel.z) + Math.PI);
+      mctx.fillStyle = '#efa53c'; mctx.beginPath(); mctx.moveTo(0, -7); mctx.lineTo(4.5, 5); mctx.lineTo(-4.5, 5); mctx.closePath(); mctx.fill(); mctx.restore();
+    } else tankIcon(x, z, yawOf(viewer), viewer.turretOn ? viewer.turretYaw : null, '#efa53c', true, false, 1.25);
   }
 }
 

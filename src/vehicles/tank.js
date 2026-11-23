@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { scene } from '../core/render.js';
+import { hasTankModel, gltfTank } from './tankModel.js';
+import { scene, camera, shadowOnly } from '../core/render.js';
 import { S, tanks } from '../core/state.js';
 import { V3, QUAT, UP, clamp, rand, rv, angDiff } from '../core/util.js';
 import { H, terrainNormal, LIMIT } from '../world/terrain.js';
-import { TREES, HEDGES, fellTree } from '../world/scenery.js';
+import { TREES, HEDGES, fellTree, obstNear, demolish } from '../world/scenery.js';
 import { RAPIER, world, COL } from '../world/physics.js';
 import { TANKS, DEG, G, ballistic } from '../data/vehicles.js';
 import { spawnP, fxMuzzle, fxSmallFlash, fxBurn } from '../fx/particles.js';
@@ -15,8 +16,13 @@ import { addTankDetail } from './tankDetail.js';
 // =====================================================================
 // Blindados: modelo, corpo rígido com suspensão por roda, lagartas, câmbio
 // =====================================================================
+const NOSEAT = { alive: true, absent: true };
 export const CREW = [['driver', 'Motorista', 'MOT'], ['radio', 'Op. de rádio', 'RÁD'], ['gunner', 'Atirador', 'ATI'], ['commander', 'Comandante', 'CMD'], ['loader', 'Municiador', 'MUN']];
-export const MODS = { engine: ['Motor', 22], transmission: ['Transmissão', 25], tracks: ['Esteira', 11], breech: ['Culatra', 18], drive: ['Giro da torre', 15] };
+// Módulos funcionais (rótulo, tempo de reparo). Cada um é um volume dentro do tanque (components()) que pode ser atingido:
+// motor (potência a 22%), radiador (superaquece: potência a 60%), transmissão e esteira (imobilizam), culatra e cano
+// (não atira), giro da torre e elevação (apontar lento). Paióis e tanques de combustível não quebram: explodem/incendeiam.
+export const MODS = { engine: ['Motor', 22], radiator: ['Radiador', 14], transmission: ['Transmissão', 25], tracks: ['Esteira', 11], breech: ['Culatra', 18], barrel: ['Cano', 16], drive: ['Giro da torre', 15], elev: ['Elevação', 12] };
+const STEER = 1.55; // lagarta de dentro em curva: 1 = solta, > 1 = contra-rotação (1,6 parava o tanque na curva)
 export const GEARS = [0.15, 0.3, 0.5, 0.74, 1.0];
 
 export function hullProfile(D) {
@@ -74,7 +80,8 @@ function tagArmor(mesh, D, part) {
   mesh.userData.normalMat = mesh.material;
 }
 
-export function buildTank(D) {
+export function buildTank(D, simple) {
+  if (hasTankModel(D) && !simple) return gltfTank(D, tagArmor, () => buildTank(D, true));
   const root = new THREE.Group();
   const camo = new THREE.MeshStandardMaterial({ map: camoTexture(D), roughness: .78, metalness: .25 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c19, roughness: .95, metalness: .1 });
@@ -180,7 +187,7 @@ export class Tank {
     this.sel = 0; this.loaded = 0; this.reload = 0; this.clip = D.gun.clip || 0; this.fireAcc = 0; this.barrel = 0;
     this.mgAmmo = D.mg ? D.mg.total : 0; this.mgBelt = D.mg ? D.mg.belt : 0; this.mgReload = 0; this.mgAcc = 0; this.mgN = 0; this.mgFiring = false;
     this.throttle = 0; this.steer = 0; this.firing = false;
-    this.crew = CREW.map(([role, label, short]) => ({ role, label, short, alive: true }));
+    this.crew = CREW.filter(c => !D.crew || D.crew.includes(c[0])).map(([role, label, short]) => ({ role, label, short, alive: true })); // def.crew: postos que o veículo tem (padrão: os 5)
     this.mods = {}; for (const k in MODS) this.mods[k] = { broken: false, rep: 0, label: MODS[k][0] };
     this.fire = 0; this.fireTick = 0; this.ext = 0; this.extCd = 0; this.replace = {}; this.repairT = 0; this.repairMax = 0; this.cruise = 0;
     this.alive = true; this.turretOn = true; this.lastHitBy = null; this.deadT = 0; this.spottedUntil = 0; this.oobT = 0; this.flipT = 0;
@@ -195,10 +202,10 @@ export class Tank {
   }
   get gun() { return this.def.gun; }
   get ammo() { return this.def.gun.ammo[this.loaded >= 0 ? this.loaded : this.sel]; }
-  seat(role) { return this.crew.find(c => c.role === role); }
+  seat(role) { return this.crew.find(c => c.role === role) || NOSEAT; } // posto que não existe (carregador automático, sem rádio) nunca faz falta
   aliveCount() { return this.crew.filter(c => c.alive).length; }
   ammoFrac() { const tot = this.def.gun.ammo.reduce((s, a) => s + a.count, 0); return this.ammoLeft.reduce((s, a) => s + a, 0) / tot; }
-  canFire() { return this.alive && this.turretOn && this.loaded >= 0 && !this.mods.breech.broken && this.seat('gunner').alive; }
+  canFire() { return this.alive && this.turretOn && this.loaded >= 0 && !this.mods.breech.broken && !this.mods.barrel.broken && this.seat('gunner').alive; }
   canDrive() { return this.alive && !this.mods.transmission.broken && !this.mods.tracks.broken && this.seat('driver').alive; }
   axes() { _m4.makeRotationFromQuaternion(this.q); _ax.setFromMatrixColumn(_m4, 0); _ay.setFromMatrixColumn(_m4, 1); _az.setFromMatrixColumn(_m4, 2); }
   centerPos(out) { return out.set(0, this.def.clr + this.def.Hh * 0.6, 0).applyMatrix4(this.root.matrixWorld); }
@@ -209,6 +216,9 @@ export class Tank {
     this.root.quaternion.copy(this.q);
     this.root.position.copy(this.pos).sub(_tmp.set(0, this.comY, 0).applyQuaternion(this.q));
     if (this.turretOn) { this.turret.rotation.y = this.turretYaw; this.gunPivot.rotation.x = -this.gunPitch; }
+    if (this.setLod) { // modelo detalhado só quando ocupa tela: 170 m a olho nu, mais longe com zoom (FOV fechado)
+      this.lodSync(); this.setLod(this.pos.distanceTo(camera.position) > 170 * 60 / camera.fov);
+    }
     this.root.updateMatrixWorld(true);
     this.invRoot.copy(this.root.matrixWorld).invert();
     if (this.turretOn) this.invTurret.copy(this.turret.matrixWorld).invert();
@@ -238,18 +248,23 @@ export class Tank {
     const tgtRpm = 700 + (D.rpm - 700) * (busy ? Math.max(x, 0.55 * Math.max(Math.abs(thr), Math.abs(st))) : x * 0.6);
     this.rpm += (tgtRpm - this.rpm) * Math.min(1, dt * 6);
     const xr = this.rpm / D.rpm;
-    const P = D.hp * 745.7 * 0.95 * clamp(1.9 * xr - 0.9 * xr * xr, 0.3, 1) * (this.mods.engine.broken ? 0.22 : 1);
+    const P = D.hp * 745.7 * 0.95 * clamp(1.9 * xr - 0.9 * xr * xr, 0.3, 1) * (this.mods.engine.broken ? 0.22 : 1) * (this.mods.radiator.broken ? 0.6 : 1);
     let Fe = this.shiftT > 0 ? 0 : P / Math.max(vTrack, 0.8);
     Fe = Math.min(Fe, 0.9 * D.mass * G);
     if (x >= 1 && Math.abs(this.vFwd) >= top * 0.98) Fe = 0; // regulador de velocidade
+    // giro parado: a taxa é limitada pela relação potência/peso (Tiger ~20°/s, médios ~28°/s), não pela 1ª marcha
+    if (Math.abs(thr) < 0.05) Fe *= clamp(1 - Math.abs(this.w.dot(_ay)) / ((D.pivot || 1.8 * D.hp / (D.mass / 1000)) * DEG), 0, 1) * 4;
+    Fe = Math.min(Fe, 0.9 * D.mass * G);
     // mistura de comandos por lagarta (+1 = esquerda, local +x)
     let cl, cr;
     if (Math.abs(thr) < 0.05) { cl = -st; cr = st; }
-    else if (st > 0) { cl = thr * (1 - 1.6 * st); cr = thr; }
-    else if (st < 0) { cl = thr; cr = thr * (1 + 1.6 * st); }
+    else if (st > 0) { cl = thr * (1 - STEER * st); cr = thr; }
+    else if (st < 0) { cl = thr; cr = thr * (1 + STEER * st); }
     else { cl = cr = thr; }
     this.cmd = [clamp(cl, -1, 1), clamp(cr, -1, 1)];
-    this.Fside = [this.cmd[0] * Fe / 2, this.cmd[1] * Fe / 2];
+    // em curva a potência que sai da lagarta de dentro vai para a de fora (direção regenerativa), senão o tanque morre na curva
+    const sh = Fe / Math.max(1, Math.abs(this.cmd[0]) + Math.abs(this.cmd[1]));
+    this.Fside = [this.cmd[0] * sh, this.cmd[1] * sh];
   }
 
   makeBody() {
@@ -279,10 +294,13 @@ export class Tank {
       c.on = false;
       _rr.set(c.x, c.y - 0.12 - this.comY, c.z).applyQuaternion(this.q);
       _wp.copy(this.pos).add(_rr);
-      const d = H(_wp.x, _wp.z) - _wp.y;
+      // a altura analítica do terreno é cara (ruído fractal) e isto roda 2×/quadro por contato: tanque parado reusa a
+      // altura (o ponto não saiu do lugar) e a normal só é refeita a cada meio metro andado (a inclinação muda devagar)
+      if (!c.n) { c.n = new V3(); c.hx = c.nx = 1e9; }
+      if (Math.abs(_wp.x - c.hx) > 0.03 || Math.abs(_wp.z - c.hz) > 0.03) { c.h = H(_wp.x, _wp.z); c.hx = _wp.x; c.hz = _wp.z; }
+      const d = c.h - _wp.y;
       if (d <= 0) continue;
-      if (!c.n) c.n = new V3();
-      terrainNormal(_wp.x, _wp.z, c.n);
+      if (Math.abs(_wp.x - c.nx) > 0.5 || Math.abs(_wp.z - c.nz) > 0.5) { terrainNormal(_wp.x, _wp.z, c.n); c.nx = _wp.x; c.nz = _wp.z; }
       c.on = true; c.d = d * c.n.y; c.side > 0 ? gl++ : gr++;
     }
     this.trackV[0] = this.trackV[1] = 0;
@@ -303,7 +321,7 @@ export class Tank {
       if (Math.abs(cmd) > 0.02) {
         // o motor sempre empurra no sentido comandado; freia só se a lagarta corre de fato no sentido oposto
         Fl = this.Fside[si] / cnt;
-        if (vl * cmd < 0 && Math.abs(vl) > 0.6) Fl += clamp(-vl * m / nc * 4, -0.7 * mu * N, 0.7 * mu * N);
+        if (vl * cmd < 0 && Math.abs(vl) > 0.6) { const bk = 0.7 * Math.abs(cmd) * mu * N; Fl += clamp(-vl * m / nc * 4, -bk, bk); } // freio proporcional ao comando: em curva a lagarta de dentro arrasta, não trava
       } else Fl = clamp(-vl * m / nc * (Math.abs(vl) < 0.7 ? 6 : 1.2), -(Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N, (Math.abs(vl) < 0.7 ? 0.9 : 0.18) * mu * N);
       Fl -= Math.sign(vl) * Math.min(0.035 * N, Math.abs(vl) * m / nc * 3);
       Fl = clamp(Fl, -mu * N, mu * N);
@@ -320,6 +338,7 @@ export class Tank {
     this.syncIn();
     const D = this.def;
     for (let i = 0; i < 2; i++) { this.trackOff[i] += this.trackV[i] * dt; (i === 0 ? this.trackL : this.trackR).map.offset.x = -this.trackOff[i] * 0.9; }
+    if (this.trackAnim) this.trackAnim(this.trackOff);
     for (const w of this.wheels) w.m.rotation.x += (w.side > 0 ? this.trackV[0] : this.trackV[1]) / w.r * dt;
     this.axes();
     const gs = this.groundSpeed();
@@ -342,6 +361,10 @@ export class Tank {
         }
         break;
       }
+    }
+    if (gs * D.mass > 80000) { // muro no caminho: derruba e perde velocidade
+      const fx = this.pos.x + this.vel.x / gs * (D.L * 0.5 + 0.9), fz = this.pos.z + this.vel.z / gs * (D.L * 0.5 + 0.9);
+      for (const b of obstNear(fx - 1, fz - 1, fx + 1, fz + 1)) if (b.b && b.b.ram && !b.b.dead && fx > b.mn[0] - R && fx < b.mx[0] + R && fz > b.mn[2] - R && fz < b.mx[2] + R) { demolish(b.b); this.body.setLinvel({ x: this.vel.x * .75, y: this.vel.y, z: this.vel.z * .75 }, true); break; }
     }
     for (const hd of HEDGES) if (this.pos.x > hd.mn[0] && this.pos.x < hd.mx[0] && this.pos.z > hd.mn[2] && this.pos.z < hd.mx[2]) { this.body.setLinvel({ x: this.vel.x * 0.985, y: this.vel.y, z: this.vel.z * 0.985 }, true); break; }
     const out = Math.abs(this.pos.x) > LIMIT || Math.abs(this.pos.z) > LIMIT;
@@ -366,7 +389,9 @@ export class Tank {
     let elev = Math.atan2(p.y, hd);
     if (this.compensate) elev += ballistic(this.ammo, hd).ang;
     const tgt = clamp(elev, -g.dep * DEG, g.elev * DEG);
-    if (gunner) this.gunPitch += clamp(tgt - this.gunPitch, -g.elevRate * DEG * dt, g.elevRate * DEG * dt);
+    // estabilizador (tanques modernos): a elevação corrige o balanço do casco quase na hora
+    const er = g.elevRate * DEG * dt * (this.mods.elev.broken ? 0.15 : g.stab ? 8 : 1);
+    if (gunner) this.gunPitch += clamp(tgt - this.gunPitch, -er, er);
     this.aimErr = Math.abs(angDiff(this.turretYaw, want)) + Math.abs(tgt - this.gunPitch) + (Math.abs(elev - tgt) > 0.01 ? 1 : 0);
   }
 
@@ -396,7 +421,7 @@ export class Tank {
       const seat = this.seat(role);
       if (seat.alive) { delete this.replace[role]; continue; }
       if (!this.replace[role]) {
-        const spare = ['radio', 'loader', 'commander'].map(r => this.seat(r)).find(c => c.alive && !Object.values(this.replace).some(x => x.spare === c));
+        const spare = ['radio', 'loader', 'commander'].map(r => this.seat(r)).find(c => c.alive && !c.absent && !Object.values(this.replace).some(x => x.spare === c));
         if (spare) this.replace[role] = { spare, t: 4 };
       } else if ((this.replace[role].t -= dt) <= 0) {
         const sp = this.replace[role].spare; delete this.replace[role];
@@ -406,7 +431,7 @@ export class Tank {
     // reparo: iniciado com F (jogador) ou pela IA; conserta todos os módulos ao final
     if (this.repairT > 0) {
       if (this.fire > 0) { this.repairT = 0; if (this.isPlayer) showDmg('Reparo interrompido pelo incêndio'); }
-      else if ((this.repairT -= dt * (this.aliveCount() >= 4 ? 1 : 0.7)) <= 0) {
+      else if ((this.repairT -= dt * (this.aliveCount() >= this.crew.length - 1 ? 1 : 0.7)) <= 0) {
         this.repairT = 0;
         for (const k in this.mods) this.mods[k].broken = false;
         if (this.isPlayer) showDmg('Reparo concluído', true);
@@ -467,7 +492,7 @@ export class Tank {
     fireProj(this, pos, dir.clone().multiplyScalar(am.v), am, 'bullet', { tracer: (this.barrel % am.tracer) === 0 });
     this.ammoLeft[this.loaded]--; this.clip--;
     if (this.barrel % 2 === 0) fxSmallFlash(pos, dir);
-    sndMG(pos, 26);
+    sndMG(pos, g.cal, false, g.rpm / (g.barrels || 1));
     if (this.clip <= 0 || this.ammoLeft[this.loaded] <= 0) { this.loaded = -1; this.reload = g.reload; }
   }
   shootMG() {
@@ -487,6 +512,9 @@ export class Tank {
       { kind: 'mod', name: 'transmission', p: [0, y0 + .35, D.transFront ? L * .43 : -L * .46], r: .5 },
       { kind: 'mod', name: 'ammo', p: [it * .36, y0 + .4, -L * .02], r: .42 },
       { kind: 'mod', name: 'ammo', p: [-it * .36, y0 + .4, -L * .02], r: .42 },
+      { kind: 'mod', name: 'ammo', p: [0, y0 + .22, L * .1], r: .36 },
+      { kind: 'mod', name: 'radiator', p: [it * .3, yH - .32, -L * .43], r: .34 },
+      { kind: 'mod', name: 'radiator', p: [-it * .3, yH - .32, -L * .43], r: .34 },
       { kind: 'mod', name: 'fuel', p: [it * .36, y0 + .65, -L * .2], r: .38 },
       { kind: 'mod', name: 'fuel', p: [-it * .36, y0 + .65, -L * .2], r: .38 },
       { kind: 'mod', name: 'drive', p: [0, yH - .25, T.z], r: .35 }
@@ -498,10 +526,13 @@ export class Tank {
         { kind: 'crew', ref: this.seat('gunner'), p: tp(-T.w * .22, .05, T.l * .12), r: .4 },
         { kind: 'crew', ref: this.seat('commander'), p: tp(-T.w * .22, .15, -T.l * .28), r: .4 },
         { kind: 'crew', ref: this.seat('loader'), p: tp(T.w * .24, -.05, -T.l * .05), r: .4 },
-        { kind: 'mod', name: 'breech', p: tp(0, T.h * .5, T.l * .18), r: .35 });
+        { kind: 'mod', name: 'breech', p: tp(0, T.h * .5, T.l * .18), r: .35, yaw: this.turretYaw },
+        { kind: 'mod', name: 'elev', p: tp(T.w * .16, T.h * .3, T.l * .3), r: .22, yaw: this.turretYaw },
+        // o cano fica FORA da blindagem: é atingido por fora (impactTank), aqui só aparece no raio-X
+        { kind: 'mod', name: 'barrel', p: tp(0, T.h * .5, T.l / 2 + D.gun.len * .5), r: .16, len: D.gun.len, yaw: this.turretYaw });
     }
-    return out;
+    return out.filter(c => c.kind !== 'crew' || !c.ref.absent);
   }
-  remove() { scene.remove(this.root); if (this.body) world.removeRigidBody(this.body); this.body = null; this.label.remove(); const i = tanks.indexOf(this); if (i >= 0) tanks.splice(i, 1); }
+  remove() { scene.remove(this.root); if (this.lod) shadowOnly.delete(this.lod.root); if (this.body) world.removeRigidBody(this.body); this.body = null; this.label.remove(); const i = tanks.indexOf(this); if (i >= 0) tanks.splice(i, 1); }
 }
 

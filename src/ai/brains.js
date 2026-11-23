@@ -2,7 +2,7 @@ import { S, tanks, planes } from '../core/state.js';
 import { V3, UP, clamp, rand, angDiff } from '../core/util.js';
 import { H, POINTS, AIRSPAWN, AIRLIMIT } from '../world/terrain.js';
 import { obstNear } from '../world/scenery.js';
-import { G } from '../data/vehicles.js';
+import { G, DEG, RHO, penAt, ballistic } from '../data/vehicles.js';
 import { los, losPts } from '../combat/ballistics.js';
 import { _az, _tmp } from '../vehicles/tank.js';
 import { _pf, _pt } from '../vehicles/plane.js';
@@ -17,7 +17,7 @@ export class TankBrain {
     this.stuck = 0; this.rev = 0; this.revSteer = 1; this.hold = false; this.goal = null;
     this.style = Math.random() < .45 ? 'sniper' : 'brawler'; this.side = Math.random() < .5 ? 1 : -1;
     this.offset = Math.random() * Math.PI * 2; this.pref = Math.floor(Math.random() * 3); this.extAt = rand(2.5, 6);
-    this.part = 'hull'; this.avoid = 0; this.spaa = t.type === 'spaa';
+    this.part = 'hull'; this.avoid = 0; this.peek = 0; this.spaa = t.type === 'spaa';
   }
   decide() {
     const t = this.t; let best = null, bd = 1e9;
@@ -38,11 +38,14 @@ export class TankBrain {
       this.err.set(rand(-1, 1), rand(-.4, 1), rand(-1, 1)).multiplyScalar(bd * 0.012);
       this.part = Math.random() < .5 ? 'hull' : 'turret';
       if (best && !this.spaa && best.type !== 'plane') {
-        const am = t.gun.ammo, thick = best.def.armor.front[0] >= 100;
-        let s = 0;
-        if (best.type === 'spaa' && am[2]) s = 2;
-        else if (thick && am[0].pen < 170 && t.ammoLeft[1] > 0) s = 1;
-        if (t.ammoLeft[s] > 0) t.selectAmmo(s);
+        // munição: a primeira que fura a frente do alvo naquela distância (HE contra antiaérea); se nenhuma fura, a de
+        // maior perfuração e a mira desce para a placa inferior
+        const am = t.gun.ammo, A = best.def.armor, he = am.findIndex(a => a.type === 'HE');
+        const eff = a => A.front[0] / Math.cos(A.front[1] * DEG) * (a.type === 'HEAT' ? A.ce || 1 : 1), pen = a => penAt(a, ballistic(a, bd).v);
+        const ok = am.map((a, i) => i).filter(i => am[i].type !== 'HE' && t.ammoLeft[i] > 0);
+        let s = best.type === 'spaa' && he >= 0 && t.ammoLeft[he] > 0 ? he : ok.find(i => pen(am[i]) > eff(am[i]) * 1.05);
+        if (s === undefined) { const low = a => pen(a) / (A.lfront[0] / Math.cos(A.lfront[1] * DEG) * (a.type === 'HEAT' ? A.ce || 1 : 1)); s = ok.sort((a, b) => low(am[b]) - low(am[a]))[0]; this.part = 'low'; } // a que mais sobra contra a placa inferior
+        if (s !== undefined && s !== t.loaded) t.selectAmmo(s);
       }
     }
     const open = POINTS.filter(p => p.owner !== t.team || p.contested);
@@ -62,14 +65,25 @@ export class TankBrain {
     if (this.rev > 0) { this.rev -= dt; thr = -1; st = this.revSteer; }
     else if (this.hold && this.target && this.target.type !== 'plane') {
       const b = Math.atan2(this.target.pos.x - t.pos.x, this.target.pos.z - t.pos.z);
-      const ang = t.def.key === 't34' ? 0 : t.def.key === 'tiger' ? .5 * this.side : .3 * this.side; // inclinar o casco
+      // inclinar o casco: glacis muito deitada já rende de frente; chapa vertical ganha espessura em diagonal (mais se a lateral for grossa)
+      const A = t.def.armor, ang = A.front[1] >= 55 ? 0 : (A.side[0] >= 60 ? .5 : .3) * this.side;
       const e = angDiff(yaw, b + ang); st = Math.abs(e) > 0.05 ? clamp(e * 3, -1, 1) : 0;
+      // atira e recua: enquanto o municiador carrega o tanque dá ré (sai da mira de quem respondeu); carregado, volta ao ponto de tiro
+      if (this.style === 'sniper' && !t.gun.auto && t.gun.reload > 4) {
+        if (t.loaded < 0 && this.peek < 2.5) { thr = -0.8; this.peek += dt; }
+        else if (t.loaded >= 0 && this.peek > 0) { thr = 0.8; this.peek -= dt; }
+      }
     } else if (this.goal) {
       const dx = this.goal.x - t.pos.x, dz = this.goal.z - t.pos.z, d = Math.hypot(dx, dz);
       let diff = angDiff(yaw, Math.atan2(dx, dz));
       const ax = t.pos.x + Math.sin(yaw) * 11, az = t.pos.z + Math.cos(yaw) * 11;
       let blocked = false;
       for (const b of obstNear(ax - 3, az - 3, ax + 3, az + 3)) if (ax > b.mn[0] - 2.5 && ax < b.mx[0] + 2.5 && az > b.mn[2] - 2.5 && az < b.mx[2] + 2.5 && b.mx[1] > t.pos.y - 1) { blocked = true; break; }
+      // outro blindado (ou destroço) no caminho: contorna pelo lado livre — todos seguem a mesma estrada e ficavam empurrando uns aos outros
+      if (!blocked) for (const o of tanks) {
+        if (o === t) continue; const ox = o.pos.x - t.pos.x, oz = o.pos.z - t.pos.z, od = Math.hypot(ox, oz); if (od > 15 || od < 0.1) continue;
+        const rel = angDiff(yaw, Math.atan2(ox, oz)); if (Math.abs(rel) < 0.55 && (o.alive ? o.groundSpeed() < t.groundSpeed() + 1 : true)) { blocked = true; if (!this.avoid) this.avoid = rel > 0 ? -1 : 1; break; }
+      }
       if (blocked) { if (!this.avoid) this.avoid = diff > 0 ? 1 : -1; diff += this.avoid * 1.1; } else this.avoid = 0;
       st = clamp(diff * 2.5, -1, 1);
       thr = d < 6 ? 0 : Math.abs(diff) > 1.2 ? 0 : Math.abs(diff) > .5 ? .5 : 1;
@@ -89,7 +103,7 @@ export class TankBrain {
       t.firing = this.aimT > 0.6 && t.aimErr < 0.04 && d < 1600;
     } else if (tg) {
       this.aimT += dt;
-      const D2 = tg.def, y = this.part === 'hull' ? D2.clr + D2.Hh * .55 : D2.clr + D2.Hh + D2.turret.h * .5;
+      const D2 = tg.def, y = this.part === 'low' ? D2.clr + D2.Hh * .2 : this.part === 'hull' ? D2.clr + D2.Hh * .55 : D2.clr + D2.Hh + D2.turret.h * .5;
       const aim = _tmp.set(0, y, 0).applyMatrix4(tg.root.matrixWorld);
       const d = t.pos.distanceTo(tg.pos), tof = d / t.ammo.v * 1.06;
       aim.addScaledVector(tg.vel, tof);
@@ -111,6 +125,7 @@ export class PlaneBrain {
   constructor(p) {
     this.p = p; this.corr = new V3(); this.think = 0; this.air = null; this.gt = null; this.state = 'approach'; this.t = 0; this.simT = 0; this.dropT = 0; this.rockT = 0;
     this.role = p.def.key === 'fw190' && Math.random() < .4 ? 'fighter' : 'attack';
+    this.vs = Math.sqrt(2 * p.def.mass * G / (RHO * p.def.S * p.def.clmax)); // estol limpo: os limites de velocidade da IA saem dele (eram fixos, de hélice, e o jato subia até estolar)
   }
   bombImpact() {
     const p = this.p, b = p.bombs[p.bombs.length - 1];
@@ -159,10 +174,18 @@ export class PlaneBrain {
       if (this.state === 'approach') {
         const alt = gh + 750;
         // subida limitada (~10°) e nivelando se a velocidade cair
-        dir.set(tp.x - p.pos.x, clamp((alt - p.pos.y) * 1.2, -hd * .3, p.ias < 75 ? 0 : hd * .18), tp.z - p.pos.z).normalize();
-        glim = clamp((p.ias - 55) / 12, 2, 6); // curva suave na aproximação: preserva energia
+        dir.set(tp.x - p.pos.x, clamp((alt - p.pos.y) * 1.2, -hd * .3, p.ias < this.vs * 1.75 ? 0 : hd * .18), tp.z - p.pos.z).normalize();
+        glim = clamp((p.ias - this.vs * 1.15) / 12, 2, 6); // curva suave na aproximação: preserva energia
         const ahead = ((tp.x - p.pos.x) * fwdFlat.x + (tp.z - p.pos.z) * fwdFlat.z) / Math.max(hd, 1);
-        if (hd < Math.max(agl, 300) * 1.05 + 220 && p.ias > 70) {
+        // jato: bombardeio em voo nivelado — larga quando o impacto previsto chega no alvo (em mergulho a bomba dele passa longe)
+        if (p.def.jet && p.bombs.length && ahead > 0.97 && hd < 4000) {
+          if (!this.dropping && (this.simT -= dt) < 0) {
+            this.simT = .1; const imp = this.bombImpact();
+            if (imp) { const mx = tp.x - imp.x, mz = tp.z - imp.z, al = mx * fwdFlat.x + mz * fwdFlat.z; if (al < 12 && al > -70 && Math.hypot(mx - al * fwdFlat.x, mz - al * fwdFlat.z) < 35) this.dropping = true; }
+          }
+          if (this.dropping && (this.dropT -= dt) < 0) { this.dropT = .12; if (!p.dropBomb()) this.dropping = false; }
+        }
+        if (hd < Math.max(agl, 300) * 1.05 + 220 && p.ias > this.vs * 1.4 && !(this.dropping && p.bombs.length)) {
           if (ahead > 0.85) { this.state = 'dive'; this.corr = new V3(); this.dropping = false; }
           else if (hd < 700) { this.state = 'pull'; this.t = 0; } // passou do alvo: sai, ganha distância e volta
         }
@@ -172,15 +195,19 @@ export class PlaneBrain {
         if (p.bombs.length) aim.add(this.corr);
         dir.copy(aim).sub(p.pos).normalize();
         const d = p.pos.distanceTo(tp), ang = dir.dot(_pf);
-        if (dir.dot(_pf) < 0.2 && !this.dropping) { this.state = 'pull'; this.t = 0; }
+        if ((dir.dot(_pf) < 0.2 || sinD > 0.82) && !this.dropping) { this.state = 'pull'; this.t = 0; } // passou do alvo ou mergulho fechado demais: sai e tenta de novo
         if (p.bombs.length && (this.simT -= dt) < 0) {
           this.simT = .1;
           const imp = this.bombImpact();
           if (imp) {
             const mx = tp.x - imp.x, mz = tp.z - imp.z, miss = Math.hypot(mx, mz);
-            this.corr.x += mx * 0.25; this.corr.z += mz * 0.25;
+            // erro ao longo da rota (al > 0: a bomba cai antes do alvo) e de lado. Bomba curta: a mira sobe até o impacto
+            // chegar no alvo (como sempre). Bomba LONGA (avião rápido): só o desvio lateral corrige — puxar a mira para trás
+            // fechava o mergulho até 70° e o avião não saía mais; ela sai assim que o impacto passa pelo alvo
+            const al = mx * fwdFlat.x + mz * fwdFlat.z, lx = mx - al * fwdFlat.x, lz = mz - al * fwdFlat.z;
+            this.corr.x += (al > 0 ? mx : lx) * 0.25; this.corr.z += (al > 0 ? mz : lz) * 0.25;
             if (this.corr.length() > 700) this.corr.setLength(700);
-            if (miss < 22 || (agl < pullAlt + 70 && miss < 90)) this.dropping = true;
+            if (miss < 22 || (al <= 0 && al > -70 && Math.hypot(lx, lz) < 30) || (agl < pullAlt + 70 && miss < 90)) this.dropping = true;
           }
         }
         if (this.dropping && (this.dropT -= dt) < 0) { this.dropT = .12; if (!p.dropBomb()) { this.dropping = false; this.state = 'pull'; this.t = 0; } }
@@ -188,7 +215,7 @@ export class PlaneBrain {
         if (!p.bombs.length && d < 750 && ang > 0.9996) fire = true;
         if (agl < pullAlt || (d < 260 && !p.bombs.length)) { if (this.dropping) while (p.dropBomb()); this.state = 'pull'; this.t = 0; this.dropping = false; }
       } else if (this.state === 'pull') {
-        dir.copy(fwdFlat).addScaledVector(UP, p.ias < 90 ? 0.15 : 0.6).normalize(); glim = 7;
+        dir.copy(fwdFlat).addScaledVector(UP, agl > 900 ? 0 : p.ias < this.vs * 1.8 ? 0.15 : 0.6) // sai subindo, mas não passa de ~900 m (jato ia a 3 km e demorava a voltar).normalize(); glim = 7;
         if (agl > 520 && this.t > 4 && this.gt && Math.hypot(this.gt.pos.x - p.pos.x, this.gt.pos.z - p.pos.z) > 1100) this.state = 'approach';
         if (hdFar(p)) this.state = 'approach';
       }

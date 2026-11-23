@@ -22,6 +22,10 @@ describe('balística das munições', () => {
     const r = d => penAt(cr, ballistic(cr, d).v) / cr.pen - penAt(he, ballistic(he, d).v) / he.pen;
     expect(r(1500)).toBeLessThan(0);
   });
+  it('HEAT perfura o mesmo a qualquer distância', () => {
+    const heat = TANKS.m1.gun.ammo.find(a => a.type === 'HEAT');
+    expect(penAt(heat, ballistic(heat, 2000).v)).toBe(heat.pen);
+  });
   it('queda a 1000 m do 88 mm fica entre 0,1° e 1°', () => {
     const deg = ballistic(am, 1000).ang * 180 / Math.PI;
     expect(deg).toBeGreaterThan(0.1); expect(deg).toBeLessThan(1);

@@ -3,7 +3,7 @@ import { planeDecals, camoTexture } from './paint.js';
 import { MISSILES, GUNS } from '../data/vehicles.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { hasModel, gltfPlane } from './modelLibrary.js';
+import { hasModel, applySkin } from './modelLibrary.js';
 import { buildPlaneFx } from './planeFx.js';
 import * as DT from './planeDetail.js';
 import { buildCockpit } from './planeCockpit.js';
@@ -366,11 +366,10 @@ function panelBump() {
 }
 
 export function buildPlane(D) {
-  // modelo glTF carregado para esta aeronave? (modelLibrary.js) — senão, procedural
-  if (hasModel(D)) {
-    const r = gltfPlane(D, id => missileMesh(MISSILES[id]));
-    if (r) { r.gearMesh = buildGear(D, r.root, new THREE.MeshStandardMaterial({ color: 0x1b1b1a, roughness: .45, metalness: .5 })); return r; }
-  }
+  // pele glTF com a fuselagem em outra posição em relação à asa (model.fz, m para trás): a estrutura é montada com a asa
+  // adiantada e no fim tudo recua — asa, trem e armas ficam onde a física os tem, nariz/cabine/cauda casam com a pele
+  const fz = hasModel(D) && D.model.fz || 0;
+  if (fz) D = Object.assign({}, D, { wingZ: D.wingZ + fz }, D.model.def);
   const root = new THREE.Group(), L = D.L, fr = D.fuseR, jet = !!D.jet;
   // jato sem pintura (metal) a menos que a ficha peça camuflagem (def.finish = 'camo')
   const metal = jet && D.finish !== 'camo';
@@ -541,7 +540,9 @@ export function buildPlane(D) {
     while (y > y0 - 0.3 && !fits(y, z)) y -= 0.01;
     return { y, z };
   });
-  buildCockpit({ add, root, D, M: DM, sec: fuseG.userData.sec, hole, crew: heads, jet, face: C.face, cy, canopyH, canopyW });
+  // interior da cabine num grupo próprio: com pele glTF (solo) é a única parte da estrutura que aparece na vista de cabine
+  const cockG = new THREE.Group(); cockG.userData.cockpit = true; root.add(cockG);
+  buildCockpit({ add: (g, m, p = cockG, ...a) => add(g, m, p === root ? cockG : p, ...a), root: cockG, D, M: DM, sec: fuseG.userData.sec, hole, crew: heads, jet, face: C.face, cy, canopyH, canopyW });
   // piloto sob a capota (capacete branco no jato, de couro no pistão); a hitbox 'pilot' é alinhada a ele (plane.js)
   const pilot = new THREE.Group(), suit = new THREE.MeshStandardMaterial({ color: jet ? 0x5b5f45 : 0x6b5a3e, roughness: .9 });
   const helm = new THREE.MeshStandardMaterial({ color: jet ? 0xdedcd2 : 0x4a3424, roughness: jet ? .3 : .8 });
@@ -553,7 +554,7 @@ export function buildPlane(D) {
   const limb = (g, a, b, r, m) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), l = d.length(); const o = add(new THREE.CapsuleGeometry(r, Math.max(0.01, l - 2 * r), 4, 10), m, g, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return o; };
   // C.seats: posição de cada tripulante (fração do comprimento da capota, da frente); o primeiro é o piloto
   const crew = (g, t) => {
-    const { y, z } = heads[seats.indexOf(t)]; g.position.set(0, y, z); root.add(g);
+    const { y, z } = heads[seats.indexOf(t)]; g.position.set(0, y, z); g.userData.crew = true; root.add(g);
     // capacete
     const hm = add(new THREE.SphereGeometry(0.128, 22, 16), helm, g, 0, 0.012, -0.012); hm.scale.set(1, 1.07, 1.13);
     if (jet) {
@@ -696,7 +697,8 @@ export function buildPlane(D) {
     if (D.key === 'spit9') radiator(o, side * (fr + 1.0), D.wingZ - 0.35, grp); // radiadores sob a asa
     // armas de asa sem `mount` (pistão): o cano sai do bordo de ataque na estação de cada arma (g.span) — canhão de
     // 20/23 mm bem para fora com a luva de carenagem, metralhadora só a ponta; antes as asas não tinham arma nenhuma
-    for (const gn of D.guns || []) if (!gn.mount) for (const gx of gn.span) {
+    // model.guns: a pele já traz os canos (P-47: tubos de sopro) — com os procedurais por cima ficavam dois jogos de armas
+    for (const gn of D.guns || []) if (!gn.mount && !(hasModel(D) && D.model.guns)) for (const gx of gn.span) {
       if (gx <= fr) continue;
       const W = GUNS[gn.w], sw = (gx - o.x0) / o.half; if (sw <= 0 || sw >= 1) continue;
       const pl = station(o, sw, 0), par = sw > sB ? tip : grp, big = W.cal >= 20, r = W.cal / 1000 * (big ? 1.1 : 1.2), out = big ? 0.42 : 0.1;
@@ -879,7 +881,7 @@ export function buildPlane(D) {
     prop.add(new THREE.Group());
   } else {
     // spinner em ogiva com prato traseiro (antes um cone pequeno sumia dentro do capô)
-    const sr = Math.min(D.noseR * 0.62, fr * 0.5), sl = sr * 2.3, sp = [];
+    const sr = Math.min(D.noseR * 0.62, fr * 0.5) * (D.spinner ?? 1), sl = sr * 2.3, sp = []; // def.spinner < 1: só o cubo da hélice (P-47)
     for (let i = 0; i <= 12; i++) { const t = i / 12; sp.push(V2(Math.max(sr * Math.cos(t * Math.PI / 2) ** 0.75, 0.001), t * sl)); }
     const spin = D.nation === 'Alemanha' ? black : accent;
     add(DT.latheZ(sp, 28), spin, prop, 0, 0, -0.05);
@@ -893,18 +895,30 @@ export function buildPlane(D) {
   }
   // pontos duros: bombas, foguetes e mísseis
   // bombas e foguetes presos por pilone/trilhos ao intradorso (ou ao ventre) — antes flutuavam sob o avião
-  const bombMeshes = [], under0 = (x, z) => (Math.abs(x) > fr * 0.9 ? wingY(wingCfg(Math.sign(x)), x, z, -1) : at(z / L).yc - at(z / L).h);
+  const bombMeshes = [], ordFit = [], fit = m => { if (jet) ordFit.push(m); return m; }, under0 = (x, z) => (Math.abs(x) > fr * 0.9 ? wingY(wingCfg(Math.sign(x)), x, z, -1) : at(z / L).yc - at(z / L).h);
+  // asa enflechada: o pilone vai a 42% da corda da estação (com z fixo caía à frente do bordo de ataque)
+  const hardZ = (x, z) => { if (!D.sweep || Math.abs(x) <= fr * 0.9) return z; const o = wingCfg(Math.sign(x)); return station(o, (Math.abs(x) - o.x0) / o.half, 0.42)[2]; };
   for (const b of D.bombs) for (let i = 0; i < b.n; i++) {
-    const x = b.x[i] || 0, z = D.wingZ - .2, len = b.d * 4.5, py = under0(x, z), ph = 0.12, y = py - ph - b.d / 2;
+    const x = b.x[i] || 0, z = hardZ(x, D.wingZ - .2 + (b.z ? b.z[i] : 0)), len = b.d * 4.5, py = under0(x, z), ph = b.ph || 0.12, y = py - ph - b.d / 2;
     const m = add(DT.latheZ([V2(b.d * 0.3, -len / 2), V2(b.d / 2, -len * 0.3), V2(b.d / 2, len * 0.25), V2(b.d * 0.35, len * 0.45), V2(0.001, len / 2 + b.d * 0.3)], 16), dark, root, x, y, z);
     for (let k = 0; k < 4; k++) add(new THREE.BoxGeometry(0.01, b.d * 0.7, b.d * 0.9).translate(0, b.d * 0.35, -len / 2 + b.d * 0.3).rotateZ(Math.PI / 4 + k * Math.PI / 2), dark, m); // empenas
-    add(new THREE.BoxGeometry(0.07, ph + 0.06, len * 0.45), under, root, x, py - ph / 2 + 0.02, z);                       // pilone
-    for (const dz of [-1, 1]) add(new THREE.CylinderGeometry(0.012, 0.012, ph + b.d * 0.3, 6), steel, root, x + b.d * 0.3, py - ph / 2 - b.d * 0.1, z + dz * len * 0.18); // escoras
+    fit(add(new THREE.BoxGeometry(0.07, ph + 0.06, len * 0.45), under, root, x, py - ph / 2 + 0.02, z));                     // pilone
+    for (const dz of [-1, 1]) fit(add(new THREE.CylinderGeometry(0.012, 0.012, ph + b.d * 0.3, 6), steel, root, x + b.d * 0.3, py - ph / 2 - b.d * 0.1, z + dz * len * 0.18)); // escoras
     bombMeshes.push(m);
   }
   const rocketMeshes = [];
-  if (D.rockets) for (let i = 0; i < D.rockets.n; i++) {
-    const side = i % 2 ? -1 : 1, k = Math.floor(i / 2), x = side * (D.span * 0.22 + k * 0.45), z = D.wingZ + .2, py = under0(x, z), y = py - 0.13 - 0.06;
+  if (D.rockets && D.rockets.pod) {
+    // casulos (LAU-3, UB-16): um por estação de pod.x, sob o pilone; os foguetes saem da boca, alternando os casulos
+    const P = D.rockets.pod, mouths = P.x.map(x => {
+      const o = wingCfg(Math.sign(x)), wg = x > 0 ? wingL : wingR, par = (Math.abs(x) - o.x0) / o.half > sB ? wg.userData.tip : wg;
+      const z = hardZ(x, D.wingZ), py = under0(x, z), y = py - P.ph - P.r, e = new THREE.Object3D();
+      fit(add(DT.latheZ([V2(0.001, -P.len / 2 - P.r), V2(P.r * 0.8, -P.len / 2), V2(P.r, -P.len * 0.3), V2(P.r, P.len / 2 - 0.06), V2(P.r * 0.88, P.len / 2), V2(0.001, P.len / 2)], 16), paint, par, x, y, z));
+      fit(add(new THREE.BoxGeometry(0.07, P.ph + 0.06, P.len * 0.4), paint, par, x, py - P.ph / 2 + 0.02, z));                 // pilone
+      e.position.set(x, y, z + P.len / 2); par.add(e); return e;
+    });
+    for (let i = 0; i < D.rockets.n; i++) rocketMeshes.push(mouths[i % mouths.length]);
+  } else if (D.rockets) for (let i = 0; i < D.rockets.n; i++) {
+    const side = i % 2 ? -1 : 1, k = Math.floor(i / 2), x = side * ((D.rockets.x0 || D.span * 0.22) + k * 0.45), z = D.wingZ + .2, py = under0(x, z), y = py - 0.13 - 0.06;
     rocketMeshes.push(add(new THREE.CylinderGeometry(.06, .06, 1.4, 10).rotateX(Math.PI / 2), dark, root, x, y, z));
     for (const dz of [0.45, -0.35]) add(new THREE.BoxGeometry(0.035, 0.15, 0.1), steel, root, x, py - 0.07, z + dz);        // postes de lançamento
   }
@@ -949,11 +963,14 @@ export function buildPlane(D) {
   // efeitos presos ao avião (chama da PC, fogo do WEP, cone de vapor) — fora da fusão de malhas
   const fx = buildPlaneFx(D, root, nozzles, stacks);
   // une as peças estáticas por material (menos draw calls); superfícies que se soltam ou somem ficam à parte
-  const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes]);
-  for (const grp of [root, wingL, wingR, wingL.userData.tip, wingR.userData.tip, tail]) mergeStatic(grp, keep);
+  const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes, ...ordFit]);
+  for (const grp of [root, cockG, wingL, wingR, wingL.userData.tip, wingR.userData.tip, tail]) mergeStatic(grp, keep);
   root.traverse(o => { if (o.userData.loose) mergeStatic(o, keep); });
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
-  return { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };
+  const built = { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, ordFit, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };
+  if (fz) for (const c of root.children) c.position.z -= fz;
+  if (hasModel(D)) applySkin(D, built); // pele glTF por cima da estrutura (modelLibrary.js)
+  return built;
 }
 // Trem de pouso: pernas principais na asa, bequilha (pistão) ou trem do nariz (jato). userData.lift = altura
 // do CG ao chão com o trem baixado; userData.pitch = atitude parado (cauda baixa no pistão).
@@ -971,12 +988,16 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
   // tubo entre dois pontos (braço de arrasto, tesoura)
   const rod = (par, a, b, rr, m) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(); const o = mk(new THREE.CylinderGeometry(rr, rr, L, 6), m, par, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return o; };
   // roda: pneu com perfil redondo (toro), aro, disco de freio e calota
-  const wheel = (par, x, y, z, r, w) => {
+  // cada roda é um grupo no próprio eixo: gira com a velocidade no chão (userData.spin) — antes ficava parada, deslizando
+  const wheels = [];
+  const wheel = (par0, x, y, z, r, w) => {
+    const par = new THREE.Group(); par.position.set(x, y, z); par0.add(par); par.userData.r = r; wheels.push(par);
     const tb = Math.min(w / 2, r * 0.32);
-    mk(new THREE.TorusGeometry(r - tb, tb, 10, 28).rotateY(Math.PI / 2), tire, par, x, y, z);
-    mk(new THREE.CylinderGeometry(r - tb * 1.2, r - tb * 1.2, w * 0.8, 20).rotateZ(Math.PI / 2), hubM, par, x, y, z);           // aro
-    mk(new THREE.CylinderGeometry(r * 0.3, r * 0.3, w + 0.03, 12).rotateZ(Math.PI / 2), mat, par, x, y, z);                     // cubo
-    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; mk(new THREE.BoxGeometry(w * 0.84, 0.025, 0.025), mat, par, x, y + Math.sin(a) * r * 0.45, z + Math.cos(a) * r * 0.45); } // parafusos/raios
+    mk(new THREE.TorusGeometry(r - tb, tb, 10, 28).rotateY(Math.PI / 2), tire, par, 0, 0, 0);
+    mk(new THREE.CylinderGeometry(r - tb * 1.2, r - tb * 1.2, w * 0.8, 20).rotateZ(Math.PI / 2), hubM, par, 0, 0, 0);           // aro
+    mk(new THREE.CylinderGeometry(r * 0.3, r * 0.3, w + 0.03, 12).rotateZ(Math.PI / 2), mat, par, 0, 0, 0);                     // cubo
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; mk(new THREE.BoxGeometry(w * 0.84, 0.03, 0.03), mat, par, 0, Math.sin(a) * r * 0.45, Math.cos(a) * r * 0.45); } // parafusos/raios
+    mk(new THREE.BoxGeometry(w * 0.9, r * 0.16, 0.035), tire, par, 0, r * 0.55, 0); // válvula/marca no aro: sem ela não se vê a roda girar
   };
   // perna oleopneumática: cilindro fixo + haste cromada e roda num grupo que sobe quando o amortecedor comprime
   const slides = [];
@@ -1029,7 +1050,7 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
         rod(p, [rad * 1.1 * side, -rad * 1.5, -rad * 0.6], [rad * 1.1 * side, -cyl, -rad * 0.6], 0.012, mat);
       }
     }
-    if (door) mk(new THREE.BoxGeometry(0.025, len * 0.62, Math.max(0.5, r * 1.9)), doorM, p, door * (rad + 0.12), -len * 0.36, 0); // porta presa à perna (cor da barriga)
+    if (door) mk(new THREE.BoxGeometry(0.025, len * 0.62, Math.max(0.5, r * 1.9)), doorM, p, door * (rad + 0.12), -len * 0.36, 0).userData.legDoor = true; // porta presa à perna (cor da barriga)
     return p;
   };
   const { mz, mx, mr, nz, nl, nr } = GP, legs = [], doors = [];
@@ -1119,7 +1140,9 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
   // amortecedor (squash) + encolhimento da perna ao recolher (a roda cabe no alojamento): as duas somam
   let sq = 0, rk = 0; const slide = () => { slides.forEach(([s, t], i) => (s.position.y = sq * t + (i < 2 ? rk * (GP.bay.shrink || 0) : 0))); };
   g.userData.squash = c => { sq = c; slide(); };
+  g.userData.spin = dist => { for (const w of wheels) w.rotation.x = dist / w.userData.r; }; // dist = metros rodados
   g.userData.travel = slides[0][1]; // curso do trem principal: o corpo desce isso com o amortecedor todo comprimido
+  g.userData.bayY = GP.bay.y0; // altura do munhão das pernas principais (eixos do avião)
   g.userData.lift = lift; g.userData.pitch = D.jet ? 0 : Math.atan2(lift - nl, D.L * 0.46 + mz) * 0.9;
   g.userData.mainZ = mz; g.userData.mainX = mx; g.userData.noseZ = nz; g.userData.noseLift = nl; // nl: CG → chão pela roda do nariz/bequilha
   return g;

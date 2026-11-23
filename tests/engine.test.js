@@ -29,13 +29,13 @@ describe('turbojato', () => {
     expect(es.output).toBeGreaterThan(0.94);
     expect(f0).toBeLessThan(0.75);
   });
-  it('resposta não-linear: o primeiro segundo saindo da marcha lenta rende pouco empuxo', () => {
+  it('resposta não-linear: o primeiro quinto do tempo de spool saindo da marcha lenta rende pouco empuxo', () => {
     const es = run(new EngineSet('j47'), 10, 0);
-    run(es, 1, 1);
+    run(es, ENGINES.j47.spoolUp * 0.2, 1);
     expect(es.output).toBeLessThan(0.3);
   });
   it('motor diferente responde diferente', () => {
-    const a = run(run(new EngineSet('j47'), 10, 0), 3, 1).output, b = run(run(new EngineSet('r13'), 10, 0), 3, 1).output;
+    const a = run(run(new EngineSet('j47'), 10, 0), 0.8, 1).output, b = run(run(new EngineSet('r13'), 10, 0), 0.8, 1).output;
     expect(b).toBeGreaterThan(a);
   });
   it('pós-combustão: só com manete cheia, liga e corta na hora', () => {

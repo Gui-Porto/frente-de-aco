@@ -14,7 +14,7 @@ export let AC = null;
 let master = null, sfx = null, engBus = null, verb = null, noiseBuf = null, brownBuf = null;
 const lastShot = new Map();
 export const eng = { tank: null, air: null };
-function applyVol() { if (!AC) return; master.gain.value = settings.audio.master * 0.7; sfx.gain.value = settings.audio.sfx; engBus.gain.value = settings.audio.engine; }
+function applyVol() { if (!AC) return; master.gain.value = settings.audio.master * 0.7; sfx.gain.value = settings.audio.sfx; engBus.gain.value = settings.audio.engine * 0.45; /* motores estavam altos demais contra tiros e explosões (dono) */ }
 onSettings(applyVol);
 
 // resposta ao impulso "ao ar livre": pré-eco curto (chão), cauda difusa de ~2,4 s com agudos morrendo antes
@@ -34,9 +34,15 @@ export function audioInit() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
-    const comp = AC.createDynamicsCompressor(); comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.25;
-    master = AC.createGain(); master.connect(comp); comp.connect(AC.destination);
-    sfx = AC.createGain(); sfx.connect(master); engBus = AC.createGain(); engBus.connect(master);
+    const comp = AC.createDynamicsCompressor(); comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 3.5; comp.attack.value = 0.005; comp.release.value = 0.22;
+    // medido com tools/audio_probe.py: os motores saíam a −31/−26 dBFS (o jogador tinha de subir o volume do PC e o tiro estourava).
+    // Ganho de compensação depois do compressor e um limitador no fim: o conjunto sobe ~7 dB sem clipar no disparo.
+    const makeup = AC.createGain(); makeup.gain.value = 1.6;
+    const lim = AC.createDynamicsCompressor(); lim.threshold.value = -2.5; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.09;
+    master = AC.createGain(); master.connect(comp); comp.connect(makeup); makeup.connect(lim); lim.connect(AC.destination);
+    // efeitos passam por uma saturação suave (tanh): tiro e explosão ganham corpo em vez de só chiado de ruído filtrado
+    const sat = AC.createWaveShaper(), sc = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; sc[i] = Math.tanh(x * 1.7) / Math.tanh(1.7); } sat.curve = sc; sat.oversample = '2x'; sat.connect(master);
+    sfx = AC.createGain(); sfx.connect(sat); engBus = AC.createGain(); engBus.connect(master);
     verb = AC.createConvolver(); verb.buffer = impulse(2.4); const vg = AC.createGain(); vg.gain.value = 0.55; verb.connect(vg); vg.connect(sfx);
     applyVol();
     noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
@@ -48,15 +54,53 @@ export function audioInit() {
     const filt = (type, f, q = 0.7) => { const x = AC.createBiquadFilter(); x.type = type; x.frequency.value = f; x.Q.value = q; return x; };
     const gain = v => { const x = AC.createGain(); x.gain.value = v; return x; };
 
-    // ---- tanque: motor (dente de serra + sub-harmônico, batida dos cilindros) e esteiras (chocalho que segue a velocidade) ----
+    // ---- tanque: V12 a gasolina. O oscilador roda na frequência do CICLO do motor (rpm/120) e a forma de onda traz as
+    // ordens: 12 (queima dos 12 cilindros) e múltiplos dominam, 6 e 18 dão o ronco irregular entre bancadas, o resto é
+    // mecânica. A carga abre o filtro (motor "abrindo") e sobe o ruído de escape, que pulsa na queima; esteiras à parte.
     {
-      const o = AC.createOscillator(), o2 = AC.createOscillator(), fl = filt('lowpass', 240), g = gain(0), g2 = gain(0.35);
-      o.type = 'sawtooth'; o.frequency.value = 32; o2.type = 'square'; o2.frequency.value = 16;
-      const am = gain(0.75), lfo = AC.createOscillator(), lg = gain(0.3); lfo.frequency.value = 8; lfo.connect(lg); lg.connect(am.gain);
-      o.connect(fl); o2.connect(g2); g2.connect(fl); fl.connect(am); am.connect(g); g.connect(engBus); o.start(); o2.start(); lfo.start();
+      const N = 72, re = new Float32Array(N + 1), im = new Float32Array(N + 1); let sd = 7;
+      const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+      for (let n = 1; n <= N; n++) {
+        const amp = n % 12 === 0 ? 1 / Math.pow(n / 12, 0.75) : n % 6 === 0 ? 0.5 / Math.pow(n / 6, 0.9) : n % 3 === 0 ? 0.16 / Math.sqrt(n / 3) : 0.07 * rnd() / Math.sqrt(n);
+        const ph = rnd() * Math.PI * 2; re[n] = amp * Math.cos(ph); im[n] = amp * Math.sin(ph);
+      }
+      const wave = AC.createPeriodicWave(re, im), o = AC.createOscillator(); o.setPeriodicWave(wave); o.frequency.value = 6;
+      const fl = filt('lowpass', 320, 0.9), body = filt('peaking', 110, 1.2); body.gain.value = 7; const g = gain(0);
+      o.connect(fl); fl.connect(body); body.connect(g); g.connect(engBus); o.start();
+      // escape: ruído marrom que pulsa com o motor
+      const xn = loop(brownBuf, 1.3), xf = filt('bandpass', 180, 0.7), xam = gain(0.5), xmod = gain(0.9), xg = gain(0);
+      o.connect(xmod); xmod.connect(xam.gain); xn.connect(xf); xf.connect(xam); xam.connect(xg); xg.connect(g);
+      // mecânica: válvulas/engrenagens, chiado agudo e baixo
+      const mn = loop(noiseBuf, 1), mf = filt('bandpass', 2600, 1.5), mam = gain(0.4), mmod = gain(0.6), mg = gain(0);
+      o.connect(mmod); mmod.connect(mam.gain); mn.connect(mf); mf.connect(mam); mam.connect(mg); mg.connect(g);
       const tn = loop(noiseBuf, 0.7), tf = filt('bandpass', 900, 1.2), tam = gain(0.5), tl = AC.createOscillator(), tlg = gain(0.5), tg = gain(0);
       tl.type = 'square'; tl.frequency.value = 6; tl.connect(tlg); tlg.connect(tam.gain); tn.connect(tf); tf.connect(tam); tam.connect(tg); tg.connect(engBus); tl.start();
-      eng.tank = { o, o2, g, f: fl, lfo, track: { g: tg, lfo: tl, f: tf } };
+      // squeal: rangido metálico dos pinos da esteira, só andando
+      const sq = AC.createOscillator(), sqf = filt('bandpass', 2300, 9), sqg = gain(0); sq.type = 'sawtooth'; sq.frequency.value = 2300; sq.connect(sqf); sqf.connect(sqg); sqg.connect(engBus); sq.start();
+      // rpm real do motor, carga 0..1 (acelerador), velocidade da esteira em m/s
+      const set = (on, rpm, load, sp) => {
+        const t = AC.currentTime, k = 0.06;
+        const rt = eng.recT;
+        g.gain.setTargetAtTime(on ? (0.10 + load * 0.11) * (rt ? 0.35 : 1) : 0, t, k);
+        if (rt) { rt.g.gain.setTargetAtTime(on ? 0.32 + load * 0.3 : 0, t, 0.08); if (on) { rt.s.playbackRate.setTargetAtTime(0.72 + clamp((rpm - 700) / 2300, 0, 1) * 0.75, t, 0.06); rt.f.frequency.setTargetAtTime(4200 + load * 9000 + rpm * 2, t, 0.1); } }
+        if (!on) { tg.gain.setTargetAtTime(0, t, k); sqg.gain.setTargetAtTime(0, t, k); return; }
+        o.frequency.setTargetAtTime(rpm / 120, t, 0.03);
+        fl.frequency.setTargetAtTime(260 + rpm * 0.12 + load * 900, t, 0.09);
+        body.frequency.setTargetAtTime(70 + rpm * 0.03, t, 0.1);
+        xf.frequency.setTargetAtTime(120 + rpm * 0.1, t, 0.1); xg.gain.setTargetAtTime(0.5 + load * 1.3, t, 0.08);
+        mg.gain.setTargetAtTime(0.14 + rpm / 2500 * 0.34, t, 0.1); // mecânica audível: sem ela o motor era só grave abafado
+        tg.gain.setTargetAtTime(Math.min(1, sp / 6) * 0.09, t, k); tl.frequency.setTargetAtTime(2 + sp * 2.2, t, k); tf.frequency.setTargetAtTime(700 + sp * 40, t, k);
+        sqg.gain.setTargetAtTime(sp > 0.5 ? 0.006 + Math.min(sp, 8) * 0.0015 : 0, t, 0.15); sq.frequency.setTargetAtTime(2100 + sp * 60 + Math.sin(t * 7) * 120, t, 0.05);
+      };
+      eng.tank = { g, set, track: { g: tg } };
+      // motores dos OUTROS blindados por perto (3 vozes): o mesmo timbre do V12 com escape, posição, distância e abafamento
+      eng.tvoices = [];
+      for (let i = 0; i < 3; i++) {
+        const vo = AC.createOscillator(); vo.setPeriodicWave(wave); vo.frequency.value = 6;
+        const vf = filt('lowpass', 300, 0.8), vnf = filt('bandpass', 160, 0.7), vng = gain(0.6), vg = gain(0), vp = AC.createStereoPanner();
+        vo.connect(vf); loop(brownBuf, 1.1 + i * 0.13).connect(vnf); vnf.connect(vng); vng.connect(vf); vf.connect(vg); vg.connect(vp); vp.connect(engBus); vo.start();
+        eng.tvoices.push({ o: vo, f: vf, g: vg, p: vp });
+      }
     }
     // ---- pistão: forma de onda com harmônicos de escapamento + "estalo" de ruído no ritmo das explosões + batida da hélice ----
     {
@@ -97,13 +141,15 @@ export function audioInit() {
     }
     // vento na fuselagem (duas bandas: chiado e sopro grave) e trepidação perto do estol
     {
-      const wf = filt('bandpass', 700, 0.5), wg = gain(0), lf = filt('lowpass', 260, 0.7), lg = gain(0.8);
+      const wf = filt('bandpass', 700, 0.5), wg = gain(0), lf = filt('lowpass', 260, 0.7), lg = gain(0.35); // sopro grave menor: cobria o motor a pistão (75% da energia em 60–250 Hz)
       loop(noiseBuf).connect(wf); wf.connect(wg); loop(brownBuf, 1.2).connect(lf); lf.connect(lg); lg.connect(wg); wg.connect(engBus);
       const bf = filt('lowpass', 70, 1.5), bam = gain(0), bl = AC.createOscillator(), blg = gain(1), bg = gain(0); bl.type = 'square'; bl.frequency.value = 11; bl.connect(blg); blg.connect(bam.gain); loop(brownBuf, 0.7).connect(bf); bf.connect(bam); bam.connect(bg); bg.connect(engBus); bl.start();
       eng.wind = { g: wg, f: wf, buffet: bg };
     }
     // ronco grave da turbina (o "peso" que o apito sozinho não tem)
     { const rf = filt('lowpass', 110, 1.2), rg = gain(0); loop(brownBuf, 0.6).connect(rf); rf.connect(rg); rg.connect(engBus); eng.rumble = { g: rg, f: rf }; }
+    // chiado do jato rasgando o ar (acima de 4,5 kHz): a gravação não tem nada lá em cima
+    { const hf = filt('highpass', 4500, 0.5), hg = gain(0); loop(noiseBuf, 1.4).connect(hf); hf.connect(hg); hg.connect(engBus); eng.hiss = { g: hg }; }
     // rodas rolando na pista
     { const rf = filt('bandpass', 180, 0.8), rg = gain(0); loop(brownBuf, 1.5).connect(rf); rf.connect(rg); rg.connect(engBus); eng.roll = { g: rg, f: rf }; }
     // motores dos OUTROS aviões por perto (até 3 vozes): rugido/pistão com Doppler e posição estéreo
@@ -116,6 +162,8 @@ export function audioInit() {
     // tons do cockpit: buscador do míssil (rosnado/tom) e alarmes
     const tone = type => { const o = AC.createOscillator(), g = AC.createGain(); o.type = type; g.gain.value = 0; o.connect(g); g.connect(sfx); o.start(); return { o, g }; };
     eng.seek = tone('triangle'); eng.warn = tone('square');
+    for (let k = 0; k < 3; k++) GRAIN.push(shotGrain(k));
+    { const gb = gain(1), gw = gain(0.18); gb.connect(sfx); gb.connect(gw); gw.connect(verb); eng.gunBus = gb; }
     loadSamples();
   } catch (e) { AC = null; }
 }
@@ -124,15 +172,30 @@ export function audioInit() {
 // Se um arquivo existir, a gravação vira a base daquele som e a síntese fica só de tempero (rotação, apito,
 // sub-grave); se faltar, tudo segue sintetizado. SMP.meta traz o "pico" dos rasantes (s) para alinhar o vush.
 export const SMP = {};
-const FILES = ['piston', 'jet', 'jetcab', 'mg', 'mgloop', 'cannon', 'boom', 'boom_small', 'jetby', 'propby', 'hit1', 'hit2', 'hit3', 'hit4', 'snap1', 'snap2', 'snap3', 'abstart'];
+// Equalização por gravação [tipo, Hz, dB]: as prévias em MP3 do Freesound são abafadas (medido: quase nada acima de
+// 2,5 kHz; a explosão tem 72% da energia abaixo de 60 Hz, o pistão 76% entre 60 e 250 Hz). Corta o excesso de grave
+// e levanta o que existe de médio/agudo; o que a gravação não tem (estalo, chiado) vem da síntese por cima.
+const EQ = {
+  tank: [['highshelf', 1800, 9]], piston: [['lowshelf', 260, -5], ['highshelf', 1000, 6]], jet: [['lowshelf', 220, 4], ['highshelf', 3000, 8]],
+  jetcab: [['highpass', 45, 0], ['lowshelf', 110, -10], ['highshelf', 600, 12]], mgloop: [['lowshelf', 160, -8], ['highshelf', 2200, 7]],
+  boom: [['highpass', 40, 0], ['lowshelf', 80, -9], ['highshelf', 500, 12]], boom_small: [['lowshelf', 200, -7], ['highshelf', 700, 12]],
+  tankshot: [['lowshelf', 220, -6], ['highshelf', 900, 12]], jetby: [['highshelf', 2500, 6]], propby: [['highshelf', 1500, 7]],
+};
+const eqOf = new Map(); // buffer → lista de filtros
+function eqChain(buf, src) { let n = src; for (const [type, f, db] of eqOf.get(buf) || []) { const x = AC.createBiquadFilter(); x.type = type; x.frequency.value = f; x.gain.value = db; x.Q.value = 0.7; n.connect(x); n = x; } return n; }
+const FILES = ['tankshot', 'tank', 'piston', 'jet', 'jetcab', 'mg', 'mgloop', 'cannon', 'boom', 'boom_small', 'jetby', 'propby', 'hit1', 'hit2', 'hit3', 'hit4', 'snap1', 'snap2', 'snap3', 'abstart'];
 async function loadSamples() {
   try { SMP.meta = await (await fetch(new URL('audio/meta.json', document.baseURI))).json(); } catch (e) { SMP.meta = {}; }
   await Promise.all(FILES.map(async k => {
-    try { const r = await fetch(new URL(`audio/${k}.ogg`, document.baseURI)); if (r.ok) SMP[k] = await AC.decodeAudioData(await r.arrayBuffer()); }
-    catch (e) { /* sem o arquivo: fica a síntese */ }
+    // audio/local/ (fora do git) tem prioridade: sons do próprio jogador, para uso pessoal — ver public/audio/LEIAME.md
+    for (const f of ['local/' + k + '.wav', 'local/' + k + '.ogg', 'local/' + k + '.mp3', k + '.wav', k + '.ogg']) { // .wav: preparados por tools/audio_prep.py
+      try { const r = await fetch(new URL(`audio/${f}`, document.baseURI)); if (r.ok && !/html/.test(r.headers.get('content-type') || '')) { SMP[k] = await AC.decodeAudioData(await r.arrayBuffer()); if (EQ[k] && !f.startsWith('local/')) eqOf.set(SMP[k], EQ[k]); break; } } // som próprio do jogador (local/) toca como veio
+      catch (e) { /* sem o arquivo: fica a síntese */ }
+    }
   }));
   // laços de motor gravados: um para o avião principal e um por voz dos outros aviões
-  const loopOf = (buf, dest) => { const s = AC.createBufferSource(); s.buffer = buf; s.loop = true; const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 16000; const g = AC.createGain(); g.gain.value = 0; s.connect(f); f.connect(g); g.connect(dest); s.start(0, Math.random() * buf.duration); return { s, f, g }; };
+  const loopOf = (buf, dest) => { const s = AC.createBufferSource(); s.buffer = buf; s.loop = true; const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 16000; const g = AC.createGain(); g.gain.value = 0; eqChain(buf, s).connect(f); f.connect(g); g.connect(dest); s.start(0, Math.random() * buf.duration); return { s, f, g }; };
+  if (SMP.tank) eng.recT = loopOf(SMP.tank, engBus);       // motor do seu tanque: gravação em laço, tom e volume pela rotação/carga
   if (SMP.piston) eng.recP = loopOf(SMP.piston, engBus);
   if (SMP.jet) eng.recJ = loopOf(SMP.jet, engBus);
   if (SMP.jetcab) eng.recC = loopOf(SMP.jetcab, engBus);  // jato ouvido de dentro da cabine
@@ -142,7 +205,7 @@ async function loadSamples() {
 // toca uma gravação num ponto do mundo (estéreo, distância, reverberação); rate muda tom e duração juntos
 function playRec(buf, a, vol, rate = 1, dest, offset = 0, dur) {
   const s = AC.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate;
-  const g = AC.createGain(); g.gain.value = vol; s.connect(g); g.connect(dest || sfx);
+  const g = AC.createGain(); g.gain.value = vol; eqChain(buf, s).connect(g); g.connect(dest || sfx);
   s.start(a ? a.t : AC.currentTime, offset, dur); return s;
 }
 
@@ -165,9 +228,11 @@ function out(a, wetK = 1) {
   p.connect(lp); lp.connect(dry); lp.connect(wet); dry.connect(sfx); wet.connect(verb);
   return p;
 }
-function noiseBurst(t, vol, freq, dur, q = 0.7, dest = sfx, type = 'lowpass', buf = noiseBuf, att = 0.006) {
+// f1: o filtro varre de freq até f1 durante o som (explosão real começa clara e escurece)
+function noiseBurst(t, vol, freq, dur, q = 0.7, dest = sfx, type = 'lowpass', buf = noiseBuf, att = 0.006, f1 = 0) {
   const s = AC.createBufferSource(); s.buffer = buf; s.playbackRate.value = rand(.8, 1.1);
   const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  if (f1) { f.frequency.setValueAtTime(freq, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.7); }
   const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(vol, 0.0002), t + att); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   s.connect(f); f.connect(g); g.connect(dest); s.start(t, rand(0, 1)); s.stop(t + dur + 0.05);
 }
@@ -178,6 +243,17 @@ function thump(t, vol, f0, dur, dest = sfx) {
 function ping(t, vol, f0, f1, dur, dest = sfx, type = 'triangle') {
   const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   g.gain.setValueAtTime(Math.max(vol, 0.0002), t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.02);
+}
+
+// motores dos outros blindados: list = até 3 de { pos, rpm, load } (os mais próximos da câmera); [] cala todos
+export function tankVoices(list) {
+  if (!AC || !eng.tvoices) return; const t = AC.currentTime;
+  eng.tvoices.forEach((v, i) => {
+    const q = list[i], a = q && at(q.pos, 1);
+    if (!a) { v.g.gain.setTargetAtTime(0, t, 0.15); return; }
+    v.o.frequency.setTargetAtTime(q.rpm / 120, t, 0.06); v.f.frequency.setTargetAtTime((240 + q.rpm * 0.1 + q.load * 600) / (1 + a.d / 150), t, 0.1);
+    v.g.gain.setTargetAtTime((0.09 + q.load * 0.08) / (1 + a.d / 18), t, 0.12); v.p.pan.setTargetAtTime(a.pan, t, 0.1);
+  });
 }
 
 // ---------- cockpit ----------
@@ -261,36 +337,110 @@ export function sndCrackle(v, muf = 1) {
 }
 export function audioPause(p) { if (AC) p ? AC.suspend() : AC.resume(); }
 // canhão de tanque: estalo da boca, corpo do disparo, sub-grave e a cauda do vale (reverberação)
+// Tiro de canhão em camadas: estalo supersônico, corpo da explosão com o filtro fechando, sub grave que cresce com o
+// calibre, e o eco que volta do terreno. De perto (o seu canhão) entra o tranco da culatra e o estojo caindo.
 export function sndShot(pos, cal) {
-  const a = at(pos, 1.4 * cal / 80); if (!a) return; const o = out(a, 1.3), v = Math.min(a.vol, 1.2);
-  if (SMP.boom_small) { playRec(SMP.boom_small, a, v * 1.2, rand(0.62, 0.7), o); thump(a.t, Math.min(a.vol, 1), 60, 0.6, o); return; }
-  noiseBurst(a.t, v, 6000, 0.05, 0.7, o, 'highpass');
-  noiseBurst(a.t, v, 1800 / (1 + a.d / 500), 1.1, 0.8, o);
-  noiseBurst(a.t, v * 0.9, 220, 1.6, 0.7, o, 'lowpass', brownBuf, 0.01);
-  thump(a.t, Math.min(a.vol, 1), 75, 0.45, o);
+  const a = at(pos, 1.6 * cal / 80); if (!a) return; const o = out(a, 1.5), v = Math.min(a.vol, 1.3), big = clamp((cal - 37) / 60, 0, 1.3);
+  if (SMP.tankshot) { // gravação de peça de artilharia: calibre maior toca mais grave; o sub, o eco e a culatra continuam sintetizados por cima
+    playRec(SMP.tankshot, a, v * 1.5, clamp(1.3 - cal / 300, 0.82, 1.15) * rand(0.97, 1.03), o);
+    thump(a.t, Math.min(a.vol * 1.1, 1.1), 70 - big * 25, 0.5 + big * 0.4, o);
+    // a gravação sozinha é abafada (quase nada acima de 2,5 kHz): o estalo da boca e o corpo do disparo vêm da síntese
+    noiseBurst(a.t, v * 1.5, 4200, 0.06, 0.7, o, 'highpass', noiseBuf, 0.001);
+    noiseBurst(a.t, v * 1.5, 5200 / (1 + a.d / 400), 0.4 + big * 0.3, 0.8, o, 'lowpass', noiseBuf, 0.003, 320);
+    noiseBurst(a.t, v * 0.9, 1100, 0.22, 0.8, o, 'bandpass', noiseBuf, 0.002);
+  } else {
+  noiseBurst(a.t, v, 5200, 0.045, 0.7, o, 'highpass', noiseBuf, 0.001);
+  noiseBurst(a.t, v * 1.2, 3600 / (1 + a.d / 400), 0.55 + big * 0.5, 0.8, o, 'lowpass', noiseBuf, 0.003, 240);
+  noiseBurst(a.t + 0.01, v, 700 - big * 180, 1.1 + big * 0.8, 0.7, o, 'lowpass', noiseBuf, 0.006, 140);
+  noiseBurst(a.t, v, 190 - big * 60, 1.8 + big * 1.2, 0.7, o, 'lowpass', brownBuf, 0.008);
+  thump(a.t, Math.min(a.vol * 1.2, 1.2), 82 - big * 30, 0.5 + big * 0.5, o);
+  thump(a.t, Math.min(a.vol, 1) * big, 38, 0.9, o);
+  }
+  // eco do terreno: repetição mais grave e fraca, mais longe = mais atrasada
+  const e = 0.28 + Math.min(a.d, 600) / 1500; noiseBurst(a.t + e, v * 0.22, 700, 1.4, 0.6, o, 'lowpass', brownBuf, 0.05);
+  if (a.d < 12) { // dentro/junto do tanque: culatra recuando e voltando, estojo no piso
+    ping(a.t + 0.05, 0.16, 190, 90, 0.18, sfx, 'square'); noiseBurst(a.t + 0.32, 0.22, 2400, 0.09, 5, sfx, 'bandpass');
+    ping(a.t + 0.9, 0.07, 3100, 2300, 0.25, sfx); ping(a.t + 1.02, 0.04, 3600, 2700, 0.2, sfx);
+  }
+}
+// ---------- tiro automático: um "grão" por disparo, tocado na cadência REAL da arma ----------
+// O laço gravado (mgloop.wav) tinha ~1060 disp/min irregulares e repetia a cada 1,6 s: toda arma soava igual, fora de
+// ritmo com os traçantes, e o dono reprovou. Cada grão = estalo (ruído diferenciado), corpo (ressonador na faixa do
+// calibre), soco grave (seno descendo) e um resto de ar; 0 = metralhadora, 1 = canhão 20–23 mm, 2 = 30 mm ou mais.
+const GRAIN = [];
+function shotGrain(kind) {
+  const sr = AC.sampleRate, n = Math.floor(sr * 0.22), b = AC.createBuffer(1, n, sr), d = b.getChannelData(0);
+  const fB = [1500, 950, 620][kind], f0 = [230, 170, 120][kind], f1 = [95, 70, 50][kind], tB = [0.022, 0.03, 0.04][kind], tT = [0.03, 0.045, 0.06][kind];
+  const r = 0.955, c = 2 * r * Math.cos(2 * Math.PI * fB / sr); let y1 = 0, y2 = 0, tl = 0, prev = 0, ph = 0, pk = 0, hl = 0, z1 = 0, z2 = 0;
+  const rP = 0.9, cP = 2 * rP * Math.cos(2 * Math.PI * [3600, 2900, 2400][kind] / sr); // segundo ressonador: o "estalo de metal" entre 2,5 e 6 kHz
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, nz = Math.random() * 2 - 1, y = nz * (1 - r) * 4 + c * y1 - r * r * y2; y2 = y1; y1 = y;
+    const crack = (nz - prev) * 0.9 * Math.exp(-t / 0.0035); prev = nz; tl += (nz - tl) * 0.08;
+    const z = nz * (1 - rP) * 3 + cP * z1 - rP * rP * z2; z2 = z1; z1 = z;
+    hl += (nz - hl) * 0.35; const hiss = (nz - hl) * 0.9 * Math.exp(-t / 0.012); // chiado do gás (acima de ~3 kHz): sem ele o tiro era só médio
+    ph += 2 * Math.PI * (f1 + (f0 - f1) * Math.exp(-t / 0.02)) / sr;
+    d[i] = Math.tanh((crack * 1.2 + hiss * 0.6 + z * Math.exp(-t / 0.016) + y * 0.7 * Math.exp(-t / tB) + Math.sin(ph) * Math.exp(-t / tT) * 0.9 + tl * 0.5 * Math.exp(-t / 0.07)) * 1.6) * Math.min(1, (n - i) / (sr * 0.004));
+    pk = Math.max(pk, Math.abs(d[i]));
+  }
+  for (let i = 0; i < n; i++) d[i] *= 0.9 / pk;
+  return b;
+}
+const grainOf = cal => GRAIN[cal >= 30 ? 2 : cal >= 20 ? 1 : 0], grainRate = cal => (cal >= 20 ? 1 : (12.7 / Math.max(cal, 7.5)) ** 0.35) * rand(0.96, 1.04);
+function playGrain(buf, t, vol, rate, dest) { const s = AC.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; const g = AC.createGain(); g.gain.value = vol; s.connect(g); g.connect(dest); s.start(t); }
+// armas do SEU avião: groups = [{ cal, rpm, n }] atirando agora. Até 3 vozes por grupo, levemente fora de sincronia (as
+// armas de asa não disparam juntas); agenda só 70 ms à frente — soltou o gatilho, para.
+const gunV = [];
+export function sndOwnGuns(groups, vol = 0.5) {
+  if (!AC || !GRAIN.length) return; const now = AC.currentTime;
+  groups.forEach((G, gi) => {
+    const nv = Math.min(G.n, 3);
+    for (let k = 0; k < nv; k++) {
+      const v = gunV[gi * 3 + k] || (gunV[gi * 3 + k] = { next: 0, det: 1 });
+      if (v.next < now - 0.2) { v.next = now + k * 0.013 + Math.random() * 0.008; v.det = 1 + (k - (nv - 1) / 2) * 0.045; } // começo de rajada
+      while (v.next < now + 0.07) { playGrain(grainOf(G.cal), Math.max(v.next, now), vol / Math.sqrt(nv) * rand(0.85, 1), grainRate(G.cal), eng.gunBus); v.next += 60 / (G.rpm * v.det) * rand(0.97, 1.03); }
+    }
+  });
 }
 // metralhadoras e canhões de avião: estalo curto que muda com o calibre; a partir de 20 mm, o "tum" do canhão.
 // Limite de cadência POR CALIBRE (antes era um só para tudo: o canhão sumia no meio das .50)
-export function sndMG(pos, cal, own) {
-  if (!AC || (own && cal < 20 && eng.gunLoop)) return; // as suas metralhadoras tocam no laço gravado
+export function sndMG(pos, cal, own, rpm = 0) {
+  if (!AC || (own && rpm < 2400 && GRAIN.length)) return; // as suas armas tocam em sndOwnGuns, na cadência real
+  if (rpm >= 2400) { // canhão rotativo (GAU-8, M61): os tiros fundem num zumbido — dente de serra na cadência + sopro, em grãos que se emendam
+    const t0 = AC.currentTime; if (t0 - (lastShot.get('b') || 0) < 0.07) return; lastShot.set('b', t0);
+    const a = at(pos, 0.3 * cal / 10); if (a.vol < 0.004) return; const o = out(a, 0.7), v = Math.min(a.vol, 0.8), dur = 0.15;
+    const os = AC.createOscillator(), f = AC.createBiquadFilter(), g = AC.createGain(); os.type = 'sawtooth'; os.frequency.value = rpm / 60 * rand(0.98, 1.02);
+    f.type = 'lowpass'; f.frequency.value = Math.max(300, 2600 / (1 + a.d / 250));
+    g.gain.setValueAtTime(0.0001, a.t); g.gain.exponentialRampToValueAtTime(v * 0.7, a.t + 0.015); g.gain.setValueAtTime(v * 0.7, a.t + dur - 0.04); g.gain.exponentialRampToValueAtTime(0.0001, a.t + dur);
+    os.connect(f); f.connect(g); g.connect(o); os.start(a.t); os.stop(a.t + dur + 0.02);
+    noiseBurst(a.t, v * 0.8, 1400 / (1 + a.d / 300), dur, 0.8, o, 'bandpass', noiseBuf, 0.015); thump(a.t, v * 0.5, cal >= 30 ? 75 : 100, dur, o);
+    return;
+  }
   const t = AC.currentTime, key = cal >= 20 ? 'c' : 'm', gap = cal >= 30 ? 0.09 : cal >= 20 ? 0.055 : 0.04;
   if (t - (lastShot.get(key) || 0) < gap) return; lastShot.set(key, t);
-  const a = at(pos, 0.25 * cal / 10); if (a.vol < 0.004) return; const o = out(a, 0.5), v = Math.min(a.vol, cal >= 20 ? .7 : .5);
+  const a = at(pos, 0.5 + 0.022 * cal); if (a.vol < 0.004) return; const o = out(a, 0.5), v = Math.min(a.vol, cal >= 20 ? .9 : .7); // a metralhadora do tanque mal passava do motor em marcha lenta
   // gravação: metralhadora (calibre menor = tom mais agudo) ou canhão automático (37 mm mais grave)
   const rec = cal >= 20 ? SMP.cannon : SMP.mg;
   if (rec) { playRec(rec, a, v * 1.8, (cal >= 20 ? 20 / cal * 1.05 : 12.7 / cal) * rand(0.95, 1.05), o); if (cal >= 20) thump(a.t, v * 0.6, cal >= 30 ? 65 : 90, 0.12, o); return; }
+  if (GRAIN.length) { playGrain(grainOf(cal), a.t, v * 1.5, grainRate(cal), o); return; } // o mesmo disparo das suas armas, com posição e distância
   noiseBurst(a.t, v, (cal >= 20 ? 2200 : 3400) / (1 + a.d / 300), cal >= 20 ? .16 : .1, 1.5, o, 'bandpass');
-  noiseBurst(a.t, v * 0.6, 7000, 0.03, 0.7, o, 'highpass');
+  noiseBurst(a.t, v * 0.8, 7000, 0.03, 0.7, o, 'highpass');
   if (cal >= 20) thump(a.t, v * 0.8, cal >= 30 ? 70 : 95, 0.12, o);
 }
 // explosão: estalo, estrondo grave, sub, estilhaços chovendo e a cauda longa (reverberação)
 export function sndBoom(pos, big) {
   const a = at(pos, big ? 2.2 : 0.9); if (!a) return; const o = out(a, 1.4), v = Math.min(a.vol, 1.4);
   const rec = big ? SMP.boom : SMP.boom_small;
-  if (rec) { playRec(rec, a, v * 1.3, rand(0.88, 1.08) * (big ? 0.9 : 1), o); thump(a.t, Math.min(a.vol, 1.2), big ? 45 : 60, big ? 1.4 : .5, o); return; }
+  if (rec) { // medido: o sub de 45 Hz por 1,4 s era 78% da energia — a explosão virava só um "tum". Sub curto, estalo e estrondo médio por cima da gravação
+    playRec(rec, a, v * 1.4, rand(0.88, 1.08) * (big ? 0.9 : 1), o); thump(a.t, Math.min(a.vol, 1.2) * 0.4, big ? 58 : 70, big ? 0.55 : .3, o);
+    noiseBurst(a.t, v * 1.2, 4500, 0.07, 0.7, o, 'highpass', noiseBuf, 0.001);
+    noiseBurst(a.t, v * 0.9, big ? 3600 : 4200, big ? 1.7 : 0.8, 0.7, o, 'lowpass', noiseBuf, 0.004, big ? 200 : 280);
+    noiseBurst(a.t, v * 1.1, big ? 420 : 600, big ? 1.1 : 0.5, 0.6, o, 'bandpass', noiseBuf, 0.006);
+    if (big && a.d < 400) for (let i = 0; i < 6; i++) noiseBurst(a.t + rand(0.5, 1.6), v * 0.15, rand(2000, 5000), 0.05, 4, o, 'bandpass');
+    return; }
   noiseBurst(a.t, v, 5000, 0.06, 0.7, o, 'highpass');
-  noiseBurst(a.t, v, big ? 700 : 1200, big ? 2.6 : 0.9, 0.7, o);
+  noiseBurst(a.t, v * 1.1, big ? 2200 : 2800, big ? 2.6 : 0.9, 0.7, o, 'lowpass', noiseBuf, 0.004, big ? 120 : 200);
   noiseBurst(a.t, v, big ? 160 : 260, big ? 3.2 : 1.4, 0.8, o, 'lowpass', brownBuf, 0.01);
+  if (a.d > 250) noiseBurst(a.t + 0.2 + a.d / 2500, v * 0.5, 120, big ? 3 : 1.6, 0.7, o, 'lowpass', brownBuf, 0.08); // de longe: o trovão que rola depois do estalo
   thump(a.t, Math.min(a.vol, 1.2), big ? 48 : 60, big ? 1.4 : .5, o);
   if (big && a.d < 400) for (let i = 0; i < 6; i++) noiseBurst(a.t + rand(0.5, 1.6), v * 0.15, rand(2000, 5000), 0.05, 4, o, 'bandpass');
 }
