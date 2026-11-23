@@ -198,8 +198,11 @@ const HOLEGEOS = Array.from({ length: 8 }, (_, i) => {
 for (const [g, m] of [[OUTER, FLAME], [INNER, DIAMOND], [DISC, GLOW], [OUTER, VAPOR], [HOLEGEO, HOLE]]) mk(g, m, scene, 0, -1e4, 0); // sementes dos shaders
 const _rc = new THREE.Raycaster(), _o = new THREE.Vector3(), _d = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Vector3();
 const matOf = h => (Array.isArray(h.object.material) ? h.object.material[0] : h.object.material);
-const solid = h => h.face && !h.object.userData.fx && !matOf(h).transparent;
-const glassy = h => h.face && !h.object.userData.fx && matOf(h).transparent && matOf(h).opacity < 0.5;
+// o Raycaster não olha `visible`: nos aviões com pele glTF a estrutura procedural está escondida por baixo e era ELA que
+// levava a marca (filha de malha invisível = marca invisível: nenhum furo aparecia nesses aviões)
+const seen = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+const solid = h => h.face && !h.object.userData.fx && !matOf(h).transparent && seen(h.object);
+const glassy = h => h.face && !h.object.userData.fx && matOf(h).transparent && matOf(h).opacity < 0.5 && seen(h.object);
 // marca `cell` no ponto da batida, deitada na face (normal voltada para `side`), presa à malha
 function mark(pl, hit, cell, size, side) {
   _n.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);

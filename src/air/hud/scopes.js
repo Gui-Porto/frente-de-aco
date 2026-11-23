@@ -93,8 +93,8 @@ function radarScope(p, rd, T) {
 function rwrScope(p, rw, mw, T) {
   plate(0, 0, WW, RH, T);
   ptxt(sysName(T, (rw || mw).W), 22, 22, 13, T.fg, 'left', UI, 700);
-  ptxt(rw ? 'RWR' : 'MAW', WW - 14, 22, 11, T.dim, 'right', UI, 700);
   const cx = WW / 2, cy = 32 + (RH - 66) / 2, R = 66, top = rw && rw.top;
+  ptxt(rw ? 'RWR' : 'MAW', WW - 14, 22, 11, T.dim, 'right', UI, 700);
   g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.arc(cx, cy, R + 4, 0, 7); g.fill();
   // avião no centro
   g.strokeStyle = T.dim; g.lineWidth = 1.2; g.beginPath(); g.moveTo(cx, cy - 7); g.lineTo(cx, cy + 6); g.moveTo(cx - 6, cy); g.lineTo(cx + 6, cy); g.moveTo(cx - 3, cy + 5); g.lineTo(cx + 3, cy + 5); g.stroke();
@@ -103,15 +103,25 @@ function rwrScope(p, rw, mw, T) {
     g.strokeStyle = T.faint; g.lineWidth = 1;
     for (const k of [0.4, 0.75, 1]) { g.beginPath(); g.arc(cx, cy, R * k, 0, 7); g.stroke(); }
     for (let a = 0; a < 360; a += 30) { const r0 = a % 90 ? R - 4 : R - 9, s = Math.sin(a * DEG), c = Math.cos(a * DEG); g.beginPath(); g.moveTo(cx + s * r0, cy - c * r0); g.lineTo(cx + s * R, cy - c * R); g.stroke(); }
-    for (const th of rw ? rw.list.slice(0, rw.W.maxShow) : []) {
-      const rr = R * (0.22 + 0.72 * (1 - th.strength)), x = cx + Math.sin(th.az) * rr, y = cy - Math.cos(th.az) * rr;
-      const col = th.lvl === 'SEARCH' ? T.fg : th.lvl === 'TRACK' ? C.amber : C.enemy;
-      const show = th.lvl !== 'GUIDANCE' || Math.sin(V.blink * 16) > -0.3;
-      if (show) ptxt(th.type || '?', x, y + 4, 12.5, col, 'center', MONO, 500);
-      if (th.lvl === 'LOCK' || th.lvl === 'GUIDANCE') { g.strokeStyle = col; g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y - 11); g.lineTo(x + 11, y); g.lineTo(x, y + 11); g.lineTo(x - 11, y); g.closePath(); g.stroke(); }
-      if (th === top) { g.strokeStyle = col; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y + 2, 13, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
-    }
+    // Como no WT: cada emissor é um rótulo na direção dele (mais perto do centro = sinal mais forte). Contato NOVO vem
+    // circulado por ~2,5 s; radar RASTREANDO você liga uma linha tracejada do centro até ele; LANÇAMENTO (iluminação de
+    // míssil) faz a linha piscar. Rótulos sobrepostos piscam alternados. O estado mais grave aparece no cabeçalho do painel.
+    const L = rw ? rw.list.slice(0, rw.W.maxShow) : [], P = L.map(th => { const rr = R * (0.22 + 0.72 * (1 - th.strength)); return [cx + Math.sin(th.az) * rr, cy - Math.cos(th.az) * rr]; });
+    L.forEach((th, i) => {
+      const [x, y] = P[i];
+      const col = th.lvl === 'SEARCH' ? T.fg : th.lvl === 'TRACK' ? C.amber : C.enemy, launch = th.lvl === 'GUIDANCE';
+      if (th.lvl !== 'SEARCH' && (!launch || Math.sin(V.blink * 16) > -0.2)) {
+        g.strokeStyle = col; g.lineWidth = 1.3; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(cx + Math.sin(th.az) * 9, cy - Math.cos(th.az) * 9); g.lineTo(x - Math.sin(th.az) * 10, y + Math.cos(th.az) * 10); g.stroke(); g.setLineDash([]);
+      }
+      const grp = P.map((q, k) => (Math.hypot(q[0] - x, q[1] - y) < 15 ? k : -1)).filter(k => k >= 0); // quem divide o lugar com este
+      if (grp.length > 1 && Math.floor(V.blink * 2.5) % grp.length !== grp.indexOf(i)) return;
+      ptxt(th.type || '?', x, y + 4, 12.5, col, 'center', MONO, 600);
+      if (S.now - (th.t0 ?? -9) < 2.5) { g.strokeStyle = col; g.lineWidth = 1.2; g.beginPath(); g.arc(x, y, 12, 0, 7); g.stroke(); }
+    });
   }
+  // cabeçalho: o pior estado, como o TRACK/LAUNCH que o WT escreve acima do indicador (fica DENTRO do painel do RWR)
+  const st = top && rw.W.res < 90 ? (top.lvl === 'GUIDANCE' ? 'LAUNCH' : top.lvl === 'LOCK' || top.lvl === 'TRACK' ? 'TRACK' : '') : '';
+  if (st && (st !== 'LAUNCH' || Math.sin(V.blink * 16) > -0.2)) { g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(WW - 70, 10, 58, 17); ptxt(st, WW - 41, 23, 12, st === 'LAUNCH' ? C.enemy : C.amber, 'center', MONO, 700); }
   // mísseis do MAW: triângulo vermelho piscando na direção, mais perto do centro quanto mais perto
   const blink = Math.sin(V.blink * 12) > -0.3;
   if (mw && blink) for (const m of mw.list) {

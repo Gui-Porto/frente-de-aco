@@ -246,7 +246,7 @@ export function applyMod(pl, m, dmg, by, am) {
     case 'gun': if (died) {
       // só os canos daquele lado param; o grupo inteiro só quando não sobra nenhum
       const g = pl.guns[m.g];
-      if (g) { g.pts = m.sd ? g.pts.filter(q => Math.sign(q[0]) !== m.sd) : []; if (!g.pts.length) g.broken = true; }
+      if (g) { const lost = m.sd ? g.pts.filter(q => Math.sign(q[0]) === m.sd) : g.pts; g.pts = m.sd ? g.pts.filter(q => Math.sign(q[0]) !== m.sd) : []; if (!g.pts.length) g.broken = true; if (pl.gunWreck) pl.gunWreck(lost, g.W); }
       crit(`${m.label} inoperante`);
     } break;
     case 'gear': if (died && pl.jamLeg) {

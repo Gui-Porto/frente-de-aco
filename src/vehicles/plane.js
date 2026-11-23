@@ -327,6 +327,10 @@ export class Plane {
       if (Math.random() < dt * 10) fxTrail(ep.clone(), 0xb8b4ac, 1, 3);
       this.smokeStep(1, ep);
     } else this.smokeStep(0);
+    if (this.gunSmoke && this.gunSmoke.length) {
+      if (ST.now > this.gunSmoke[0].until) this.gunSmoke.shift();
+      for (const s of this.gunSmoke) if (Math.random() < dt * 16) { const w = _pt.set(...s.lp).applyMatrix4(this.root.matrixWorld).clone(); fxTrail(w, 0x4a4642, 0.35, 1.8); if (Math.random() < 0.12) fxSparks(w, 2); }
+    }
     // vazamentos saindo de onde furou: óleo = rastro marrom fino (marrom médio, nunca quase-preto); água = névoa branca
     const at = m => (m ? _pt.set(...m.c).applyMatrix4(this.root.matrixWorld) : _pt.copy(this.pos)).clone(), hurt = k => modsOf(this, k).find(m => m.hp < m.max);
     if (this.oil > 0 && this.oilQ > 0 && Math.random() < dt * 30) fxTrail(at(hurt('oil') || hurt('cool') || this.mods.eng0 || this.mods.engine), 0x7a6650, 0.4, 3.5);
@@ -901,6 +905,22 @@ export class Plane {
     fxBigBlast(this.pos.clone(), 1); sndBoom(this.pos, true); addCrater(this.pos, 4); shakeAt(this.pos, 1, 60);
     this.root.visible = false; this.burnAt = this.pos.clone(); this.burnT = 25;
     if (this.bombs.length) blast(this.pos.clone(), this.bombs.reduce((s, b) => s + b.tnt, 0) * 0.5, this.lastHitBy, { skipPlane: this });
+  }
+  // Arma destruída aparece no avião (antes só a HUD avisava): rombo queimado e painel arrancado na boca de cada cano
+  // perdido (marcas presas à malha, valem para pele glTF e procedural), lascas de chapa, e a arma fica soltando fumaça
+  // e faísca por uns segundos. pts = bocas perdidas [x, y, z] no referencial do avião
+  gunWreck(pts, W) {
+    const big = W && W.cal >= 20 ? 1.4 : 1;
+    pts.forEach((q, i) => {
+      // o raio vem de FORA para a chapa onde a arma está: arma de linha central (queixo/ventre) por baixo, de fuselagem
+      // pelo lado, de asa por cima; se não achar chapa, de frente
+      const ax = Math.abs(q[0]), sx = Math.sign(q[0]), z = q[2] - 0.35, o = { panel: i === 0 }; // um painel arrancado por grupo, rombo queimado em cada cano
+      const dir = ax <= 0.2 ? [0, 1, 0] : ax < this.def.fuseR * 1.4 ? [-sx, 0, 0] : [0, -1, 0];
+      const h = fxHole(this, [q[0], q[1], z], dir, true, 1.6, 0.28 * big, o) || fxHole(this, q, [0, 0, -1], true, 1.5, 0.28 * big, o);
+      const w = _pt.set(q[0], q[1], q[2] - 0.3).applyMatrix4(this.root.matrixWorld).clone();
+      fxFlakes(this, h ? h.point : w, 3, false); fxSparks(w, 6);
+      (this.gunSmoke || (this.gunSmoke = [])).push({ lp: [q[0], q[1], q[2] - 0.3], until: ST.now + 9 });
+    });
   }
   // fita de fumaça atrás do avião avariado: kind 0 nada, 1 motor (cinza, fina), 2 incêndio (preta, grossa). Uma fita por
   // estado; trocar de estado fecha a antiga (ela some sozinha) e abre outra. Material único das fitas: nenhum shader novo.

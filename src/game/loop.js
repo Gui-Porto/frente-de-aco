@@ -87,5 +87,5 @@ requestAnimationFrame(frame);
 // gancho para testes automatizados
 import * as R from '../core/render.js';
 window.__r = R;
-import * as TRAILS from '../fx/trails.js'; import * as PARTS from '../fx/particles.js'; import * as AIRHUD from '../air/hud.js'; import * as AIRCAM from '../air/camera.js'; import * as MODELS from '../vehicles/modelLibrary.js'; import * as DATA from '../data/vehicles.js';
-window.__game = { mods: { TRAILS, PARTS, AIRHUD, AIRCAM, MODELS, DATA }, audio: AUDIO, BUILDS, TREES, HEDGES, blast, renderer, renderFrame, afterRender, updateHUD, airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };
+import * as TRAILS from '../fx/trails.js'; import * as PARTS from '../fx/particles.js'; import * as AIRHUD from '../air/hud.js'; import * as AIRCAM from '../air/camera.js'; import * as MODELS from '../vehicles/modelLibrary.js'; import * as DATA from '../data/vehicles.js'; import * as DMG from '../vehicles/planeDamage.js';
+window.__game = { mods: { TRAILS, PARTS, AIRHUD, AIRCAM, MODELS, DATA, DMG }, audio: AUDIO, BUILDS, TREES, HEDGES, blast, renderer, renderFrame, afterRender, updateHUD, airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };

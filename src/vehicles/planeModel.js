@@ -697,7 +697,8 @@ export function buildPlane(D) {
     if (D.key === 'spit9') radiator(o, side * (fr + 1.0), D.wingZ - 0.35, grp); // radiadores sob a asa
     // armas de asa sem `mount` (pistão): o cano sai do bordo de ataque na estação de cada arma (g.span) — canhão de
     // 20/23 mm bem para fora com a luva de carenagem, metralhadora só a ponta; antes as asas não tinham arma nenhuma
-    for (const gn of D.guns || []) if (!gn.mount) for (const gx of gn.span) {
+    // model.guns: a pele já traz os canos (P-47: tubos de sopro) — com os procedurais por cima ficavam dois jogos de armas
+    for (const gn of D.guns || []) if (!gn.mount && !(hasModel(D) && D.model.guns)) for (const gx of gn.span) {
       if (gx <= fr) continue;
       const W = GUNS[gn.w], sw = (gx - o.x0) / o.half; if (sw <= 0 || sw >= 1) continue;
       const pl = station(o, sw, 0), par = sw > sB ? tip : grp, big = W.cal >= 20, r = W.cal / 1000 * (big ? 1.1 : 1.2), out = big ? 0.42 : 0.1;
