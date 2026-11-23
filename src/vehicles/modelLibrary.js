@@ -27,7 +27,7 @@ export const hasModel = D => !!(D.model && cache.has(D.model.url));
 // r = o que buildPlane() montou. Esconde a chapa pintada e as insígnias projetadas nela e pendura a pele.
 export function applySkin(D, r) {
   const src = cache.get(D.model.url); if (!src) return;
-  const paint = new Set(r.mats), keep = new Set(D.model.solo ? (D.jet ? [r.gearMesh] : [r.gearMesh, r.prop]) : // hélice: sempre a do jogo (gira, borra e para)
+  const paint = new Set(r.mats), bk = (r.brakes || []).map(b => b.pivot), keep = new Set(D.model.solo ? (D.jet ? [r.gearMesh, ...bk] : [r.gearMesh, r.prop, ...bk]) : // hélice: sempre a do jogo (gira, borra e para)
     [r.gearMesh, ...r.bombMeshes, ...r.rocketMeshes, ...(r.ordFit || [])]); // solo: o armamento pendurado já vem na pele
   // model.solo: a pele é o avião inteiro (formas que o procedural não faz, como o A-10) — da estrutura só aparecem o
   // trem e os efeitos; senão some só a chapa (às vezes [pintura, ventre]) e os decalques
@@ -39,6 +39,8 @@ export function applySkin(D, r) {
     for (const c of o.children) hide(c);
   };
   hide(r.root);
+  // solo: o freio aerodinâmico é o painel da estrutura — fechado ele some (a pele já mostra a chapa fechada), aberto aparece
+  if (D.model.solo) for (const b of r.brakes || []) b.hideShut = true;
   // solo: a tripulação procedural senta na altura da capota procedural e furava a capota da pele (capacete do F-4E para fora)
   // model.seats: [[y, z], ...] = cabeça de cada tripulante NA PELE — com a capota de vidro, cabine vazia chamava atenção
   const crew = []; r.root.traverse(g => { if (g.userData.crew) crew.push(g); });

@@ -129,28 +129,3 @@ export function frameLighting(focus, camY, groundY, S, dt) {
 const glCtx = renderer.getContext();
 export const afterRender = []; // desenhos por cima do quadro pronto (hit-cam 3D): f() usa o renderer direto na tela
 export function renderFrame() { composer.render(); for (const f of afterRender) f(); glCtx.flush(); }
-// Brilho do quadro PRONTO em até dois pontos da tela (a HUD escreve x/y em px de CSS e lê v, 0..1): a mira branca sumia
-// sobre céu estourado/névoa clara, então ela escurece quando o fundo atrás dela é claro. Leitura sem travar o quadro:
-// readPixels para um PBO a cada 3 quadros e o resultado é colhido quando a GPU sinaliza (fence) — glReadPixels direto
-// pararia o pipeline todo quadro.
-export const screenLum = { x: [0, 0], y: [0, 0], v: [0.3, 0.3] };
-{
-  const gl = glCtx, N = 5, buf = new Uint8Array(2 * N * N * 4); let pbo = null, sync = null, fN = 0;
-  if (gl.fenceSync) afterRender.push(() => {
-    if (sync) {
-      const st = gl.clientWaitSync(sync, 0, 0); if (st === gl.TIMEOUT_EXPIRED) return;
-      gl.deleteSync(sync); sync = null;
-      if (st !== gl.WAIT_FAILED) {
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, buf); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-        for (let k = 0; k < 2; k++) { let s = 0; for (let i = 0; i < N * N; i++) { const o = (k * N * N + i) * 4; s += 0.2126 * buf[o] + 0.7152 * buf[o + 1] + 0.0722 * buf[o + 2]; } screenLum.v[k] = s / (N * N * 255); }
-      }
-    }
-    if (++fN % 3) return;
-    renderer.setRenderTarget(null);
-    if (!pbo) { pbo = gl.createBuffer(); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, buf.byteLength, gl.STREAM_READ); } else gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
-    const pr = renderer.getPixelRatio(), W = gl.drawingBufferWidth, H = gl.drawingBufferHeight, h = N >> 1;
-    for (let k = 0; k < 2; k++) gl.readPixels(clamp(Math.round(screenLum.x[k] * pr) - h, 0, W - N), clamp(H - Math.round(screenLum.y[k] * pr) - h, 0, H - N), N, N, gl.RGBA, gl.UNSIGNED_BYTE, k * N * N * 4);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-  });
-}

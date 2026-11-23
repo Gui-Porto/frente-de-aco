@@ -322,6 +322,8 @@ export const PLANES = {
     // dois freios ventrais à frente e um atrás (abrem para baixo)
     brake: [{ zf: 0.15, ax: 0.45, ay: -1, w: 0.4, len: 0.72, open: 'down', deg: 40 }, { zf: 0.15, ax: -0.45, ay: -1, w: 0.4, len: 0.72, open: 'down', deg: 40 }, { zf: -0.3, ax: 0, ay: -1, w: 0.42, len: 0.5, open: 'down', deg: 40 }],
     missiles: [{ w: 'R3R', n: 2 }, { w: 'R3S', n: 2 }],
+    // freios aerodinâmicos: dois painéis dianteiros no ventre e um traseiro
+    brake: [{ zf: 0.06, ax: 0.55, w: 0.42, len: 0.95, deg: 35 }, { zf: 0.06, ax: -0.55, w: 0.42, len: 0.95, deg: 35 }, { zf: -0.2, ax: 0, w: 0.5, len: 0.8, deg: 40 }],
     // ataque ao solo (batalha de tanques): 2 FAB-250 nos pilones internos e 2 casulos UB-16-57 (16 S-5K de carga oca cada) nos externos
     bombs: [{ name: 'FAB-250', m: 250, tnt: 99, d: 0.325, n: 2, x: [1.72, -1.72], ph: 0.2 }],
     rockets: { name: 'S-5K 57 mm', m: 3.65, tnt: 0.3, pen: 130, v: 600, n: 32, cal: 57, pod: { x: [2.43, -2.43], r: 0.17, len: 1.9, ph: 0.2 } }

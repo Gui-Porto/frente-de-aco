@@ -381,7 +381,9 @@ export class Plane {
     // Antes qualquer toque da ponta arrancava a ponta na hora (pedido do dono: mais realista)
     for (const sd of ['L', 'R']) if (this.wingOn[sd]) { const q = this.tipPts[sd][this.tipOn[sd] ? 0 : 1]; C.push([q[0], q[1] - 0.05, q[2], 0, 0, 0, sd]); }
     const trav = U.travel || 0.2, V = Math.hypot(this.vel.x, this.vel.z), tail = U.pitch > 0;
-    const brake = this.airbrake || this.throttle < 0.02;
+    // freio das rodas, como no WT: o jogador freia SEGURANDO a tecla de reduzir com a manete já em 0% (wheelBrake, air/input.js);
+    // parado de manete fechada o avião fica calçado. A IA continua freando com a manete no zero.
+    const brake = this.airbrake || (this.isPlayer ? this.wheelBrake || (this.throttle < 0.02 && V < 1.5) : this.throttle < 0.02);
     // roda do nariz esterça com o leme (menos com a velocidade); bequilha, ao contrário e pouco
     const steer = tail ? -this.rud * 0.3 * clamp(1.2 - V / 25, 0, 1) : this.rud * 0.6 * clamp(1.2 - V / 35, 0.12, 1);
     _gw.set(-this.pr, this.yr, this.rr).applyQuaternion(this.q);
@@ -683,7 +685,7 @@ export class Plane {
   // superfícies de comando seguem o comando (ou ficam onde travaram) e somem quando arrancadas
   animSurfaces() {
     // freios aerodinâmicos abrem/fecham em ~0,8 s (hidráulico)
-    if (this.brakes) { this.brakeK = clamp((this.brakeK || 0) + (this.brakeOn ? 1 : -1) / 96, 0, 1); for (const b of this.brakes) b.pivot.quaternion.setFromAxisAngle(b.axis, b.max * this.brakeK); }
+    if (this.brakes) { this.brakeK = clamp((this.brakeK || 0) + (this.brakeOn ? 1 : -1) / 96, 0, 1); for (const b of this.brakes) { b.pivot.quaternion.setFromAxisAngle(b.axis, b.max * this.brakeK); if (b.hideShut) b.pivot.visible = this.brakeK > 0.02; } }
     const M = this.mods, sv = this.surf; if (!sv) return;
     const cmd = n => (M[n].dead ? M[n].stuck || 0 : null);
     const ang = { ailL: -(cmd('ailL') ?? this.ail), ailR: cmd('ailR') ?? this.ail, flapL: -this.flapP.L, flapR: -this.flapP.R, elevL: cmd('elevL') ?? this.elev, elevR: cmd('elevR') ?? this.elev, rud: -(cmd('rud') ?? this.rud) };
@@ -698,6 +700,7 @@ export class Plane {
     if (this.gone || !isFinite(dmg)) return;
     if (by && by.team !== this.team) { this.lastHitBy = by; this.lastHitT = S.now; }
     if (S.air) S.air.onDamage(this, dmg, by);
+    (this.partHit || (this.partHit = {}))[part === 'pilot' ? 'fuse' : part] = S.now; // a silhueta da HUD pisca onde bateu
     if (part === 'pilot') {
       if (penetrated && Math.random() < 0.3 * Math.min(1.5, dmg)) { this.pilot = false; if (this.pilotMesh) this.pilotMesh.rotation.x = 0.55; if (this.alive) destroyVehicle(this, by, 'pilot'); } // cabeça tomba
       else part = 'fuse';

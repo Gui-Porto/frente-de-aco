@@ -136,7 +136,7 @@ async function takeoff() {
 // ---------- debriefing ----------
 export function showResult(b) {
   if (S.mode !== 'air') return;
-  exitPointer(); showAirHud(false); airAudioOff();
+  exitPointer(); showAirHud(false); airAudioOff(); $('#airDown').hidden = true;
   only('#airRes');
   const r = b.result, st = b.stats, m = Math.floor(st.time / 60), s = Math.floor(st.time % 60);
   $('#resTitle').textContent = r.win ? 'Missão cumprida' : 'Missão fracassada';
@@ -150,7 +150,14 @@ export function showResult(b) {
   $('#resScore').innerHTML = `<span>Pontuação <b>${nf(st.score)}</b></span><span>XP <b>+${nf(st.xp)}</b></span><span>Nível <b>${lv}</b>${st.levelUp ? ' <em>promovido</em>' : ''}</span><i><em style="width:${clamp((c.xp - a) / (bb - a), 0, 1) * 100}%"></em></i>`;
   $('#resBack').focus();
 }
+// abatido com a esquadrilha ainda voando: escolhe assistir ou sair para o hangar (antes ia direto a assistir, sem botão)
+export function showDown(d) {
+  const k = d && d.k;
+  $('#airDownWhy').textContent = k ? `Por ${k.who ? k.who.name : 'um inimigo'} (${k.def.short}). A esquadrilha segue em combate.` : 'A esquadrilha segue em combate.';
+  $('#airDown').hidden = false; exitPointer(); $('#airDownWatch').focus();
+}
 export function exitToHangar() {
+  $('#airDown').hidden = true;
   B.stop(); resetEnv(); airAudioOff(); exitPointer(); showAirHud(false);
   S.paused = false; $('#pause').hidden = true; $('#hud').hidden = true;
   openAirHangar();
@@ -170,6 +177,8 @@ export function initAir() {
   $('#cfgBack').onclick = () => { sndUi(); only('#airSel'); };
   $('#cfgGo').onclick = takeoff;
   $('#resBack').onclick = exitToHangar;
+  $('#airDownExit').onclick = exitToHangar;
+  $('#airDownWatch').onclick = () => { $('#airDown').hidden = true; lockPointer(); toast('Assistindo à esquadrilha · T troca de avião · Esc pausa/sai', 5000); };
   $('#resAgain').onclick = () => { B.stop(); resetEnv(); openHangarSilently(); takeoff(); };
   document.querySelectorAll('#airViews button').forEach(b => (b.onclick = () => { setView(b.dataset.v); document.querySelectorAll('#airViews button').forEach(x => x.setAttribute('aria-pressed', x === b)); }));
   const gl = renderer.domElement;

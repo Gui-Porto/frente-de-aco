@@ -1,5 +1,5 @@
 import { Quaternion } from 'three';
-import { camera, screenLum } from '../core/render.js';
+import { camera } from '../core/render.js';
 import { S, planes } from '../core/state.js';
 import { isDown, settings, keyName, pressed } from '../core/settings.js';
 import { V3, clamp } from '../core/util.js';
@@ -222,21 +222,13 @@ const _q = new Quaternion();
 // branco e fino como no WT: contorno escuro leve só para ler contra céu claro
 const RW = 'rgba(255,255,255,.85)', RWD = 'rgba(255,255,255,.5)';
 function rstroke(w, col = RW) { g.shadowBlur = 0; g.lineWidth = w + 1.2; g.strokeStyle = 'rgba(0,0,0,.35)'; g.stroke(); g.lineWidth = w; g.strokeStyle = col; g.stroke(); }
-// A mira troca de branco para escuro quando o fundo ATRÁS dela é claro (céu estourado, névoa, nuvem): continua um traço
-// limpo, sem contorno, mas não some mais no branco. `screenLum` (core/render.js) dá o brilho do quadro nos dois pontos:
-// 0 = cruz das armas, 1 = rodinha do mouse. Histerese (escurece acima de 0,84, clareia abaixo de 0,74) e troca em ~0,1 s.
-const tone = [0, 0]; let toneT = 0;
-function retCol(k, a = 1) {
-  const m = tone[k], v = Math.round(255 + (14 - 255) * m);
-  return `rgba(${v},${v},${Math.round(v + 6 * m)},${a})`;
-}
+// mira VERDE (escolha do dono; a branca sumia no céu claro e a que escurecia sozinha ele não quis): cruz das armas,
+// rodinha do mouse e anel de aquecimento
+const retCol = (k, a = 1) => `rgba(56,255,92,${a})`;
 function reticle(p) {
-  const tn = performance.now(), dtT = Math.min(0.1, (tn - toneT) / 1000); toneT = tn;
-  for (let k = 0; k < 2; k++) { const L = screenLum.v[k], tg = L > 0.84 ? 1 : L < 0.74 ? 0 : tone[k] > 0.5 ? 1 : 0; tone[k] += (tg - tone[k]) * (1 - Math.exp(-dtT * 22)); }
   // para onde as balas vão (eixo fixo das armas — plane.fireDir), a 400 m
   p.fireDir(_a).multiplyScalar(400).add(p.pos);
   const pr = proj(_a, P1);
-  if (pr) { screenLum.x[0] = pr.x; screenLum.y[0] = pr.y; }
   // distância da régua: radar telemétrico (F-86/MiG-15) mede quem está no cone; sem ele, o alvo marcado
   const rr = p.sys.radar && p.sys.radar.ranging ? p.sys.radar : null;
   const mk = rr ? rr.target : B.marked, d = rr ? rr.range : mk ? mk.pos.distanceTo(p.pos) : 0;
@@ -278,7 +270,6 @@ function reticle(p) {
   // e o retículo parava fora do círculo mesmo com o nariz no lugar (pior na mira com FOV fechado)
   _b.copy(p.pos).addScaledVector(cam.aimDir, 400);
   const ap = proj(_b, P2);
-  if (ap) { screenLum.x[1] = ap.x; screenLum.y[1] = ap.y; }
   if (ap && acam.mode !== 3) {
     const near = pr ? Math.hypot(ap.x - pr.x, ap.y - pr.y) : 99;
     g.globalAlpha = clamp((near - 6) / 20, 0.75, 1); // sempre visível, como no WT (antes quase sumia com o nariz no lugar)
@@ -319,12 +310,6 @@ function hitMessages() {
       g.globalAlpha = clamp((life - age) * 3, 0, 1); otxt(m.t, V.W / 2, V.H * 0.2, size, col, 'center', UI, 700); g.globalAlpha = 1;
     }
   }
-  let i = 0;
-  for (const c of B.critLog) {
-    const age = S.now - c.at; if (age > 2.5) continue;
-    g.globalAlpha = clamp(2.5 - age, 0, 1); otxt(c.t, V.W / 2, V.H * 0.2 + 26 + i * 20, 15, C.amber, 'center'); i++;
-  }
-  g.globalAlpha = 1;
 }
 
 // ---------- efeitos de tela ----------

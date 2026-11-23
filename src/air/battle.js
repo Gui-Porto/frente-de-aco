@@ -17,7 +17,7 @@ import { homeField, setFieldSet, onAirfield, H } from '../world/terrain.js';
 import { Euler } from 'three';
 import { updateAirfields } from '../world/airfield.js';
 import { acam, resetAirCam } from './camera.js';
-import { showResult, toast } from './screens.js';
+import { showResult, toast, showDown } from './screens.js';
 import { cam } from '../game/camera.js';
 const _tv = new V3();
 // causa do abate em texto (cartões e tela final)
@@ -62,9 +62,7 @@ export const B = {
     return out;
   },
   toast(t) { toast(t); },
-  // acertos críticos do jogador ("Tanque perfurado", "Piloto ferido"…), mostrados perto do retículo
-  critLog: [],
-  crit(t) { if (this.critLog.some(c => c.t === t && S.now - c.at < 2)) return; this.critLog.push({ t, at: S.now }); if (this.critLog.length > 4) this.critLog.shift(); this.flash('ACERTO CRÍTICO', 2); },
+  crit() { this.flash('ACERTO CRÍTICO', 2); }, // sem dizer ONDE acertou (pedido do dono): só que foi crítico
   // mensagem grande de acerto no centro (como "Hit / Critical hit / Shot down" do WT); só sobe de nível
   hitMsg: null, hitT: -9, hitBig: false, hurtT: -9, hurtK: 0, hurtFrom: new V3(),
   flash(t, lvl) { const m = this.hitMsg; if (m && S.now - m.at < 0.9 && m.lvl > lvl) return; this.hitMsg = { t, lvl, at: S.now }; },
@@ -80,7 +78,7 @@ export const B = {
     p.dmgBy = new Map(); S.me.veh = cfg.plane; S.me.v = p;
     this.player = S.player = p;
     this.seeker = null; this.syncSeeker();
-    this.weapon = 1; this.marked = null; this.radarPending = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.critLog = []; this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
+    this.weapon = 1; this.marked = null; this.radarPending = null; this.launches = []; this.refit = { t: 0, dur: 0, done: false, parked: false, onField: false }; this.deathCard = null; this.fade = null; this.fadeK = 0; this.hitMsg = null; this.hitT = this.hurtT = -9; this.hurtK = 0;
     this.obj = this.mode.create(this); this.obj.setup(this);
     S.state = 'play'; S.paused = false; S.matchT = 0;
     resetAirCam(Math.PI);
@@ -105,7 +103,7 @@ export const B = {
       pl.who.assists = (pl.who.assists || 0) + 1; pl.who.score += 40;
       if (pl === this.player) { this.stats.assists++; showDmg('Assistência · +40', true); }
     }
-    if (k === this.player) { this.stats.kills++; this.flash('ALVO DESTRUÍDO', 3); }
+    if (k === this.player) { this.stats.kills++; this.flash('AERONAVE DESTRUÍDA', 3); }
     // você caiu: quem, com o quê e o que você levou (fica na tela até a próxima vida/fim)
     if (v === this.player) this.deathCard = { at: S.now, k, cause, sum: hitSummary(v, null), kw: k ? hitSummary(v, k).weapons : [] };
     addFeed(k, v, cause);
@@ -162,7 +160,7 @@ export const B = {
     // jogador abatido: assiste aos aliados ou termina
     if (p && !p.alive && this.downT > 0 && (this.downT -= dt) <= 0) {
       const ally = planes.find(q => q.alive && q.team === 1);
-      if (ally && this.mode.allies) { S.state = 'spectate'; S.spectate = ally; toast('Você foi abatido · assistindo à esquadrilha (T troca, Esc sai)'); }
+      if (ally && this.mode.allies) { S.state = 'spectate'; S.spectate = ally; showDown(this.deathCard); } // assiste por trás da tela de abatido (botões: assistir / sair para o hangar)
       else { const d = this.deathCard, k = d && d.k; return this.finish({ win: false, why: k ? `Você foi abatido por ${k.who ? k.who.name : 'um inimigo'} (${k.def.short}) · ${CAUSE_TXT[d.cause] || 'derrubado'}.` : 'Você foi abatido.' }); }
     }
     if (S.state === 'spectate') {

@@ -46,7 +46,8 @@ export function flightPanel(p, theme) {
 function readouts(p) {
   const E = p.eng, D = p.def, rows = [], L = HEAT_LIMITS[p.cooling], hot = (v, lim) => (v > lim + 10 ? C.enemy : v > lim ? C.amber : WH);
   const lit = E.jet && E.ab > 0.02, bt = !p.canBoost ? '' : E.jet && E.hasAB ? (lit ? `  PC ${Math.round(E.ab * 100)}%` : p.wep ? '  PC acendendo' : '') : p.wep ? '  WEP' : '';
-  rows.push(['MANETE', `${Math.round(p.throttle * 100)}%${bt}`, bt ? T.ab : WH]);
+  const wb = p.wheelBrake && p.onGround; // freio das rodas (segurando reduzir em 0%): FREIO em vermelho no lugar do 0%, como no WT
+  rows.push(['MANETE', wb ? 'FREIO' : `${Math.round(p.throttle * 100)}%${bt}`, wb ? C.enemy : bt ? T.ab : WH]);
   if (E.jet) rows.push(['ROTAÇÃO', `${Math.round(E.N * 100)}%`, E.N < p.throttle * (1 - E.E.nIdle) + E.E.nIdle - 0.02 ? C.amber : WH]);
   else rows.push(['POTÊNCIA', `${Math.round(E.power * 100)}%`, WH]);
   const agl = p.pos.y - H(p.pos.x, p.pos.z);
@@ -143,23 +144,24 @@ function silhouette(p, x, y, w, sh) {
   const draw = (pts, f, lost, flash) => {
     path(pts);
     if (lost) { g.lineWidth = 1.2; g.strokeStyle = C.enemy; g.setLineDash([3, 3]); g.stroke(); g.setLineDash([]); return; }
-    g.fillStyle = flash ? '#fff' : f >= 0.7 ? 'rgba(238,241,236,.13)' : fcol(f); g.globalAlpha = flash ? 0.8 : f >= 0.7 ? 1 : 0.55; g.fill(); g.globalAlpha = 1;
+    g.fillStyle = flash ? '#ff5a3c' : f >= 0.7 ? 'rgba(238,241,236,.13)' : fcol(f); g.globalAlpha = flash ? 0.85 : f >= 0.7 ? 1 : 0.55; g.fill(); g.globalAlpha = 1;
     g.lineWidth = 2.6; g.strokeStyle = 'rgba(0,0,0,.6)'; g.stroke(); g.lineWidth = 1; g.strokeStyle = f >= 0.7 ? T.dim : fcol(f); g.stroke();
   };
-  const sf = k => clamp(p.hp[k] / p.maxHp[k], 0, 1), hot = m => m && S.now - m.hitT < 0.25;
+  // onde você levou o tiro: a parte da estrutura (asa, cauda, fuselagem) e o módulo atingido piscam por meio segundo
+  const sf = k => clamp(p.hp[k] / p.maxHp[k], 0, 1), hot = m => m && S.now - m.hitT < 0.5, hotP = k => S.now - ((p.partHit && p.partHit[k]) ?? -9) < 0.5;
   const sB = tipBreak(D), A = D.ail || SURF.ail, F = D.flap || SURF.flap;
   g.lineJoin = 'round';
   // asas: raiz e ponta (estrutura), e por cima as superfícies de comando com a cor do módulo
   for (const [side, sd] of [[1, 'L'], [-1, 'R']]) {
     const o = wingCfg(D, side), k = 'wing' + sd, wOn = p.wingOn[sd], tOn = wOn && p.tipOn[sd];
-    draw(strip(o, 0, sB, 0, 1), sf(k), !wOn);
-    draw(strip(o, sB, 1, 0, 1), sf(k), !tOn);
+    draw(strip(o, 0, sB, 0, 1), sf(k), !wOn, hotP(k));
+    draw(strip(o, sB, 1, 0, 1), sf(k), !tOn, hotP(k));
     for (const [n, r] of [['ail' + sd, A], ['flap' + sd, F]]) { const m = M[n], inTip = (r[0] + r[1]) / 2 >= sB; if (!wOn || (inTip && !tOn)) continue; draw(strip(o, r[0], r[1], SURF.cf, 1), m.ripped ? 0 : modFrac(m), m.ripped, hot(m)); }
   }
   // empenagem: estabilizador (todo móvel ou com profundor) e deriva com o leme
   for (const side of [1, -1]) {
     const o = tailCfg(D, side), m = M[side > 0 ? 'elevL' : 'elevR'];
-    draw(strip(o, 0, 1, 0, 1), sf('tail'), !p.tailOn);
+    draw(strip(o, 0, 1, 0, 1), sf('tail'), !p.tailOn, hotP('tail'));
     const gone = m.ripped && !(p.surf && p.surf[side > 0 ? 'elevL' : 'elevR']);
     if (p.tailOn) draw(strip(o, 0.04, 0.95, D.stab === 'all' ? 0.05 : 0.68, 1), gone ? 0 : modFrac(m), gone, hot(m));
   }
@@ -167,7 +169,7 @@ function silhouette(p, x, y, w, sh) {
   const fz = []; for (let i = 0; i <= 24; i++) fz.push(-0.53 + i * (0.99 / 24));
   const fa = p.fuseAt;
   const fuse = fa ? [...fz.map(z => [fa(z).hw, 0, z * D.L]), ...fz.slice().reverse().map(z => [-fa(z).hw, 0, z * D.L])] : [[D.fuseR, 0, D.L * .47], [D.fuseR, 0, -D.L * .5], [-D.fuseR, 0, -D.L * .5], [-D.fuseR, 0, D.L * .47]];
-  draw(fuse, sf('fuse'), false);
+  draw(fuse, sf('fuse'), false, hotP('fuse') || hotP('engine') || hotP('fuel'));
   { const o = finCfg(D), r = M.rud, fz0 = finStation(o, 0, 0)[2], fz1 = finStation(o, 0, 1)[2]; draw([[0.07, 0, fz0], [0.07, 0, fz1], [-0.07, 0, fz1], [-0.07, 0, fz0]], sf('tail'), !p.tailOn);
     if (p.tailOn) { const z0 = finStation(o, 0.1, 0.7)[2], z1 = finStation(o, 0.1, 1)[2]; draw([[0.09, 0, z0], [0.09, 0, z1], [-0.09, 0, z1], [-0.09, 0, z0]], r.ripped ? 0 : modFrac(r), r.ripped, hot(r)); } }
   // componentes internos, como no WT: inteiro, só o que orienta o piloto (motores e piloto, em tom neutro);
