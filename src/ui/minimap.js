@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { S, tanks, planes } from '../core/state.js';
 import { $, clamp } from '../core/util.js';
-import { H, POINTS, LIMIT, groundSample } from '../world/terrain.js';
+import { H, POINTS, LIMIT, ROADS, groundSample } from '../world/terrain.js';
 import { OBST, TREES, HEDGES } from '../world/scenery.js';
 import { DEG } from '../data/vehicles.js';
 import { yawOf } from '../ai/brains.js';
@@ -10,17 +10,19 @@ import { yawOf } from '../ai/brains.js';
 const mini = $('#mini'), mctx = mini.getContext('2d');
 const MMBASE = 1600, mmBase = document.createElement('canvas'); mmBase.width = mmBase.height = 640;
 {
-  const g = mmBase.getContext('2d'), img = g.createImageData(640, 640), s = 640 / (MMBASE * 2), c = new THREE.Color();
+  const g = mmBase.getContext('2d'), img = g.createImageData(640, 640), s = 640 / (MMBASE * 2), c = new THREE.Color(), c2 = new THREE.Color();
   for (let j = 0; j < 640; j++) for (let i = 0; i < 640; i++) {
     const x = i / s - MMBASE, z = j / s - MMBASE, h = H(x, z), sl = H(x + 4, z) - H(x, z);
-    groundSample(x, z, c, null);
-    const sh = 1 + sl * 0.25, o = (j * 640 + i) * 4;
+    // carta: cor média do terreno com 30% do lote (com a cor cheia de cada lavoura virava um camuflado ilegível) e relevo sombreado
+    groundSample(x, z, c, null, true, true); groundSample(x, z, c2, null, false, true); c.lerp(c2, 0.3);
+    const sh = 1 + clamp(sl * 0.35, -0.3, 0.3), o = (j * 640 + i) * 4;
     img.data[o] = clamp(Math.sqrt(c.r) * 255 * sh, 0, 255); img.data[o + 1] = clamp(Math.sqrt(c.g) * 255 * sh, 0, 255); img.data[o + 2] = clamp(Math.sqrt(c.b) * 255 * sh, 0, 255); img.data[o + 3] = 255;
   }
   g.putImageData(img, 0, 0);
+  g.strokeStyle = '#c4b48c'; g.lineCap = 'round'; for (const r of ROADS) { g.lineWidth = Math.max(1.3, r[4] * 2 * s * 1.5); g.beginPath(); g.moveTo((r[0] + MMBASE) * s, (r[1] + MMBASE) * s); g.lineTo((r[2] + MMBASE) * s, (r[3] + MMBASE) * s); g.stroke(); }
   g.fillStyle = '#b3ab98'; for (const b of OBST) g.fillRect((b.mn[0] + MMBASE) * s, (b.mn[2] + MMBASE) * s, Math.max(1, (b.mx[0] - b.mn[0]) * s), Math.max(1, (b.mx[2] - b.mn[2]) * s));
-  g.fillStyle = 'rgba(20,35,15,.7)'; for (const t of TREES) g.fillRect((t.x + MMBASE) * s - 1, (t.z + MMBASE) * s - 1, 2, 2);
-  g.strokeStyle = 'rgba(15,30,10,.8)'; g.lineWidth = 1.5; for (const h of HEDGES) { g.strokeRect((h.mn[0] + MMBASE) * s, (h.mn[2] + MMBASE) * s, (h.mx[0] - h.mn[0]) * s, (h.mx[2] - h.mn[2]) * s); }
+  g.fillStyle = 'rgba(24,42,18,.5)'; for (const t of TREES) g.fillRect((t.x + MMBASE) * s - 1, (t.z + MMBASE) * s - 1, 2, 2);
+  g.strokeStyle = 'rgba(24,44,18,.45)'; g.lineWidth = 1; for (const h of HEDGES) { g.strokeRect((h.mn[0] + MMBASE) * s, (h.mn[2] + MMBASE) * s, (h.mx[0] - h.mn[0]) * s, (h.mx[2] - h.mn[2]) * s); }
 }
 // marcador de blindado como no WT: casco orientado + linha do canhão (para onde a torre aponta); destruído vira um X
 function tankIcon(x, z, yaw, turretYaw, col, alive, aa, k = 1) {

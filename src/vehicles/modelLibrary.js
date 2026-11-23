@@ -39,7 +39,10 @@ export function applySkin(D, r) {
   };
   hide(r.root);
   // solo: a tripulação procedural senta na altura da capota procedural e furava a capota da pele (capacete do F-4E para fora)
-  if (D.model.solo) r.root.traverse(g => { if (g.userData.crew) g.traverse(o => { if (o.isMesh && o.visible) { o.visible = false; o.layers.set(1); hidden.push(o); } }); });
+  // model.seats: [[y, z], ...] = cabeça de cada tripulante NA PELE — com a capota de vidro, cabine vazia chamava atenção
+  const crew = []; r.root.traverse(g => { if (g.userData.crew) crew.push(g); });
+  const seats = D.model.seats || [], home = crew.map(g => g.position.clone());
+  if (D.model.solo) crew.forEach((g, i) => { if (seats[i]) g.position.set(0, seats[i][0], seats[i][1]); else g.traverse(o => { if (o.isMesh && o.visible) { o.visible = false; o.layers.set(1); hidden.push(o); } }); });
   // solo: o alojamento do trem é o da estrutura (invisível, noutra altura) — recolhido, o trem some em vez de ficar sobre a asa da pele
   // model.nozzles: a chama da pós-combustão sai dos bocais da pele (os da estrutura ficam noutro lugar: no F-4E, 6 m atrás)
   (D.model.nozzles || []).forEach(([x, y, z, rr], i) => { const f = r.fx.flames[i]; if (!f) return; f.out.position.set(x, y, z); f.inn.position.set(x, y, z); f.glow.position.set(x, y, z + 0.05); f.r = rr; });
@@ -57,5 +60,5 @@ export function applySkin(D, r) {
   const nodes = [body];
   for (const [n, g] of [['wingL', r.wingL], ['wingR', r.wingR], ['tail', r.tail]]) { const o = body.getObjectByName(n); if (o) { g.attach(o); nodes.push(o); } }
   // solo: na vista de cabine volta a estrutura procedural (é ela que tem painel, assento e vidro por dentro) e a pele some
-  if (D.model.solo) r.skinView = cockpit => { for (const o of hidden) o.visible = cockpit; for (const o of nodes) o.visible = !cockpit; };
+  if (D.model.solo) r.skinView = cockpit => { for (const o of hidden) o.visible = cockpit; for (const o of nodes) o.visible = !cockpit; crew.forEach((g, i) => { if (seats[i]) cockpit ? g.position.copy(home[i]) : g.position.set(0, seats[i][0], seats[i][1]); }); }; // na cabine o tripulante volta ao assento da estrutura
 }
