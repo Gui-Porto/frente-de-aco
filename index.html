@@ -73,17 +73,22 @@
 
   <div id="menu">
     <div class="side">
-      <div class="eyebrow">Armas combinadas · Normandia, 1944</div>
-      <h1>Frente <span>de Aço</span></h1>
-      <p class="lede">Blindados e aviões na mesma batalha. Granada com arrasto, chapa inclinada, tripulação, motor, câmbio e asas que quebram.</p>
-      <div class="grp">Era</div>
-      <div class="views" id="eras"></div>
-      <div class="grp">Seu lineup</div>
-      <div class="lineup" id="lineup"></div>
-      <div class="sidebtns"><button class="go" id="startBtn">Entrar em combate</button><button class="ghost" id="setBtn">Configurações</button></div>
-      <button class="airgo" id="airBtn"><small>Novo modo</small><b>Batalha aérea</b><span>Caças a pistão e os primeiros jatos contra a IA. Duelo, equipes, interceptação.</span></button>
-      <p class="note">Controles no padrão do War Thunder e remapeáveis em Configurações. Tab placar, M mapa, Esc pausa.</p>
+      <header class="brand">
+        <!-- emblema próprio: um avião sobre os dentes da linha de frente -->
+        <svg class="emblem" viewBox="0 0 48 48" aria-hidden="true"><path class="fr" d="M8 2.5h32l5.5 5.5v32L40 45.5H8L2.5 40V8z"/><path class="pl" d="M24 6.5l2.6 8.2 12.4 6.6v2.9l-12.6-2.2-.8 4.5h-3.2l-.8-4.5L9 24.2v-2.9l12.4-6.6z"/><path class="tt" d="M9 41l5-9.5 5 9.5zm10 0l5-9.5 5 9.5zm10 0l5-9.5 5 9.5z"/></svg>
+        <h1>Frente <span>de Aço</span></h1>
+        <p class="eyebrow">Blindados e aviões na mesma batalha</p>
+      </header>
+      <section class="mode" aria-labelledby="gTitle">
+        <div class="mhead"><small>Tanques, antiaérea e apoio aéreo</small><h2 id="gTitle">Batalha terrestre</h2></div>
+        <div class="erarow"><span class="grp" id="eraLbl">Era</span><div class="views" id="eras" role="group" aria-labelledby="eraLbl"></div></div>
+        <div class="lineup" id="lineup" role="group" aria-label="Seu lineup"></div>
+        <button class="go" id="startBtn">Entrar em combate</button>
+      </section>
+      <button class="airgo" id="airBtn"><small>Só aviões, contra a IA</small><b>Batalha aérea</b><span>Do Spitfire ao F-4E. Duelo, equipes, interceptação.</span></button>
     </div>
+    <div class="util"><button class="ghost" id="setBtn"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 4h7m4 0h3M1 12h3m4 0h7"/><circle cx="10" cy="4" r="2"/><circle cx="6" cy="12" r="2"/></svg><span>Configurações</span></button></div>
+    <p class="keys"><span><kbd>Tab</kbd>placar</span><span><kbd>M</kbd>mapa</span><span><kbd>Esc</kbd>pausa</span><span class="drag">Arraste para girar o veículo</span></p>
     <div class="sheet" id="sheet">
       <div class="nat" id="shNat"></div>
       <div class="nm" id="shName"></div>

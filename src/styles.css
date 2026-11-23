@@ -17,16 +17,40 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .warn{color:var(--amber)} .bad{color:var(--enemy)}
 
-/* ---------- HANGAR ---------- */
-#menu{position:fixed;inset:0;pointer-events:none}
+/* ---------- HOME (hangar) ----------
+   Trilho à esquerda (a câmera do hangar já põe o veículo 13% à direita). A borda do trilho é a "linha de frente" de carta:
+   dentes apontando para o campo, o do veículo escolhido em âmbar. Medidas em em: a tela inteira escala com a janela. */
+#menu{position:fixed;inset:0;pointer-events:none;font-size:clamp(15px,min(1.78vh,1.05vw),22px);
+  background:linear-gradient(180deg,rgba(10,13,9,.4),transparent 20%,transparent 66%,rgba(10,13,9,.5))}
 #menu > *{pointer-events:auto}
-.side{position:absolute;left:0;top:0;bottom:0;width:min(400px,100%);box-sizing:border-box;padding:34px 28px 24px;display:flex;flex-direction:column;gap:18px;
-  background:linear-gradient(90deg,rgba(14,18,12,.97) 0,rgba(14,18,12,.92) 80%,rgba(14,18,12,0));overflow:auto}
-.eyebrow{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);font-weight:600}
-h1{font-family:var(--display);font-weight:400;font-size:clamp(48px,6vw,84px);line-height:.86;margin:0;text-wrap:balance}
-h1 span{display:block;color:var(--amber)}
-.lede{font-size:17px;line-height:1.4;margin:0;max-width:34ch}
-.grp{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600;margin:6px 0 -10px}
+.side{--edge:18px;position:absolute;left:0;top:0;bottom:0;width:26em;max-width:100%;box-sizing:border-box;padding:1.8em calc(1.4em + var(--edge)) 1.5em 1.75em;display:flex;flex-direction:column;justify-content:space-between;gap:1.1em;overflow:hidden auto;scrollbar-width:thin;
+  background:linear-gradient(rgba(221,214,183,.42),rgba(221,214,183,.42)) calc(100% - var(--edge)) 0/1px 100% no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='28'%3E%3Cpath d='M0 8l8 6-8 6z' fill='%23ddd6b7' fill-opacity='.5'/%3E%3C/svg%3E") right 10px top 0/8px 28px repeat-y,
+    linear-gradient(90deg,rgba(14,18,12,.95),rgba(14,18,12,.88)) 0 0/calc(100% - var(--edge)) 100% no-repeat;
+  animation:railIn .5s cubic-bezier(.2,.8,.2,1) backwards}
+@keyframes railIn{from{opacity:0;transform:translateX(-18px)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}}
+.brand{display:grid;grid-template-columns:auto 1fr;column-gap:.9em;align-items:center}
+.emblem{width:4.5em;height:4.5em;display:block}
+.emblem .fr{fill:rgba(16,20,14,.55);stroke:var(--khaki);stroke-width:1.6}
+.emblem .pl{fill:var(--khaki)} .emblem .tt{fill:var(--amber)}
+#menu h1{font-family:var(--display);font-weight:400;font-size:3.7em;line-height:.84;margin:0;text-transform:uppercase;white-space:nowrap}
+#menu h1 span{display:block;color:var(--amber)}
+.eyebrow{grid-column:1/3;margin:1em 0 0;font-size:.8em;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.mode{display:flex;flex-direction:column;gap:.7em}
+.mhead small{display:block;font-size:.72em;letter-spacing:.2em;text-transform:uppercase;font-weight:600;color:var(--amber)}
+.mhead h2{font-family:var(--display);font-weight:400;font-size:1.7em;line-height:1;margin:.12em 0 0}
+.erarow{display:flex;align-items:center;gap:.9em}
+.erarow .views{flex:1}
+.grp{font-size:.75em;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.util{position:absolute;top:1.4em;right:1.4em;animation:fadeUp .5s .15s cubic-bezier(.2,.8,.2,1) backwards}
+.util .ghost{display:flex;align-items:center;gap:.55em;font-size:1.06em;font-weight:600;padding:.5em .9em;background:rgba(16,20,14,.8);transition:border-color .15s,background .15s}
+.util .ghost:hover{border-color:var(--khaki);background:rgba(35,42,29,.92)}
+.util svg{width:1em;height:1em;fill:var(--ink);stroke:currentColor;stroke-width:1.5}
+.keys{position:absolute;left:27.4em;bottom:1.4em;margin:0;display:flex;align-items:center;gap:1.1em;color:var(--khaki);text-shadow:0 1px 3px #000,0 0 6px rgba(0,0,0,.7);white-space:nowrap;animation:fadeUp .5s .25s cubic-bezier(.2,.8,.2,1) backwards}
+.keys span{font-size:.85em}
+.keys kbd{font-family:var(--mono);font-size:.82em;border:1px solid rgba(221,214,183,.45);background:rgba(16,20,14,.78);padding:.12em .5em;margin-right:.45em;text-shadow:none}
+.keys .drag{color:var(--dim);padding-left:1.1em;border-left:1px solid rgba(221,214,183,.3)}
 .lineup{display:flex;flex-direction:column;gap:4px}
 .slot{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;text-align:left;background:rgba(35,42,29,.85);border:1px solid var(--line);color:var(--khaki);padding:7px 10px;font-size:17px;font-weight:600}
 .slot small{display:block;font-size:12px;color:var(--dim);font-weight:500;letter-spacing:.04em}
@@ -35,18 +59,41 @@ h1 span{display:block;color:var(--amber)}
 .slot:hover{border-color:#6c7759}
 .slot[aria-pressed="true"]{border-color:var(--amber);background:rgba(60,52,30,.85)}
 .slot:disabled{opacity:.4;cursor:default}
+/* lineup (home e tela de spawn): silhueta do tipo no lugar da etiqueta, barra âmbar no escolhido */
+.lineup .slot{position:relative;grid-template-columns:34px 1fr auto;transition:border-color .15s,background .15s,transform .2s cubic-bezier(.2,.8,.2,1)}
+.lineup .slot:hover:enabled{background:rgba(48,57,39,.92);transform:translateX(3px)}
+.lineup .slot[aria-pressed="true"]{background:rgba(60,52,30,.92);box-shadow:inset 3px 0 0 var(--amber)}
+.lineup .slot .ic{width:34px;height:17px;padding:0;border:0;font-size:0;background:var(--dim);-webkit-mask:var(--ic) center/contain no-repeat;mask:var(--ic) center/contain no-repeat}
+.lineup .slot[aria-pressed="true"] .ic{background:var(--amber)}
+.ic[data-t="tank"]{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 16'%3E%3Cpath d='M5 10.5h22a2.75 2.75 0 0 1 0 5.5H5a2.75 2.75 0 0 1 0-5.5zM3 7.2h24.5l2 2.3H2zM10 2.8h8.5l2 3.6H9zM19.5 3.6H31v1.5H20.3z'/%3E%3C/svg%3E")}
+.ic[data-t="spaa"]{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 16'%3E%3Cpath d='M5 10.5h22a2.75 2.75 0 0 1 0 5.5H5a2.75 2.75 0 0 1 0-5.5zM3 7.2h24.5l2 2.3H2zM9 4.4h9l1.5 2H8zM15 3.6l9.5-3.6.6 1.3-9.5 3.6zM17 5.2l9.5-3.6.6 1.3-9.5 3.6z'/%3E%3C/svg%3E")}
+.ic[data-t="plane"]{--ic:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 16'%3E%3Cpath d='M1.5 8L3 6.6h21.5l6 1.4-6 1.4H3zM19.5 8L14 .6h-3.4L13.6 8l-3 7.4H14zM6.6 8L4.6 4.2h-2L3.8 8l-1.2 3.8h2z'/%3E%3C/svg%3E")}
+#lineup .slot{font-size:1.1em;padding:.36em .7em;min-height:2.75em;animation:fadeUp .3s cubic-bezier(.2,.8,.2,1) backwards}
+#lineup .slot:nth-child(2){animation-delay:.03s} #lineup .slot:nth-child(3){animation-delay:.06s} #lineup .slot:nth-child(4){animation-delay:.09s} #lineup .slot:nth-child(5){animation-delay:.12s} #lineup .slot:nth-child(n+6){animation-delay:.15s}
+#lineup .slot small{font-size:.7em} #lineup .slot .cost{font-size:.72em}
+/* o dente da linha de frente que marca o veículo escolhido */
+#lineup .slot[aria-pressed="true"]::after{content:'';position:absolute;left:calc(100% + 1.4em + 1px);top:50%;width:15px;height:26px;margin-top:-13px;background:var(--amber);clip-path:polygon(0 0,100% 50%,0 100%);transform-origin:0 50%;animation:tooth .22s cubic-bezier(.2,.8,.2,1) backwards}
+@keyframes tooth{from{transform:scaleX(0)}}
 .go{background:var(--amber);color:var(--ink);border:0;font-family:var(--display);font-size:26px;padding:12px 26px 10px;letter-spacing:.03em}
 .go:hover{filter:brightness(1.08)}
 .go:disabled{opacity:.4;cursor:default;filter:none}
-.sheet{position:absolute;right:22px;bottom:22px;width:min(380px,calc(100% - 44px));background:rgba(16,20,14,.88);border:1px solid var(--line);padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px}
-.sheet .nat{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);font-weight:600}
-.sheet .nm{font-family:var(--display);font-size:32px;line-height:1}
-.stats{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font-size:15px;margin:0}
-.stats dt{color:var(--dim)} .stats dd{margin:0;font-family:var(--mono);font-size:12.5px;text-align:right;align-self:center}
-.views{display:flex;gap:6px}
-.views button{flex:1;background:transparent;border:1px solid var(--line);color:var(--khaki);padding:6px 8px;font-size:15px;font-weight:600}
+#menu .go{display:flex;align-items:center;justify-content:space-between;width:100%;font-size:1.6em;padding:.52em .75em .42em;margin-top:.15em;background:linear-gradient(-45deg,transparent .5em,var(--amber) 0);transition:filter .15s,transform .1s}
+#menu .go::after{content:'';width:.95em;height:.72em;background:currentColor;clip-path:polygon(0 0,25% 0,50% 50%,25% 100%,0 100%,25% 50%,0 0,50% 0,75% 0,100% 50%,75% 100%,50% 100%,75% 50%,50% 0);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+#menu .go:hover::after{transform:translateX(.25em)}
+#menu .go:active{transform:translateY(1px)}
+.sheet{position:absolute;right:1.4em;bottom:1.4em;width:23em;max-width:calc(100% - 2.8em);background:rgba(16,20,14,.9);border:1px solid var(--line);border-top:2px solid var(--khaki);padding:1em 1.15em;box-sizing:border-box;display:flex;flex-direction:column;gap:.65em;animation:fadeUp .5s .2s cubic-bezier(.2,.8,.2,1) backwards}
+.sheet .nat{font-size:.75em;letter-spacing:.18em;text-transform:uppercase;color:var(--amber);font-weight:600}
+.sheet .nm{font-family:var(--display);font-size:2em;line-height:1}
+.stats{display:grid;grid-template-columns:auto 1fr;font-size:.94em;margin:0}
+.stats dt,.stats dd{padding:.17em 0;border-top:1px solid rgba(221,214,183,.09)}
+.stats dt{color:var(--dim);padding-right:.9em} .stats dd{margin:0;font-family:var(--mono);font-size:.83em;text-align:right;display:flex;align-items:center;justify-content:flex-end}
+.views{display:flex}
+.views button{flex:1;background:rgba(16,20,14,.5);border:1px solid var(--line);color:var(--khaki);padding:.38em .5em;font-size:.95em;font-weight:600;transition:border-color .15s,background .15s,color .15s}
+.views button + button{margin-left:-1px}
+.views button:hover:enabled{border-color:var(--khaki);position:relative}
 .views button[aria-pressed="true"]{background:var(--khaki);color:var(--ink);border-color:var(--khaki)}
 .views button:disabled{opacity:.35;cursor:default}
+.ghost:hover{border-color:var(--khaki)}
 .legend{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);font-family:var(--mono)}
 .legend i{flex:1;height:8px;background:linear-gradient(90deg,#bf140d 0,#f28014 15%,#f2d933 35%,#59bf40 60%,#2673d9 100%)}
 .note{font-size:13px;color:var(--dim);line-height:1.45;margin:0}
@@ -141,8 +188,10 @@ h1 span{display:block;color:var(--amber)}
 .tbl dt{color:var(--dim)} .tbl dd{margin:0;font-family:var(--mono)}
 .btnrow{display:flex;gap:10px;flex-wrap:wrap}
 .ghost{background:transparent;border:1px solid var(--line);color:var(--khaki);font-size:18px;padding:10px 18px}
-@media (max-width:760px){ .sheet{left:16px;right:16px;width:auto;bottom:16px} .side{width:100%;background:rgba(14,18,12,.9)} }
-@media (prefers-reduced-motion:reduce){#hitmsg,#dmgmsg,#vign{transition:none}#pFire{animation:none}}
+@media (max-height:800px){ .side{gap:.9em;padding-top:1.3em;padding-bottom:1.1em} .sheet{width:21.5em;gap:.5em;padding:.8em 1em} .stats dt,.stats dd{padding:.08em 0} #menu h1{font-size:3.2em} .emblem{width:3.9em;height:3.9em} .eyebrow{margin-top:.7em} #lineup .slot{min-height:2.5em;padding-top:.22em;padding-bottom:.22em} .airgo span{display:none} }
+@media (max-width:1150px){ .keys .drag{display:none} }
+@media (max-width:760px){ .side{--edge:0px;width:100%;background:rgba(14,18,12,.92)} #lineup .slot[aria-pressed="true"]::after,.keys,.util span{display:none} }
+@media (prefers-reduced-motion:reduce){#hitmsg,#dmgmsg,#vign{transition:none}#pFire{animation:none}#menu,#menu *,#menu *::before,#menu *::after,.lineup .slot{animation:none!important;transition:none!important}}
 
 /* ---------- v3: boot, HUD do veículo, armas, instrumentos, configurações ---------- */
 #boot{position:fixed;inset:0;display:grid;place-items:center;background:var(--ink);color:var(--khaki);font-family:var(--display);font-size:28px;letter-spacing:.04em;z-index:50}
@@ -197,7 +246,6 @@ h1 span{display:block;color:var(--amber)}
 .srow input[type=range]{accent-color:var(--amber)}
 .srow input[type=checkbox]{width:20px;height:20px;accent-color:var(--amber)}
 .qtbl{font-size:14px}
-.sidebtns{display:flex;gap:8px;flex-wrap:wrap}
 @media (max-width:760px){.brow{grid-template-columns:1fr 90px 90px}#weapons .slot{min-width:80px}}
 @media (max-width:1150px){#vehHud{width:200px}#status{width:180px;height:150px}#weaponBar{left:auto;right:250px;transform:none}#weapons .slot{min-width:84px}#reloadWrap{width:260px}}
 @media (max-width:900px){.sheet{display:none}}

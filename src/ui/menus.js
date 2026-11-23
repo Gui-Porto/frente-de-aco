@@ -54,7 +54,7 @@ function fillSheet(key) {
 }
 function slotHtml(key, extra) {
   const D = VEHICLES[key];
-  return `<span class="ic">${typeLabel(D)}</span><span>${D.short || D.name}<small>${D.nation} · ${D.year}</small></span><span class="cost">${extra ?? D.sp + ' SP'}</span>`;
+  return `<span class="ic" data-t="${D.type}">${typeLabel(D)}</span><span>${D.short || D.name}<small>${D.nation} · ${D.year}</small></span><span class="cost">${extra ?? D.sp + ' SP'}</span>`;
 }
 function syncLineup() {
   document.querySelectorAll('#lineup .slot').forEach(s => s.setAttribute('aria-pressed', s.dataset.k === choice));
