@@ -218,14 +218,14 @@ export const PLANES = {
     guns: [{ w: 'M3', n: 6, span: [0.7, 0.8, 0.9], z: 3.4, ammo: 300, mount: { zf: 0.355, r: 0.026, len: 0.2, port: true, blast: true, b: [[0.98, 0.5], [0.98, 0.18], [0.98, -0.14], [-0.98, 0.5], [-0.98, 0.18], [-0.98, -0.14]] } }],
     // freios aerodinâmicos: dois painéis nas laterais da fuselagem traseira, abrindo para fora
     brake: [{ zf: -0.17, ax: 1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }, { zf: -0.17, ax: -1, ay: -0.25, w: 0.7, len: 1.05, open: 'side', deg: 60 }],
-    missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', maw: 'pd',
+    missiles: [{ w: 'AIM9B', n: 2 }], radar: 'apg30', // sem RWR nem MAW, como o avião real: míssil só se vê pela fumaça
     bombs: [], rockets: null
   },
   mig15: {
     key: 'mig15', type: 'plane', model: { url: '/models/mig15.glb', solo: true, nozzles: [[0, 0.05, -4.45, 0.33]] }, marks: { nose: '718', decalZ: -0.2 }, gear: { track: 3.85, ret: 'in' }, fences: [{ ws: 0.4, h: 0.17, len: 0.95 }, { ws: 0.68, h: 0.12, len: 0.9 }], name: 'MiG-15bis', short: 'MiG-15', nation: 'URSS', year: 1950, color: 0xb4b6ae, sp: 500, jet: true, sweep: 35,
     mass: 4960, S: 20.6, span: 10.08, L: 10.1, cla: 4.3, clmax: 1.3, cd0: 0.023, e: 0.78, engine: 'vk1', mcrit: 0.86, vctrl: 270, flapV: [410, 305, 245],
     vne: 1076 / 3.6, glim: 10, kda: 0.045, kde: 0.3, kdr: 0.045, armor: { pilot: 10 },
-    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1', maw: 'pd',
+    hpParts: { wingL: 40, wingR: 40, tail: 30, engine: 32, fuel: 26, fuse: 46 }, radar: 'srd1',
     fuseR: 0.7, noseR: 0.62, wingZ: 0.1, chord: 2.9, tipChord: 1.4, cowl: 'intake',
     fuse: [[-0.53, .42, .46, .44, .08], [-0.45, .56, .62, .58, .08], [-0.32, .78, .86, .82, .05], [-0.16, .96, 1.04, 1, .02], [0, 1.04, 1.1, 1.06, 0], [0.14, 1.04, 1.1, 1.06, 0], [0.27, .98, 1.02, 1, -.01], [0.37, 'n1.06', 'n1.06', 'n1.06', -.02], [0.46, 'n1', 'n1', 'n1', -.02]],
     canopy: { z: 0.22, len: 2.3, w: 0.42, h: 0.55, frames: [0.24, 0.6], face: false },
@@ -249,7 +249,7 @@ export const PLANES = {
   f4e: {
     key: 'f4e', type: 'plane', marks: { serial: 'AF 67-270', decalZ: -0.33 }, gear: { track: 5.45, ret: 'in', mw: 0.26, twinN: true }, name: 'F-4E Phantom II', short: 'F-4E', nation: 'EUA', year: 1967, color: 0x7a7d63, sp: 640, jet: true, sweep: 45,
     // pele: "McDonnell Douglas F-4 Phantom II" de andertan, CC BY 4.0 (ver CREDITOS.md)
-    model: { url: '/models/f4e.glb', solo: true, seats: [[0.88, 6.25], [0.9, 4.85]], nozzles: [[-0.67, -0.35, -3.9, 0.45], [0.67, -0.35, -3.9, 0.45]] }, // nozzles: bocais da PELE [x, y, z, raio] — é de onde sai a chama
+    model: { url: '/models/f4e.glb', solo: true, seats: [[0.72, 6.0], [0.76, 4.7]], nozzles: [[-0.67, -0.35, -3.9, 0.45], [0.67, -0.35, -3.9, 0.45]] }, // nozzles: bocais da PELE [x, y, z, raio] — é de onde sai a chama
     mass: 18200, fuel: 4000, S: 49.2, span: 11.7, L: 19.2, cla: 3.5, clmax: 1.25, cd0: 0.021, e: 0.7, engine: 'j79', engines: 2, rcs: 6,
     mcrit: 0.92, wave: { mcr: 0.92, peak: 0.032, mpk: 1.1 }, vctrl: 430, flapV: [420, 370, 300], damp: [26, 0.72, 0.2], inertia: [223700, 44700, 253500], steer: { ka: 3.8, kr: 10, ky: 3.6 }, // leme fraco para a inércia: o instrutor usa mais leme e amortece a guinada (medido) // kg·m² [arfagem, rolagem, guinada] do F-4C/E publicado (a estimativa por L² dava 2–2,4× mais)
     vne: 1400 / 3.6, glim: 9.5, kda: 0.05, kde: 0.36, kdr: 0.03, armor: { pilot: 6 },
@@ -305,7 +305,7 @@ export const PLANES = {
     vne: 1300 / 3.6, glim: 9.5, kda: 0.055, kde: 0.38, kdr: 0.035, armor: { pilot: 6 },
     hpParts: { wingL: 34, wingR: 34, tail: 26, engine: 30, fuel: 22, fuse: 42 },
     fuseR: 0.62, noseR: 0.45, wingZ: -0.6, chord: 5.2, tipChord: 0.45, cowl: 'intake', dih: -2, shockCone: true,
-    radar: 'rp22', rwr: 'spo10', maw: 'pd',
+    radar: 'rp22', rwr: 'spo10', // só o SPO-10 (radar dos outros); nenhum destes tinha alerta de aproximação de míssil — o MAW inventado gritava MISSILE a cada míssil no ar
     fuse: [[-0.53, .82, .84, .82, 0], [-0.44, .86, .9, .86, 0], [-0.3, .92, 1, .92, 0], [-0.1, .96, 1.18, .96, 0], [0.08, .98, 1.22, .98, 0], [0.2, .98, 1.18, .98, 0], [0.3, .94, 1, .94, 0], [0.39, 'n1.18', 'n1.18', 'n1.18', 0], [0.46, 'n1.1', 'n1.1', 'n1.1', 0]],
     canopy: { z: 0.26, len: 2.7, w: 0.38, h: 0.5, frames: [0.26, 0.62] },
     // pétalas da pós-combustão, IFF "Odd Rods" sob o nariz, lâmina no dorso e tanque ventral de 490 l

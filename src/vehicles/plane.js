@@ -3,6 +3,8 @@ import { scene, camera } from '../core/render.js';
 import { S, S as ST, planes } from '../core/state.js'; // ST: em physics() `S` é a área da asa
 import { V3, QUAT, UP, clamp, lerp, rand, rv } from '../core/util.js';
 import { H, AIRLIMIT, activeFields } from '../world/terrain.js';
+// o concreto da pista é desenhado 8 cm acima do terreno: com a roda apoiada no terreno ela ficava afundada na pista
+const GH = (x, z) => { let h = H(x, z); for (const a of activeFields()) if (Math.abs(x - a.x) < a.w / 2 && Math.abs(z - a.z) < a.len / 2 + 0.5) { h += 0.08; break; } return h; };
 import { obstNear, addCrater, treeHit } from '../world/scenery.js';
 import { PLANES, GUNS, MISSILES, RHO, G, beltRounds } from '../data/vehicles.js';
 import { EngineSet, ENGINES } from '../air/systems/engine.js';
@@ -133,6 +135,8 @@ export class Plane {
   eyePos(out) { return out.copy(this.pos); }
   applyTransform() {
     this.root.position.copy(this.pos); this.root.quaternion.copy(this.q);
+    // rodas: giram com o chão; no ar continuam girando e vão parando
+    if (this.gearMesh && this.gearMesh.userData.spin) { const d = Math.min(0.1, Math.max(0, S.now - (this._wT ?? S.now))); this._wT = S.now; this._wV = this.onGround ? Math.hypot(this.vel.x, this.vel.z) : (this._wV || 0) * Math.exp(-d * 0.5); this._wD = ((this._wD || 0) + this._wV * d) % 1000; this.gearMesh.userData.spin(this._wD); }
     if (this.gearMesh) { if (this.gearMesh.userData.anim) this.gearMesh.userData.anim(this.gear, this._legK || (this._legK = n => this.legPos(n))); if (this.gearMesh.userData.squash) this.gearMesh.userData.squash(this.gc || 0); }
     this.animSurfaces();
     this.root.updateMatrixWorld(true); this.inv.copy(this.root.matrixWorld).invert();
@@ -338,7 +342,7 @@ export class Plane {
   // derrapa e para pela física (antes atitude, altura e velocidade lateral eram cravadas no toque — "grudava").
   // Soma a força em F e os momentos (eixos do corpo) em Mo; devolve true se o toque destruiu o avião.
   groundStep(h, m, F, Mo) {
-    const U = this.gearMesh.userData, D = this.def, hg = H(this.pos.x, this.pos.z);
+    const U = this.gearMesh.userData, D = this.def, hg = GH(this.pos.x, this.pos.z);
     if (this.pos.y > hg + U.lift + 1.5) { this.onGround = false; this.gcv = 0; this.gc = Math.max(0, (this.gc || 0) - h * 3); return false; }
     this.axes();
     // rodas: [x, y, z (corpo), fração do peso, roda principal?, roda do nariz/bequilha?] + patins
@@ -358,7 +362,7 @@ export class Plane {
     let any = 0, wheel = 0, comp = 0, nm = 0, tailW = 0, bellyW = 0;
     for (const [x, y, z, sh, main, nose] of C) {
       _gr.set(0, 0, 0).addScaledVector(_pl, x).addScaledVector(_pu, y).addScaledVector(_pf, z);
-      const px = this.pos.x + _gr.x, py = this.pos.y + _gr.y, pz = this.pos.z + _gr.z, d = H(px, pz) - py;
+      const px = this.pos.x + _gr.x, py = this.pos.y + _gr.y, pz = this.pos.z + _gr.z, d = GH(px, pz) - py;
       if (main) { comp += Math.max(0, d) / trav; nm++; }
       if (d <= 0) continue;
       any++; if (sh > 0) wheel++;

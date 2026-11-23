@@ -46,7 +46,7 @@ export const ACTIONS = [
   ['a_ext', 'Avião', 'Extintor de incêndio', ['KeyK']],
   ['a_cam', 'Avião', 'Trocar câmera (cockpit / externa)', ['KeyV']],
   ['a_target', 'Avião', 'Marcar alvo na mira', ['Mouse1', 'KeyT']],
-  ['a_xray', 'Avião', 'Raio-X da aeronave (segurar)', ['KeyJ']],
+  ['a_xray', 'Avião', 'Raio-X da aeronave (liga/desliga)', ['Semicolon', 'KeyJ']], // Semicolon = tecla Ç no teclado ABNT2
   ['freelook', 'Geral', 'Olhar livre (segurar)', ['KeyC']],
   ['score', 'Geral', 'Placar (segurar)', ['Tab']],
   ['map', 'Geral', 'Mapa ampliado (segurar)', ['KeyM']],
@@ -84,6 +84,7 @@ let saved = null;
 try { const s = localStorage.getItem(KEY); if (s) merge(settings, saved = JSON.parse(s)); } catch (e) { /* sem armazenamento: usa padrões */ }
 // configurações salvas antes do atalho de teclado: míssil só no botão do meio (touchpad não tem)
 if (settings.binds.a_missile.join() === 'Mouse1') settings.binds.a_missile.push('Space');
+if (!settings.binds.a_xray.includes('Semicolon')) settings.binds.a_xray.unshift('Semicolon'); // tecla Ç (ABNT2) também abre o raio-X em quem já tinha teclas salvas
 // esquema de voo v2 (Shift/Ctrl potência, W/S manche, A/D rolagem, Q/E leme, C olhar livre):
 // aplicado uma vez também sobre configurações salvas no esquema antigo (W/S era potência)
 if (saved && saved.binds && (saved.bindsV || 1) < 2) {

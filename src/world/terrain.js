@@ -47,7 +47,7 @@ export const AIRFIELDS = [
 ];
 // bases em uso na batalha atual (a Batalha Aérea escolhe pela era)
 let fieldSet = 'prop';
-export const setFieldSet = s => { fieldSet = s; };
+export const setFieldSet = s => { fieldSet = s; for (const a of AIRFIELDS) if (a.grp) a.grp.visible = a.set === s; }; // só a base da era aparece (as duas pistas emendadas ficavam feias)
 export const activeFields = () => AIRFIELDS.filter(a => a.set === fieldSet);
 export const homeField = team => AIRFIELDS.find(a => a.team === team && a.set === fieldSet);
 for (const a of AIRFIELDS) { let s = 0; for (let i = -4; i <= 4; i++) s += baseH(a.x, a.z + i * a.len / 8); a.h = s / 9; }

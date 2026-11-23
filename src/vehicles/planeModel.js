@@ -987,12 +987,16 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
   // tubo entre dois pontos (braço de arrasto, tesoura)
   const rod = (par, a, b, rr, m) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(); const o = mk(new THREE.CylinderGeometry(rr, rr, L, 6), m, par, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return o; };
   // roda: pneu com perfil redondo (toro), aro, disco de freio e calota
-  const wheel = (par, x, y, z, r, w) => {
+  // cada roda é um grupo no próprio eixo: gira com a velocidade no chão (userData.spin) — antes ficava parada, deslizando
+  const wheels = [];
+  const wheel = (par0, x, y, z, r, w) => {
+    const par = new THREE.Group(); par.position.set(x, y, z); par0.add(par); par.userData.r = r; wheels.push(par);
     const tb = Math.min(w / 2, r * 0.32);
-    mk(new THREE.TorusGeometry(r - tb, tb, 10, 28).rotateY(Math.PI / 2), tire, par, x, y, z);
-    mk(new THREE.CylinderGeometry(r - tb * 1.2, r - tb * 1.2, w * 0.8, 20).rotateZ(Math.PI / 2), hubM, par, x, y, z);           // aro
-    mk(new THREE.CylinderGeometry(r * 0.3, r * 0.3, w + 0.03, 12).rotateZ(Math.PI / 2), mat, par, x, y, z);                     // cubo
-    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; mk(new THREE.BoxGeometry(w * 0.84, 0.025, 0.025), mat, par, x, y + Math.sin(a) * r * 0.45, z + Math.cos(a) * r * 0.45); } // parafusos/raios
+    mk(new THREE.TorusGeometry(r - tb, tb, 10, 28).rotateY(Math.PI / 2), tire, par, 0, 0, 0);
+    mk(new THREE.CylinderGeometry(r - tb * 1.2, r - tb * 1.2, w * 0.8, 20).rotateZ(Math.PI / 2), hubM, par, 0, 0, 0);           // aro
+    mk(new THREE.CylinderGeometry(r * 0.3, r * 0.3, w + 0.03, 12).rotateZ(Math.PI / 2), mat, par, 0, 0, 0);                     // cubo
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; mk(new THREE.BoxGeometry(w * 0.84, 0.03, 0.03), mat, par, 0, Math.sin(a) * r * 0.45, Math.cos(a) * r * 0.45); } // parafusos/raios
+    mk(new THREE.BoxGeometry(w * 0.9, r * 0.16, 0.035), tire, par, 0, r * 0.55, 0); // válvula/marca no aro: sem ela não se vê a roda girar
   };
   // perna oleopneumática: cilindro fixo + haste cromada e roda num grupo que sobe quando o amortecedor comprime
   const slides = [];
@@ -1135,7 +1139,9 @@ export function buildGear(D, root, mat, doorM = mat, bays = null) {
   // amortecedor (squash) + encolhimento da perna ao recolher (a roda cabe no alojamento): as duas somam
   let sq = 0, rk = 0; const slide = () => { slides.forEach(([s, t], i) => (s.position.y = sq * t + (i < 2 ? rk * (GP.bay.shrink || 0) : 0))); };
   g.userData.squash = c => { sq = c; slide(); };
+  g.userData.spin = dist => { for (const w of wheels) w.rotation.x = dist / w.userData.r; }; // dist = metros rodados
   g.userData.travel = slides[0][1]; // curso do trem principal: o corpo desce isso com o amortecedor todo comprimido
+  g.userData.bayY = GP.bay.y0; // altura do munhão das pernas principais (eixos do avião)
   g.userData.lift = lift; g.userData.pitch = D.jet ? 0 : Math.atan2(lift - nl, D.L * 0.46 + mz) * 0.9;
   g.userData.mainZ = mz; g.userData.mainX = mx; g.userData.noseZ = nz; g.userData.noseLift = nl; // nl: CG → chão pela roda do nariz/bequilha
   return g;

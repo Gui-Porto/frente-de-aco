@@ -23,7 +23,7 @@ const tex = (() => {
 })();
 const MAT = new THREE.MeshBasicMaterial({ map: tex, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
 export const trails = [];
-const _t = new THREE.Vector3(), _c = new THREE.Vector3(), _s = new THREE.Vector3();
+const _t = new THREE.Vector3(), _c = new THREE.Vector3(), _s = new THREE.Vector3(), _pv = new THREE.Vector3();
 
 export class Trail {
   // o: { life (s), w0, w1 (largura inicial/final), color, alpha, step (m entre amostras) }
@@ -53,7 +53,7 @@ export class Trail {
   // reconstrói a fita: largura e alfa pela idade de cada amostra
   update(now, dt) {
     const g = this.mesh.geometry, P = g.attributes.position.array, C = g.attributes.color.array, U = g.attributes.uv.array;
-    let k = 0, alive = 0;
+    let k = 0, alive = 0; _pv.setFromMatrixColumn(camera.matrixWorld, 0); // lado da amostra anterior (começa no "direita" da câmera)
     for (let j = 0; j < this.n; j++) {
       const i = (this.head - this.n + j + N) % N, age = now - this.t[i], f = age / this.life;
       if (f >= 1) continue;
@@ -64,8 +64,15 @@ export class Trail {
       _t.set(this.p[jn * 3] - this.p[i * 3], this.p[jn * 3 + 1] - this.p[i * 3 + 1], this.p[jn * 3 + 2] - this.p[i * 3 + 2]);
       if (j === this.n - 1) _t.negate();
       _c.copy(camera.position).sub(_s);
-      _t.cross(_c); const L = _t.length() || 1;
-      const w = (this.w0 + (this.w1 - this.w0) * Math.sqrt(f)) / L;
+      // lado da fita = tangente × direção da câmera. Com o rastro apontando para a câmera (o SEU míssil indo embora) o produto
+      // some: o lado virava ruído, trocava de sinal de amostra em amostra e a fita torcia em gravata e esticava em espetos.
+      // Agora o lado nunca inverte em relação à amostra anterior e, quase alinhado, herda o dela.
+      const tl = _t.length() || 1; _t.cross(_c); const L = _t.length(), sn = L / (tl * (_c.length() || 1));
+      if (L > 1e-9) _t.divideScalar(L); else _t.copy(_pv);
+      if (_t.dot(_pv) < 0) _t.negate();
+      if (sn < 0.3) _t.lerp(_pv, 1 - sn / 0.3).normalize();
+      _pv.copy(_t);
+      const w = this.w0 + (this.w1 - this.w0) * Math.sqrt(f);
       P[k * 6] = _s.x + _t.x * w; P[k * 6 + 1] = _s.y + _t.y * w; P[k * 6 + 2] = _s.z + _t.z * w;
       P[k * 6 + 3] = _s.x - _t.x * w; P[k * 6 + 4] = _s.y - _t.y * w; P[k * 6 + 5] = _s.z - _t.z * w;
       // alfa: nasce forte, some com a idade; a ponta mais nova (perto do motor) um pouco mais clara

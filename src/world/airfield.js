@@ -50,7 +50,7 @@ const M = {
 const papis = [];
 const socks = [];
 for (const a of AIRFIELDS) {
-  const grp = new THREE.Group(); grp.position.set(a.x, a.h, a.z); scene.add(grp);
+  const grp = new THREE.Group(); grp.position.set(a.x, a.h, a.z); scene.add(grp); a.grp = grp; grp.visible = a.set === 'prop';
   const flat = (w, l, mat, x, z, y = 0.06) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l).rotateX(-Math.PI / 2), mat); m.position.set(x, y, z); m.receiveShadow = true; grp.add(m); return m; };
   const rwM = new THREE.MeshStandardMaterial({ map: concrete.clone(), roughness: .9 }); rwM.map.repeat.set(a.w / 30, a.len / 30); rwM.map.needsUpdate = true;
   flat(a.w, a.len, rwM, 0, 0, 0.08);

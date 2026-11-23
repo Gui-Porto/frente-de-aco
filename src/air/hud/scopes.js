@@ -16,15 +16,15 @@ import { kb } from './flight.js';
 // inimigos que você vê a olho ou pelo seu radar).
 // =====================================================================
 const RH = 252, RW = 286, WW = 176, DEG = Math.PI / 180;
+import { SIL } from './flight.js';
 const SCALES = [10000, 20000, 40000];
 
 export function leftPanels(p, T) {
   const k = clamp(Math.min(V.W / 1400, V.H / 820), 0.72, 1);
-  let x = 16;
-  const y = V.H - RH * k - 16;
-  const rd = p.sys.radar;
-  if (rd && !rd.ranging && T.scope) { g.save(); g.translate(x, y); g.scale(k, k); radarScope(p, rd, T); g.restore(); x += (RW + 12) * k; }
-  if (p.sys.rwr || p.sys.maw) { g.save(); g.translate(x, y); g.scale(k, k); rwrScope(p, p.sys.rwr, p.sys.maw, T); g.restore(); }
+  // esquerda: silhueta de dano (flight.js) e o RWR ao lado; direita: o escopo do radar
+  const y = V.H - RH * k - 16, rd = p.sys.radar;
+  if (rd && !rd.ranging && T.scope) { g.save(); g.translate(V.W - RW * k - 16, y); g.scale(k, k); radarScope(p, rd, T); g.restore(); }
+  if (p.sys.rwr || p.sys.maw) { g.save(); g.translate(16 + (SIL.w + 16) * k, y); g.scale(k, k); rwrScope(p, p.sys.rwr, p.sys.maw, T); g.restore(); }
 }
 
 // ---------- radar: B-scope ----------

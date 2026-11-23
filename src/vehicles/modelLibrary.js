@@ -67,6 +67,20 @@ export function applySkin(D, r) {
   let canopy = null; r.root.traverse(o => { if (o.userData.loose && o.userData.loose.k === 'canopy') canopy = o; });
   if (canopy) for (const o of glass) { canopy.attach(o); nodes.push(o); }
   // solo: na vista de cabine volta a estrutura procedural (é ela que tem painel, assento e vidro por dentro) e a pele some
+  // trem na asa DA PELE: o munhão da perna fica na altura da asa procedural; a asa da pele costuma passar mais baixo e o topo
+  // da perna (munhão, macaco de recolhimento) atravessava o extradorso — o trem parecia de outro avião. Mede a asa da pele no
+  // ponto do trem (raio de cima para baixo) e desce/sobe o trem inteiro até o munhão ficar no meio dela; a altura do CG ao chão
+  // (lift) acompanha, senão as rodas afundariam na pista.
+  const U = r.gearMesh && r.gearMesh.userData;
+  if (D.model.solo && U && U.bayY != null && named.wingL) {
+    r.root.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster(r.root.localToWorld(new THREE.Vector3(U.mainX, 6, U.mainZ)), new THREE.Vector3(0, -1, 0).transformDirection(r.root.matrixWorld), 0, 12);
+    const hits = ray.intersectObjects([r.wingL, r.tipL].filter(Boolean), true).filter(h => h.object.visible).map(h => r.root.worldToLocal(h.point.clone()).y);
+    if (hits.length >= 2) {
+      const dy = THREE.MathUtils.clamp((Math.max(...hits) + Math.min(...hits)) / 2 - U.bayY, -0.7, 0.7);
+      r.gearMesh.position.y += dy; U.lift -= dy; U.noseLift -= dy; U.skinDy = dy;
+    }
+  }
   // vista de cabine: a pele CONTINUA (nariz, asas e hélice de verdade lá fora; por dentro ela é invisível, as faces olham para
   // fora) e da estrutura só entra o interior — painel, mira, assento. Antes a pele sumia e voltava a estrutura inteira: sem
   // nariz, com as armas flutuando e a asa sem pintura

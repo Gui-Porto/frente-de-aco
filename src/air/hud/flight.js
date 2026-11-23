@@ -6,7 +6,7 @@ import { HEAT_LIMITS } from '../../vehicles/engineHeat.js';
 import { modFrac, fuelLeak, sparFrac, partState } from '../../vehicles/planeDamage.js';
 import { wingCfg, tailCfg, finCfg, station, finStation, tipBreak, SURF } from '../../vehicles/planeGeom.js';
 import { RADAR_MODE } from '../battle.js';
-import { g, V, C, MONO, UI, ptxt, plate, dec } from './kit.js';
+import { g, V, C, MONO, UI, ptxt, plate, dec, otxt } from './kit.js';
 import { sysName } from './themes.js';
 // =====================================================================
 // Painel da aeronave (canto inferior direito). Lê só o que o avião tem:
@@ -15,51 +15,51 @@ import { sysName } from './themes.js';
 // A manete e o motor aparecem SEPARADOS de propósito: a manete responde na
 // hora; o motor demora o que a turbina demora — e o piloto vê as duas coisas.
 // =====================================================================
-const PW = 480, PH = 340, FLAP_TXT = ['', 'COMBATE', 'DECOLAGEM', 'POUSO'];
+const FLAP_TXT = ['', 'COMBATE', 'DECOLAGEM', 'POUSO'];
 export const kb = id => (settings.binds[id] || []).map(keyName).join(' / ');
 const stallV = p => Math.sqrt(2 * p.def.mass * 9.81 / (1.225 * p.def.S * p.def.clmax)) * 0.95;
 let T = null;
 const lbl = (t, x, y, col = T.dim, align = 'left') => { g.letterSpacing = '1.2px'; ptxt(t, x, y, 10.5, col, align, UI, 600); g.letterSpacing = '0px'; };
 const num = (t, x, y, size, col = T.fg, align = 'right') => ptxt(t, x, y, size, col, align, MONO, 500);
 
+// HUD limpa, como no WT (pedido do dono): os números ficam em texto branco discreto no canto superior esquerdo; embaixo, à
+// esquerda, só a silhueta de dano (o RWR vai ao lado dela e o radar à direita — scopes.js). A placa grande com tudo dentro saiu.
+export const SIL = { w: 132, h: 188 };
+const WH = 'rgba(255,255,255,.92)', WD = 'rgba(255,255,255,.58)';
+// texto solto sobre o céu: sombra curta em vez de contorno (o contorno grosso embaçava o corpo pequeno)
+const wt = (t, x, y, size, col, align, font, weight) => { g.shadowColor = 'rgba(0,0,0,.9)'; g.shadowBlur = 3; g.shadowOffsetY = 1; ptxt(t, x, y, size, col, align, font, weight); g.shadowBlur = 0; g.shadowOffsetY = 0; };
 export function flightPanel(p, theme) {
   T = theme;
-  const k = clamp(Math.min(V.W / 1400, V.H / 820), 0.72, 1), x0 = V.W - PW * k - 16, y0 = V.H - PH * k - 16;
-  g.save(); g.translate(x0, y0); g.scale(k, k);
-  plate(0, 0, PW, PH, T);
-  header(p);
-  silhouette(p, 10, 42, 128, 178);
-  flight(p);
-  heading(p, 150, 124, 316);
-  engine(p, 150, 140);
-  weapons(p, 150, 238);
-  fuel(p, 14, 238, 118);
-  chips(p);
-  g.restore();
-  return { x: x0, y: y0, k };
+  const k = clamp(Math.min(V.W / 1400, V.H / 820), 0.8, 1);
+  g.save(); g.translate(18, 60); g.scale(k, k); readouts(p); g.restore();
+  g.save(); g.translate(16, V.H - 16 - SIL.h * k); g.scale(k, k); silhouette(p, 0, 0, SIL.w, SIL.h); chips(p); g.restore();
+  g.save(); g.translate(V.W / 2 - 150 * k, 86); g.scale(k, k); heading(p, 0, 0, 300); g.restore();
 }
-
-function header(p) {
-  const D = p.def;
-  ptxt(D.short, 22, 25, 22, T.fg, 'left', UI, 700);
-  g.font = `700 22px ${UI}`; const w = g.measureText(D.short).width;
-  ptxt(D.name.replace(D.short, '').trim() || D.nation, 30 + w, 25, 13, T.dim, 'left', UI, 500);
-  const sys = Object.values(p.sys).map(s => sysName(T, s.R || s.W));
-  if (sys.length) ptxt(sys.join('  ·  '), PW - 14, 24, 11, T.dim, 'right', MONO, 500);
-  g.fillStyle = T.faint; g.fillRect(14, 34, PW - 28, 1);
+// uma linha por parâmetro: rótulo apagado + valor. A manete (comando, responde na hora) e a rotação/potência (o que o motor
+// entrega, com o atraso da turbina) ficam em linhas vizinhas — a diferença entre as duas É o atraso
+function readouts(p) {
+  const E = p.eng, D = p.def, rows = [], L = HEAT_LIMITS[p.cooling], hot = (v, lim) => (v > lim + 10 ? C.enemy : v > lim ? C.amber : WH);
+  const lit = E.jet && E.ab > 0.02, bt = !p.canBoost ? '' : E.jet && E.hasAB ? (lit ? `  PC ${Math.round(E.ab * 100)}%` : p.wep ? '  PC acendendo' : '') : p.wep ? '  WEP' : '';
+  rows.push(['MANETE', `${Math.round(p.throttle * 100)}%${bt}`, bt ? T.ab : WH]);
+  if (E.jet) rows.push(['ROTAÇÃO', `${Math.round(E.N * 100)}%`, E.N < p.throttle * (1 - E.E.nIdle) + E.E.nIdle - 0.02 ? C.amber : WH]);
+  else rows.push(['POTÊNCIA', `${Math.round(E.power * 100)}%`, WH]);
+  const agl = p.pos.y - H(p.pos.x, p.pos.z);
+  rows.push(['VEL', `${Math.round(p.ias * 3.6)} km/h${T.mach ? `   M ${dec(p.mach || 0, 2)}` : ''}`, p.ias < stallV(p) * 1.15 ? C.amber : WH]);
+  rows.push(['ALT', `${Math.round(p.pos.y).toLocaleString('pt-BR')} m   ${p.vel.y >= 0 ? '▲' : '▼'}${Math.abs(p.vel.y).toFixed(0)}`, agl < 100 ? C.amber : WH]);
+  rows.push(['G', dec(p.n), Math.abs(p.n) > D.glim * 0.8 ? C.enemy : Math.abs(p.n) > 7 ? C.amber : WH]);
+  if (!p.engineOn) rows.push(['MOTOR', 'PARADO', C.enemy]);
+  else if (L.water) rows.push(['ÁGUA', `${Math.round(p.heat.water)}°`, hot(p.heat.water, L.water)], ['ÓLEO', `${Math.round(p.heat.oil)}°`, hot(p.heat.oil, L.oil)]);
+  else rows.push([E.jet ? 'TURBINA' : 'ÓLEO', `${Math.round(p.heat.oil)}°`, hot(p.heat.oil, L.oil)]);
+  const leak = fuelLeak(p), mins = p.fuel / Math.max(Math.max(E.flow, 0.05) + leak, 0.01) / 60;
+  rows.push(['COMB', `${Math.round(p.fuel).toLocaleString('pt-BR')} kg   ${mins > 99 ? '99+' : Math.floor(mins)} min`, leak > 0 || p.fuel < p.fuelMax * 0.15 ? C.amber : WH]);
+  rows.push(null);
+  for (const gg of p.guns) rows.push([`${gg.pts.length}× ${gg.W.name.replace(/^[\d,]+ mm /, '')}`, gg.broken ? 'DESTRUÍDA' : gg.jam ? 'QUENTE' : String(gg.ammo), gg.broken || gg.jam ? C.enemy : gg.ammo < gg.max * 0.15 ? C.amber : WH]);
+  for (const r of p.racks) rows.push([(r === p.rack ? '▸ ' : '  ') + r.M.short, '●'.repeat(r.n) + '○'.repeat(r.max - r.n) + (r.M.seeker === 'sarh' ? '  radar' : '  IR'), r === p.rack ? WH : WD]);
+  if (p.flares > 0 || p.chaff > 0 || D.jet) rows.push(['FLARE · CHAFF', `${p.flares} · ${p.chaff}`, p.flares ? WH : C.amber]);
+  if (p.ord0 && (p.ord0.bombs || p.ord0.rockets)) rows.push(['BOMBA · FOG.', `${p.bombs.length} · ${p.rockets}`, p.bombs.length || p.rockets ? WH : C.amber]);
+  let y = 0;
+  for (const r of rows) { if (!r) { y += 8; continue; } wt(r[0], 0, y, 11, WD, 'left', UI, 600); wt(r[1], 104, y, 14, r[2], 'left', MONO, 500); y += 18; }
 }
-
-function flight(p) {
-  const D = p.def, kmh = Math.round(p.ias * 3.6), slow = p.ias < stallV(p) * 1.15;
-  lbl('VELOCIDADE', 150, 52); num(String(kmh), 262, 82, 30, slow ? C.amber : T.fg); ptxt('km/h', 266, 82, 12, T.dim, 'left', UI, 500);
-  if (T.mach) num(`M ${dec(p.mach || 0, 2)}`, 262, 97, 13, (p.mach || 0) > (D.mcrit || 0.8) ? C.amber : T.dim);
-  const agl = p.pos.y - H(p.pos.x, p.pos.z), alt = Math.round(p.pos.y);
-  lbl('ALTITUDE', 300, 52); num(alt.toLocaleString('pt-BR'), 388, 82, 28, agl < 150 ? C.amber : T.fg); ptxt('m', 392, 82, 12, T.dim, 'left', UI, 500);
-  num(`${p.vel.y >= 0 ? '▲' : '▼'} ${Math.abs(p.vel.y).toFixed(0)} m/s`, 388, 97, 12, T.dim);
-  lbl('G', 466, 52, T.dim, 'right');
-  num(dec(p.n), 466, 82, 22, Math.abs(p.n) > D.glim * 0.8 ? C.enemy : Math.abs(p.n) > 7 ? C.amber : T.fg);
-}
-
 // fita de rumo: N = +z do mundo; girar para a direita aumenta o rumo
 function heading(p, x, y, w) {
   const f = p.root.matrixWorld.elements, hdg = ((Math.atan2(-f[8], f[10]) * 180 / Math.PI) + 360) % 360;
@@ -67,85 +67,11 @@ function heading(p, x, y, w) {
   g.save(); g.beginPath(); g.rect(x, y - 24, w, 32); g.clip();
   for (let d = Math.ceil((hdg - 36) / 5) * 5; d <= hdg + 36; d += 5) {
     const sx = cx + (d - hdg) * pxd, dd = ((d % 360) + 360) % 360, big = dd % 30 === 0;
-    g.fillStyle = big ? T.fg : T.dim; g.fillRect(sx, y - (big ? 6 : 3), 1, big ? 6 : 3);
-    if (big) { const n = { 0: 'N', 90: 'L', 180: 'S', 270: 'O' }[dd]; ptxt(n || String(dd / 10).padStart(2, '0'), sx, y - 9, n ? 12 : 10.5, n ? T.accent : T.dim, 'center', MONO, 500); }
+    g.globalAlpha = Math.max(0, Math.min(1, 1.3 - Math.abs(d - hdg) / 30)); g.fillStyle = big ? WH : WD; g.fillRect(sx, y - (big ? 6 : 3), 1, big ? 6 : 3);
+    if (big) { const n = { 0: 'N', 90: 'L', 180: 'S', 270: 'O' }[dd]; wt(n || String(dd / 10).padStart(2, '0'), sx, y - 9, n ? 12 : 10.5, n ? T.accent : WD, 'center', MONO, 500); }
   }
-  g.restore();
-  g.fillStyle = T.faint; g.fillRect(x, y, w, 1);
-  g.fillStyle = T.fg; g.beginPath(); g.moveTo(cx, y + 2); g.lineTo(cx - 5, y + 9); g.lineTo(cx + 5, y + 9); g.closePath(); g.fill();
-  ptxt(String(Math.round(hdg) % 360).padStart(3, '0') + '°', cx, y + 22, 12, T.fg, 'center', MONO, 500);
-}
-
-// manete × motor: trilho vertical; a marca ◀ é a manete, a coluna cheia é o que o motor entrega
-function engine(p, x, y) {
-  const E = p.eng, h = 68, top = y + 14, boost = p.canBoost, abH = boost ? 16 : 0, track = h - abH;
-  // trilho
-  g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x, top, 14, h);
-  g.strokeStyle = T.edge; g.lineWidth = 1; g.strokeRect(x + .5, top + .5, 13, h - 1);
-  if (boost) { g.fillStyle = 'rgba(255,154,60,.12)'; g.fillRect(x + 1, top + 1, 12, abH - 1); g.fillStyle = T.faint; g.fillRect(x, top + abH, 14, 1); }
-  // saída real: rotação acima da marcha lenta (jato) ou potência (pistão); a faixa de cima é PC/WEP
-  const mil = E.jet ? Math.min(1, (E.N - E.E.nIdle) / (1 - E.E.nIdle)) : Math.min(1, E.power);
-  g.fillStyle = p.engineOn ? T.fg : C.enemy; g.fillRect(x + 3, top + abH + track * (1 - mil), 8, track * mil);
-  const ab = E.jet ? E.ab : (E.power > 1.001 ? (E.power - 1) / (E.E.wep / E.E.hp - 1) : 0);
-  if (ab > 0) { g.fillStyle = T.ab; g.fillRect(x + 3, top + abH * (1 - ab), 8, abH * ab); }
-  // manete comandada
-  const cy = p.wep && boost ? top + 2 : top + abH + track * (1 - p.throttle);
-  g.fillStyle = T.accent; g.beginPath(); g.moveTo(x + 15, cy); g.lineTo(x + 23, cy - 5); g.lineTo(x + 23, cy + 5); g.closePath(); g.fill();
-  g.fillRect(x - 3, cy - 1, 18, 2);
-  // números
-  const tx = x + 34;
-  lbl('MANETE', tx, top + 8); num(`${Math.round(p.throttle * 100)}%`, tx + 108, top + 8, 15, T.accent);
-  if (E.jet) { lbl('ROTAÇÃO', tx, top + 30); num(`${Math.round(E.N * 100)}%`, tx + 108, top + 30, 15, E.N < p.throttle * (1 - E.E.nIdle) + E.E.nIdle - 0.02 ? C.amber : T.fg); }
-  else { lbl('POTÊNCIA', tx, top + 30); num(`${Math.round(E.power * 100)}%`, tx + 108, top + 30, 15); }
-  if (E.jet && E.hasAB) {
-    const lit = E.ab > 0.02, lighting = p.wep && !lit;
-    lbl('PC', tx, top + 52); ptxt(lit ? `ACESA ${Math.round(E.ab * 100)}%` : lighting ? (E.N > 0.97 ? 'ACENDENDO' : 'AGUARDA ROT.') : 'DESLIGADA', tx + 108, top + 52, 13, lit ? T.ab : lighting ? C.amber : T.dim, 'right', UI, 700);
-  } else if (boost) { lbl('WEP', tx, top + 52); ptxt(p.wep ? 'LIGADO' : 'DESLIGADO', tx + 108, top + 52, 13, p.wep ? T.ab : T.dim, 'right', UI, 700); }
-  else { lbl('PC', tx, top + 52); ptxt('—', tx + 108, top + 52, 13, T.faint, 'right', UI, 600); }
-  // temperaturas
-  const rx = x + 170, L = HEAT_LIMITS[p.cooling], hc = (v, lim) => (v > lim + 10 ? (Math.sin(V.blink * 10) > 0 ? C.enemy : T.fg) : v > lim ? C.amber : T.fg);
-  if (!p.engineOn) { lbl('MOTOR', rx, top + 8); ptxt('PARADO', rx + 146, top + 8, 15, C.enemy, 'right', UI, 700); }
-  else if (L.water) { lbl('ÁGUA', rx, top + 8); num(`${Math.round(p.heat.water)}°`, rx + 146, top + 8, 15, hc(p.heat.water, L.water)); lbl('ÓLEO', rx, top + 30); num(`${Math.round(p.heat.oil)}°`, rx + 146, top + 30, 15, hc(p.heat.oil, L.oil)); }
-  else { lbl(E.jet ? 'TURBINA' : 'ÓLEO', rx, top + 8); num(`${Math.round(p.heat.oil)}°`, rx + 146, top + 8, 15, hc(p.heat.oil, L.oil)); }
-  if (E.jet && E.count > 1) { lbl('MOTORES', rx, top + 30); num(`${E.count}× ${E.E.name.split(' ').slice(-1)[0]}`, rx + 146, top + 30, 12, T.dim); }
-  lbl('CONSUMO', rx, top + 52); num(`${dec(E.flow, 1)} kg/s`, rx + 146, top + 52, 13, E.flow > 4 ? C.amber : T.fg);
-}
-
-function weapons(p, x, y) {
-  g.fillStyle = T.faint; g.fillRect(x, y - 4, PW - x - 14, 1);
-  lbl('ARMAMENTO', x, y + 10); if (p.racks.length > 1) lbl(`${kb('a_wsel')} troca míssil`, PW - 14, y + 10, T.dim, 'right');
-  // carga de ataque ao solo (só na batalha de tanques); as linhas se apertam para caber no painel
-  const ord = p.ord0 && (p.ord0.bombs || p.ord0.rockets), cm = p.flares > 0 || p.chaff > 0 || p.def.jet;
-  const dy = Math.min(19, (PH - 12 - y - 30) / Math.max(1, p.guns.length + p.racks.length + (cm ? 1 : 0) + (ord ? 1 : 0) - 1));
-  let yy = y + 30;
-  for (const gg of p.guns) {
-    const col = gg.broken || gg.jam ? C.enemy : gg.ammo < gg.max * 0.15 ? C.amber : T.fg;
-    ptxt(gg.W.name.replace(/^[\d,]+ mm /, ''), x, yy, 13.5, gg.broken ? C.enemy : T.fg, 'left', UI, 500);
-    if (gg.beltName) ptxt(gg.beltName, x + 146, yy, 11, T.dim, 'right', UI, 600); // cinta carregada
-    g.fillStyle = T.faint; g.fillRect(x + 150, yy - 5, 90, 3);
-    if (gg.heat > 0.02) { g.fillStyle = gg.jam ? C.enemy : gg.heat > 0.7 ? C.amber : T.dim; g.fillRect(x + 150, yy - 5, 90 * gg.heat, 3); }
-    num(gg.broken ? '—' : gg.jam ? 'QUENTE' : String(gg.ammo), PW - 14, yy, 14, col);
-    yy += dy;
-  }
-  for (const r of p.racks) {
-    const sel = r === p.rack;
-    if (sel) { g.fillStyle = T.accent; g.beginPath(); g.moveTo(x - 9, yy - 9); g.lineTo(x - 3, yy - 5); g.lineTo(x - 9, yy - 1); g.closePath(); g.fill(); }
-    ptxt(r.M.short, x, yy, 13.5, sel ? T.fg : T.dim, 'left', UI, sel ? 700 : 500);
-    ptxt(r.M.seeker === 'sarh' ? 'RADAR' : 'IR', x + 62, yy, 10.5, sel ? T.accent : T.faint, 'left', UI, 700);
-    for (let i = 0; i < r.max; i++) { const mx = PW - 14 - (r.max - i) * 13; g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(mx - 1, yy - 12, 10, 14); g.fillStyle = i < r.n ? (sel ? T.fg : T.dim) : T.faint; g.fillRect(mx, yy - 11, 8, 12); }
-    yy += dy;
-  }
-  if (cm) { ptxt('Flares · chaff', x, yy, 13.5, T.dim, 'left', UI, 500); num(`${p.flares} · ${p.chaff}`, PW - 14, yy, 14, p.flares ? T.fg : C.amber); yy += dy; }
-  if (ord) { ptxt(`Bombas ${kb('a_bomb')} · foguetes ${kb('a_rocket')}`, x, yy, 13.5, T.fg, 'left', UI, 500); num(`${p.bombs.length} · ${p.rockets}`, PW - 14, yy, 14, p.bombs.length || p.rockets ? T.fg : C.amber); }
-}
-
-function fuel(p, x, y, w) {
-  const leak = fuelLeak(p), burn = Math.max(p.eng.flow, 0.05), mins = p.fuel / Math.max(burn + leak, 0.01) / 60, low = p.fuel < p.fuelMax * 0.15;
-  lbl('COMBUSTÍVEL', x, y + 10);
-  num(`${Math.round(p.fuel).toLocaleString('pt-BR')} kg`, x + w, y + 30, 14, low ? C.amber : T.fg);
-  g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(x, y + 37, w, 5);
-  g.fillStyle = leak > 0 || low ? C.amber : T.fg; g.fillRect(x, y + 38, w * p.fuel / p.fuelMax, 3);
-  num(`≈ ${mins > 99 ? '99+' : Math.floor(mins)} min`, x + w, y + 56, 11, T.dim);
+  g.restore(); g.globalAlpha = 1;
+  g.fillStyle = WH; g.beginPath(); g.moveTo(cx, y + 2); g.lineTo(cx - 4, y + 8); g.lineTo(cx + 4, y + 8); g.closePath(); g.fill();
 }
 
 // ---------- raio-X da aeronave (segurar a tecla): silhueta grande + cada componente e seu estado ----------
@@ -228,7 +154,7 @@ export function damageList(p) {
   return out;
 }
 const D_G = p => p.def.glim;
-// etiquetas acima da placa: configuração (flaps/trem/freio), radar e avarias
+// etiquetas acima da silhueta: configuração (flaps/trem/freio), radar e avarias — uma por linha, de baixo para cima
 function chips(p) {
   const list = [];
   if (p.flapStage || p.flaps > 0.02) list.push([`FLAPS ${FLAP_TXT[p.flapStage] || '↑'}`, C.ok]);
@@ -237,16 +163,8 @@ function chips(p) {
   const rd = p.sys.radar;
   if (rd && !rd.ranging) list.push([`RADAR ${RADAR_MODE[rd.mode].toUpperCase()}`, rd.on ? T.accent : T.dim]);
   for (const [t, col] of damageList(p)) list.push([t, col]);
-  let x = PW, y = -10;
-  g.font = `600 11px ${UI}`; g.letterSpacing = '1px';
-  for (const [t, col] of list) {
-    const w = g.measureText(t).width + 14;
-    if (x - w < 0) { x = PW; y -= 20; }
-    x -= w;
-    g.fillStyle = 'rgba(0,0,0,.62)'; g.fillRect(x, y - 11, w - 4, 16); g.strokeStyle = col; g.lineWidth = 1; g.strokeRect(x + .5, y - 10.5, w - 5, 15);
-    g.fillStyle = col; g.textAlign = 'left'; g.fillText(t, x + 5, y + 1);
-    x -= 4;
-  }
+  let y = -12; g.letterSpacing = '1px';
+  for (const [t, col] of list.slice(0, 9)) { wt(t, 2, y, 11, col, 'left', UI, 600); y -= 16; }
   g.letterSpacing = '0px';
 }
 

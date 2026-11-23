@@ -14,8 +14,8 @@ export function warnings(p) {
   const list = [], rw = p.sys.rwr, mw = p.sys.maw;
   let tone = null, arc = null;
   // lançamento de míssil: só som aqui; o MAW mostra no próprio painel (scopes.js), sem texto no centro
+  // (o tom de "lançamento visto" saiu: tocava para qualquer míssil inimigo por perto, mesmo no ala, e sem sensor nenhum)
   if (mw && mw.list.length) tone = 'maw';
-  else if (B.launches.some(l => l.how === 'visual' && S.now - l.at < 4)) tone = 'launch';
   const th = rw && rw.top;
   if (th && th.lvl !== 'SEARCH') {
     tone = tone || { GUIDANCE: 'guidance', LOCK: 'lock', TRACK: 'track' }[th.lvl];
@@ -27,7 +27,7 @@ export function warnings(p) {
   // do mar — tocava em curva, na aproximação com flaps e até parado no chão.
   const as = p.def.clmax / p.def.cla, agl0 = p.pos.y - H(p.pos.x, p.pos.z), stall = !p.onGround && agl0 > 5 && Math.abs(p.alpha) > as * 0.97;
   if (stall) list.push(['ESTOL', C.amber, true]);
-  const agl = p.pos.y - H(p.pos.x, p.pos.z), pull = agl < 220 && p.vel.y < -12;
+  const agl = p.pos.y - H(p.pos.x, p.pos.z), pull = agl < 100 && p.vel.y < -8 && agl / -p.vel.y < 4; // 100 m e afundando (era 220 m: apitava em qualquer rasante)
   if (pull) list.push(['ALTITUDE · PUXE', C.enemy, true]);
   if (!p.eng.jet && Math.abs(p.n) > p.def.glim * 0.85) list.push(['SOBRECARGA G', C.enemy, false]);
   if (p.ias > p.def.vne * 0.95) list.push(['VELOCIDADE-LIMITE', C.amber, true]);
