@@ -472,7 +472,12 @@ export class Plane {
     // Em du = 0 as duas fórmulas coincidem (sem salto); longe, abaixo → rola de dorso e puxa, como antes.
     // perto da mira o "nivelar" mira a inclinação de curva coordenada da mira em movimento (tan φ = V·ω/g);
     // nivelando para 0°, em curva ele brigava com a inclinação para o círculo e o nariz parava ~5° ao lado
-    const om = this._aimVel ? _pd.crossVectors(this._aimPrev, this._aimVel).dot(UP) : 0;
+    // só curva SUSTENTADA pede asa: _aimTurn soma o quanto a mira girou nos últimos ~2,5 s e a inclinação de curva coordenada
+    // só entra depois de ~4° no mesmo sentido. Um toque de 3° em 0,25 s são 12°/s, que a 800 km/h valem ~75° de asa por um
+    // instante — cada ajuste fino rolava o F-4E 25–35° e ele levava 3 s para desfazer (medido). Era o avião "bambo" ao mirar
+    const omNow = this._aimVel ? _pd.crossVectors(this._aimPrev, this._aimVel).dot(UP) : 0;
+    this._aimTurn = ((this._aimTurn || 0) + omNow * dt) * Math.exp(-dt / 2.5);
+    const om = omNow * clamp((Math.abs(this._aimTurn) - 0.07) / 0.09, 0, 1);
     const NEAR = 0.3, wl = UP.dot(_pl), wu = UP.dot(_pu), level = Math.atan2(-wl, wu) - clamp(Math.atan(this.vel.length() * om / 9.81), -1.4, 1.4);
     if (this.nearAim) { if (off > NEAR * 1.5) this.nearAim = false; } else if (off < NEAR) this.nearAim = true;
     // perto da mira, o + 0.08 (~5°) deixa a inclinação proporcional ao desvio lateral: sem ele, dl e du quase zero
@@ -483,7 +488,10 @@ export class Plane {
     let bank = Math.atan2(-dl, this.nearAim ? Math.abs(du) + 0.08 : push ? -du : du);
     // e a inclinação fica limitada ao tamanho do erro: 8° ao lado pedia ~80° de asa e uma puxada que passava do alvo
     // e voltava (MiG-21/F-4 balançavam 40°↔84° depois de a mira parar)
-    if (this.nearAim) { const lim = Math.PI / 2 * clamp(off / 0.3, 0.3, 1); bank = clamp(bank, -lim, lim); }
+    // SP.bl = graus de asa por grau de erro. Antes o piso era 27°: corrigir 3° de mira inclinava o F-4E 23–37° e o avião
+    // "bambeava" a cada ajuste fino (medido); ajuste pequeno é do leme, a asa entra conforme o erro cresce
+    const SP = D.steer || {};
+    if (this.nearAim) { const lim = clamp(off * (SP.bl ?? 3.5), 0.05, Math.PI / 2); bank = clamp(bank, -lim, lim); }
     // no chão não se inclina para virar (tombaria o avião sobre uma roda): aileron só nivela, quem vira é o leme/roda
     const w = this.onGround || opts.level || opts.recover ? 0 : nose ? clamp((off - 0.02) / 0.09, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
     // nivelar: ganho 0,6 perto do nível (não balança), mais forte com muita inclinação a desfazer — parando o mouse
@@ -493,7 +501,7 @@ export class Plane {
     // jogava o nariz para o lado, criava erro lateral e o avião ficava rolando para lá e para cá)
     const rp = lerp(1, clamp(Math.cos(rollErr), 0.15, 1), w);
     // ganhos do instrutor por avião (def.steer = { kp, kd, ka, kr, ky }); padrão = o que serve à maioria
-    const SP = D.steer || {}, kp = SP.kp ?? 3.2, kd = SP.kd ?? 0.9, ka = SP.ka ?? 3.1, kr = SP.kr ?? 1.8, ky = SP.ky ?? 1.6;
+    const kp = SP.kp ?? 3.2, kd = SP.kd ?? 0.9, ka = SP.ka ?? 3.1, kr = SP.kr ?? 9, ky = SP.ky ?? 3.4; // leme forte como já era no F-4E/MiG-21: com 1,8 o P-47 levava 2,5 s para corrigir 3° e perdia um alvo serpenteando por 5–10° (medido)
     let elev = off > 1.4 && du < 0 ? 1 : K * (kp * pe * rp - kd * (this.pr - aimRate)) + trim + (nose ? 1.2 * this.iP : 0);
     // recuperação perto do chão: desvira primeiro, puxa depois — de dorso, "alvo atrás e abaixo → puxa" era um
     // split-S para dentro do chão (medido: IA a 6 G com 100–160° de inclinação até bater)
