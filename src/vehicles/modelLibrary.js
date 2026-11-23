@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { splitSkin, splitCockpit } from './skinSplit.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // =====================================================================
 // "Pele" glTF das aeronaves (opcional), só por dados:
@@ -51,14 +52,27 @@ export function applySkin(D, r) {
   if (D.model.solo && r.gearMesh.userData.anim) { const g = r.gearMesh, anim = g.userData.anim; g.userData.anim = (k, ...a) => { anim(k, ...a); g.visible = k > 0.03; }; }
   const body = src.clone(true); if (D.model.off) body.position.fromArray(D.model.off);
   r.root.add(body); r.root.updateMatrixWorld(true);
+  const glass = [];
   body.traverse(o => {
     if (!o.isMesh) return;
     // vidro da capota: os arquivos chegam com tudo opaco (capota branca leitosa) — vira o mesmo vidro da capota procedural
-    if (GLASS.test(o.material.name) || (D.model.glass || []).includes(o.material.name)) { o.material = glassMat(); o.castShadow = false; o.renderOrder = 2; o.userData.normalMat = o.material; return; }
+    if (GLASS.test(o.material.name) || (D.model.glass || []).includes(o.material.name)) { o.material = glassMat(); o.castShadow = false; o.renderOrder = 2; o.userData.normalMat = o.material; glass.push(o); return; }
     o.castShadow = o.receiveShadow = true; o.material = o.material.clone(); o.userData.normalMat = o.material; r.mats.push(o.material); // material por avião: o fogo escurece só o dele
   });
-  const nodes = [body];
-  for (const [n, g] of [['wingL', r.wingL], ['wingR', r.wingR], ['tail', r.tail]]) { const o = body.getObjectByName(n); if (o) { g.attach(o); nodes.push(o); } }
+  const nodes = [body], named = {};
+  for (const [n, g] of [['wingL', r.wingL], ['wingR', r.wingR], ['tail', r.tail]]) { const o = body.getObjectByName(n); if (o) { g.attach(o); nodes.push(o); named[n] = o; } }
+  // a pele acompanha o dano: ponta da asa, ailerons, flaps, profundores e leme viram peças presas aos grupos do modelo de dano
+  // (skinSplit.js); o vidro da capota vai para a peça solta da capota (ejetada/arrancada, leva o vidro junto)
+  nodes.push(...splitSkin(D, r, named));
+  let canopy = null; r.root.traverse(o => { if (o.userData.loose && o.userData.loose.k === 'canopy') canopy = o; });
+  if (canopy) for (const o of glass) { canopy.attach(o); nodes.push(o); }
   // solo: na vista de cabine volta a estrutura procedural (é ela que tem painel, assento e vidro por dentro) e a pele some
-  if (D.model.solo) r.skinView = cockpit => { for (const o of hidden) o.visible = cockpit; for (const o of nodes) o.visible = !cockpit; crew.forEach((g, i) => { if (seats[i]) cockpit ? g.position.copy(home[i]) : g.position.set(0, seats[i][0], seats[i][1]); }); }; // na cabine o tripulante volta ao assento da estrutura
+  // vista de cabine: a pele CONTINUA (nariz, asas e hélice de verdade lá fora; por dentro ela é invisível, as faces olham para
+  // fora) e da estrutura só entra o interior — painel, mira, assento. Antes a pele sumia e voltava a estrutura inteira: sem
+  // nariz, com as armas flutuando e a asa sem pintura
+  const inCock = o => { for (let q = o; q; q = q.parent) if (q.userData.cockpit) return true; return false; }, inner = hidden.filter(inCock);
+  const core = D.model.solo ? splitCockpit(D, r, body, crew.map((g, i) => seats[i] || [home[i].y, home[i].z]).slice(0, Math.max(1, seats.length))) : [];
+  if (D.model.solo) r.skinView = cockpit => { for (const o of inner) o.visible = cockpit; for (const o of glass) o.visible = !cockpit; for (const o of core) o.visible = !cockpit; };
+  // o interior (painel, mira, assento) vai junto com o piloto para a cabine DA PELE: o olho da câmera é a cabeça dele
+  if (D.model.solo && seats[0] && home[0]) r.root.traverse(o => { if (o.userData.cockpit) { o.position.y += seats[0][0] - home[0].y; o.position.z += seats[0][1] - home[0].z; } }); // soma: o grupo já vem recuado por model.fz
 }

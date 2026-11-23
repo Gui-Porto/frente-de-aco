@@ -540,7 +540,9 @@ export function buildPlane(D) {
     while (y > y0 - 0.3 && !fits(y, z)) y -= 0.01;
     return { y, z };
   });
-  buildCockpit({ add, root, D, M: DM, sec: fuseG.userData.sec, hole, crew: heads, jet, face: C.face, cy, canopyH, canopyW });
+  // interior da cabine num grupo próprio: com pele glTF (solo) é a única parte da estrutura que aparece na vista de cabine
+  const cockG = new THREE.Group(); cockG.userData.cockpit = true; root.add(cockG);
+  buildCockpit({ add: (g, m, p = cockG, ...a) => add(g, m, p === root ? cockG : p, ...a), root: cockG, D, M: DM, sec: fuseG.userData.sec, hole, crew: heads, jet, face: C.face, cy, canopyH, canopyW });
   // piloto sob a capota (capacete branco no jato, de couro no pistão); a hitbox 'pilot' é alinhada a ele (plane.js)
   const pilot = new THREE.Group(), suit = new THREE.MeshStandardMaterial({ color: jet ? 0x5b5f45 : 0x6b5a3e, roughness: .9 });
   const helm = new THREE.MeshStandardMaterial({ color: jet ? 0xdedcd2 : 0x4a3424, roughness: jet ? .3 : .8 });
@@ -961,7 +963,7 @@ export function buildPlane(D) {
   const fx = buildPlaneFx(D, root, nozzles, stacks);
   // une as peças estáticas por material (menos draw calls); superfícies que se soltam ou somem ficam à parte
   const keep = new Set([...bombMeshes, ...rocketMeshes, ...missileMeshes, ...ordFit]);
-  for (const grp of [root, wingL, wingR, wingL.userData.tip, wingR.userData.tip, tail]) mergeStatic(grp, keep);
+  for (const grp of [root, cockG, wingL, wingR, wingL.userData.tip, wingR.userData.tip, tail]) mergeStatic(grp, keep);
   root.traverse(o => { if (o.userData.loose) mergeStatic(o, keep); });
   root.traverse(o => { if (o.isMesh) o.userData.normalMat = o.material; });
   const built = { root, wingL, wingR, tipL: wingL.userData.tip, tipR: wingR.userData.tip, tail, prop, bombMeshes, rocketMeshes, missileMeshes, ordFit, mats: [paint, under], fx, surf, gearMesh: gear, fuseAt: fuseG.userData.at, gunPts, brakes, pilotMesh: pilot };

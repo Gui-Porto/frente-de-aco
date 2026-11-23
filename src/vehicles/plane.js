@@ -491,7 +491,8 @@ export class Plane {
     // SP.bl = graus de asa por grau de erro. Antes o piso era 27°: corrigir 3° de mira inclinava o F-4E 23–37° e o avião
     // "bambeava" a cada ajuste fino (medido); ajuste pequeno é do leme, a asa entra conforme o erro cresce
     const SP = D.steer || {};
-    if (this.nearAim) { const lim = clamp(off * (SP.bl ?? 3.5), 0.05, Math.PI / 2); bank = clamp(bank, -lim, lim); }
+    // (só no mouse do jogador — opts.nose; a IA segue com a lei antiga, validada em combate e decolagem)
+    if (this.nearAim) { const lim = opts.nose ? clamp(off * (SP.bl ?? 3.5), 0.05, Math.PI / 2) : Math.PI / 2 * clamp(off / 0.3, 0.3, 1); bank = clamp(bank, -lim, lim); }
     // no chão não se inclina para virar (tombaria o avião sobre uma roda): aileron só nivela, quem vira é o leme/roda
     const w = this.onGround || opts.level || opts.recover ? 0 : nose ? clamp((off - 0.02) / 0.09, 0, 1) : clamp((off - 0.06) / 0.2, 0, 1);
     // nivelar: ganho 0,6 perto do nível (não balança), mais forte com muita inclinação a desfazer — parando o mouse
@@ -501,7 +502,8 @@ export class Plane {
     // jogava o nariz para o lado, criava erro lateral e o avião ficava rolando para lá e para cá)
     const rp = lerp(1, clamp(Math.cos(rollErr), 0.15, 1), w);
     // ganhos do instrutor por avião (def.steer = { kp, kd, ka, kr, ky }); padrão = o que serve à maioria
-    const kp = SP.kp ?? 3.2, kd = SP.kd ?? 0.9, ka = SP.ka ?? 3.1, kr = SP.kr ?? 9, ky = SP.ky ?? 3.4; // leme forte como já era no F-4E/MiG-21: com 1,8 o P-47 levava 2,5 s para corrigir 3° e perdia um alvo serpenteando por 5–10° (medido)
+    const kp = SP.kp ?? 3.2, kd = SP.kd ?? 0.9, ka = SP.ka ?? 3.1, kF = opts.nose && !this.onGround ? clamp((this.ias / (this.vStall || (this.vStall = Math.sqrt(2 * D.mass * 9.81 / (1.225 * D.S * D.clmax)))) - 1.25) / 0.6, 0, 1) : 0, kr = SP.kr ?? lerp(1.8, 9, kF), ky = SP.ky ?? lerp(1.6, 3.4, kF); // leme forte (como já era no F-4E/MiG-21) só no mouse do jogador e com velocidade sobrando (kF: 0 até 1,25·V_estol, cheio a 1,85): com 9 para
+    // todos, a IA de hélice derrapava logo depois de decolar e batia (medido em batalha só de IA); com 1,8 o P-47 levava 2,5 s para corrigir 3° e perdia um alvo serpenteando por 5–10° (medido)
     let elev = off > 1.4 && du < 0 ? 1 : K * (kp * pe * rp - kd * (this.pr - aimRate)) + trim + (nose ? 1.2 * this.iP : 0);
     // recuperação perto do chão: desvira primeiro, puxa depois — de dorso, "alvo atrás e abaixo → puxa" era um
     // split-S para dentro do chão (medido: IA a 6 G com 100–160° de inclinação até bater)

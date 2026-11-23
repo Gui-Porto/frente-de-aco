@@ -287,7 +287,7 @@ export const PLANES = {
     hpParts: { wingL: 80, wingR: 80, tail: 55, engine: 55, fuel: 40, fuse: 90 },
     fuseR: 0.75, noseR: 0.45, wingZ: 0.3, chord: 3.0, tipChord: 2.0, cowl: 'intake', dih: 5, nozzles: 2, finish: 'camo', rwr: 'apr36',
     // "A-10 Thunderbolt II" de AIRMAN Magazine (modelo de Alfredo Tirado), CC BY 4.0 (ver CREDITOS.md); preparada por tools/blender/skin.py
-    model: { url: '/models/a10.glb', solo: true },
+    model: { url: '/models/a10.glb', solo: true, split: false }, // dois lemes nas pontas do estabilizador: o fatiador de peças (skinSplit.js) não serve
     parts: [{ id: 'fuelF', k: 'fuel', n: 'Tanques da fuselagem', z: 0.04, y: 0.2, s: [0.6, 0.4, 1.4] }, { id: 'fuelW', k: 'fuel', n: 'Tanque da asa', w: [0.2, 0.4], s: [1.0, 0.12, 0.8] },
       { id: 'hydA', k: 'act', n: 'Hidráulico A', does: ['flaps', 'brake', 'ctl'], x: 0.4, z: -0.1, y: 0, s: [0.25, 0.2, 0.5] }, { id: 'hydB', k: 'act', n: 'Hidráulico B', does: ['guns', 'ctl'], x: -0.4, z: -0.1, y: 0, s: [0.25, 0.2, 0.5] }],
     // canhão de 7 canos no nariz; 6 Mk 82 nos pilones da asa e dois casulos LAU-3 nos externos
