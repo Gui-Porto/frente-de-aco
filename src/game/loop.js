@@ -10,6 +10,7 @@ import { Q } from '../core/render.js';
 import { updateProjs, updatePopped, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, cookOff, blast } from '../combat/ballistics.js';
 import { updateParts, fxBurn, spawnP, TEX } from '../fx/particles.js';
 import { eng, tankVoices } from '../fx/audio.js';
+import * as AUDIO from '../fx/audio.js';
 import { updateMatch, startMatch, spawnPlayer, mkWho, spawnVehicle } from './match.js';
 import { controlPlayer } from './controls.js';
 import { updateCamera, cam } from './camera.js';
@@ -86,4 +87,4 @@ requestAnimationFrame(frame);
 // gancho para testes automatizados
 import * as R from '../core/render.js';
 window.__r = R;
-window.__game = { BUILDS, TREES, HEDGES, blast, renderer, renderFrame, afterRender, updateHUD, airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };
+window.__game = { audio: AUDIO, BUILDS, TREES, HEDGES, blast, renderer, renderFrame, afterRender, updateHUD, airCam: { aimAt, acam }, B, missiles, launchMissile, spawnP, TEX, S, tanks, planes, projs, simulate, startMatch, spawnPlayer, mkWho, spawnVehicle, openSpawn, segmentHit, raycast, evalArmor, destroyVehicle, fireProj, world, H, cam, camera };
